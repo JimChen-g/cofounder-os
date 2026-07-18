@@ -39,6 +39,15 @@ This document must be updated in the same commit as every accepted stage.
 | 03de57c | Use full paths for date and shasum | Corrective for full G01 scope |
 | 028f6d5 | Final G01 closeout — all gates passed | Accepted G01 |
 | 102f6cb | Mark G01 accepted after all checks pass | Final G01 acceptance record |
+| e7f698f | Complete G01 closeout corrections per independent review | Corrective: scripts, templates, schema alignment |
+| b999645 | Use grep -F for path matching in test script | Corrective |
+| b3ab61c | Correct PROJECT_STATE stage grep pattern and annotation | Corrective |
+| c842150 | Use /usr/bin paths for sed and grep in all scripts | Corrective |
+| 2bccc83 | Use correct sed and mktemp paths in test script | Corrective |
+| ccda3a7 | Use unanchored grep pattern for PROJECT_STATE stage parsing | Corrective |
+| c9efda1 | Print WORKTREE_STATUS=DIRTY when worktree is dirty | Corrective |
+| e1101d9 | Echo clipboard content to stdout in project-preflight.sh | Corrective |
+| aff5e67 | Fix preflight exit code and complete G01 final closeout | Final G01 commit |
 
 ## Current State
 
@@ -46,7 +55,7 @@ This document must be updated in the same commit as every accepted stage.
 - **Current accepted HEAD**: 028f6d55d85a3c5bb182a13549c83eafb9abf94b (verified by tag)
 - **Current governance stage**: G01 — accepted (tag g01-accepted)
 - **Next product stage**: D06-B
-- **Current G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/20260718-162536Z`
+- **Current G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/20260718-175644Z`
 - **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
 
 ## Mandatory Update Block
