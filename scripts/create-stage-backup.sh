@@ -21,7 +21,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 usage() {
-  cat >&2 <<EOF
+  /bin/cat >&2 <<EOF
 Usage: $0 <stage-id> <commit-sha>
 
   stage-id    Stage identifier (e.g., D06-A, G01)
@@ -74,8 +74,8 @@ fi
 LOCAL_HEAD="$(/usr/bin/git rev-parse HEAD)"
 
 # Create backup directory
-mkdir -p "$BACKUP_DIR"
-chmod 700 "$BACKUP_DIR"
+/bin/mkdir -p "$BACKUP_DIR"
+/bin/chmod 700 "$BACKUP_DIR"
 
 echo "=== Stage Backup ==="
 echo "STAGE_ID=$STAGE_ID"
@@ -90,7 +90,7 @@ BUNDLE="$BACKUP_DIR/cofounder-os.bundle"
 /usr/bin/git bundle create "$BUNDLE" --all
 /usr/bin/git bundle verify "$BUNDLE" >/dev/null 2>&1 || {
   echo "ERROR: Bundle verification failed" >&2
-  rm -rf "$BACKUP_DIR"
+  /bin/rm -rf "$BACKUP_DIR"
   exit 1
 }
 echo "  OK: $BUNDLE"
@@ -163,7 +163,7 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
   echo
   echo "## Lint"
   echo "Command: ruff check app/ tests/"
-  if command -v ruff >/dev/null 2>&1; then
+  if /usr/bin/command -v ruff >/dev/null 2>&1; then
     if ruff check app/ tests/ 2>&1; then
       echo "Result: PASS"
     else
@@ -178,7 +178,7 @@ echo "  OK: $TEST_SUMMARY"
 # 6. manifest.env
 echo "[6/9] Generating manifest.env..."
 MANIFEST="$BACKUP_DIR/manifest.env"
-cat > "$MANIFEST" <<EOF
+/bin/cat > "$MANIFEST" <<EOF
 STAGE_ID=$STAGE_ID
 STAGE_NAME=$STAGE_ID
 BASELINE_COMMIT=$COMMIT_SHA
@@ -187,13 +187,13 @@ DEPLOYED_HEAD=
 DEPLOYED_AT=
 DEPLOYMENT_RESULT=PENDING
 EOF
-chmod 600 "$MANIFEST"
+/bin/chmod 600 "$MANIFEST"
 echo "  OK: $MANIFEST"
 
 # 7. Stage report
 echo "[7/9] Generating stage-report.txt..."
 STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
-cat > "$STAGE_REPORT" <<EOF
+/bin/cat > "$STAGE_REPORT" <<EOF
 STAGE_ID: $STAGE_ID
 STAGE_NAME: $STAGE_ID
 BASELINE_COMMIT: $COMMIT_SHA
@@ -214,7 +214,7 @@ echo "  OK: $STAGE_REPORT"
 echo "[8/9] Generating SHA256SUMS..."
 cd "$BACKUP_DIR"
 shasum -a 256 cofounder-os.bundle source.tar.gz manifest.env changed-files.txt test-summary.txt git-log.txt stage-report.txt > SHA256SUMS
-chmod 600 SHA256SUMS
+/bin/chmod 600 SHA256SUMS
 echo "  OK: SHA256SUMS"
 
 # 9. Verify bundle and checksums
@@ -236,4 +236,4 @@ echo "=== Stage Backup Complete ==="
 echo "BACKUP_DIR=$BACKUP_DIR"
 echo
 echo "RECOVERY_PACKAGE_CONTENTS="
-ls -la "$BACKUP_DIR" | /usr/bin/awk '{print "  " $9 " (" $5 " bytes)"}'
+/bin/ls -la "$BACKUP_DIR" | /usr/bin/awk '{print "  " $9 " (" $5 " bytes)"}'
