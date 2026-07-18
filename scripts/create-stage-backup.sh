@@ -131,7 +131,7 @@ fi
     fi
   done < "$CHANGED_FILES"
 } > "${CHANGED_FILES}.tmp"
-mv "${CHANGED_FILES}.tmp" "$CHANGED_FILES"
+/bin/mv "${CHANGED_FILES}.tmp" "$CHANGED_FILES"
 echo "  OK: $CHANGED_FILES"
 
 # 4. Git log
