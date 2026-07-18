@@ -50,7 +50,7 @@ if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$B
     fail "isolated backup — package not in temp directory: $BACKUP_DIR_LINE"
   fi
   # Verify manifest has all required keys
-  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /bin/sed 's/BACKUP_DIR=//')"
+  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
   if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
     missing=""
     for key in STAGE_ID BASELINE_COMMIT ACCEPTED_COMMIT LOCAL_HEAD DEPLOYED_HEAD DEPLOYED_AT DEPLOYMENT_RESULT FINAL_RESULT TEST_RESULT SECRETS_REVIEW RUNTIME_DATA_REVIEW; do
