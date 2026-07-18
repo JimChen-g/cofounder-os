@@ -128,8 +128,8 @@ class Task(DomainRecord):
     input_artifact_ids: List[UUID] = Field(default_factory=list)
     output_artifact_ids: List[UUID] = Field(default_factory=list)
     approval_id: Optional[UUID] = None
-    attempt_count: int = 0
-    max_attempts: int = 2
+    attempt_count: int = Field(default=0, ge=0)
+    max_attempts: int = Field(default=2, ge=1)
     last_error: Optional[str] = None
     claimed_by: Optional[str] = None
     claim_token: Optional[str] = None

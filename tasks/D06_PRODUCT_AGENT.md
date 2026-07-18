@@ -8,13 +8,11 @@ D02 (domain models), D03 (state repository and lifecycle machine), D04
 
 D06 is decomposed into four independent sub-tasks:
 
-- **D06-A**: execution foundation (AgentExecutionService with claim, attempt,
-  retry, and audit contract)
-- **D06-B**: Product Agent specialization
-- **D06-C**: Finance Agent specialization
-- **D06-D**: Research and Operations agents plus execution service wiring
-
-Only D06-A is in scope for this stage.
+- **D06-A**: Agent execution contract (AgentExecutionService with claim,
+  attempt, retry, and audit contract)
+- **D06-B**: Filesystem Artifact Store
+- **D06-C**: Product Agent specialization
+- **D06-D**: Product lifecycle integration
 
 ## Architecture
 
@@ -32,7 +30,7 @@ AgentExecutionService.claim_task(agent_id, claim_token)
     |   cofounder-auto / cofounder-qwen / cofounder-step
     |
     +--> complete_claimed_task(claim_token)  --> Task (completed)
-    +--> record_attempt_failure(error)       --> Task (failed, retryable or terminal)
+    +--> record_attempt_failure(error)       --> Task (blocked or failed)
     +--> prepare_retry()                     --> Task (ready)
 ```
 
@@ -65,7 +63,7 @@ from app.services import (
 
 Update `app/agents/registry.py` to mark only three agents as executable:
 
-- `executive-orchestrator` (can_execute=True, can_plan=True)
+- `executive-orchestrator` (can_executable=True, can_plan=True)
 - `product-agent` (can_execute=True, can_plan=False)
 - `finance-agent` (can_execute=True, can_plan=False)
 
@@ -76,8 +74,8 @@ Research, legal, and operations agents remain `can_execute=False` placeholders.
 Extend `app/domain/models.py` Task with backward-compatible defaults:
 
 ```python
-attempt_count: int = 0
-max_attempts: int = 2
+attempt_count: int = Field(default=0, ge=0)
+max_attempts: int = Field(default=2, ge=1)
 last_error: Optional[str] = None
 claimed_by: Optional[str] = None
 claim_token: Optional[str] = None
@@ -86,6 +84,17 @@ claimed_at: Optional[datetime] = None
 
 Existing D02-D05 JSON files without these fields load correctly because
 Pydantic applies the defaults.
+
+### Lifecycle Alignment
+
+D06-A aligns with the existing LifecycleStateMachine:
+
+- **claim_task**: READY -> RUNNING (via state machine)
+- **record_attempt_failure** (first failure): RUNNING -> BLOCKED (via state machine)
+- **prepare_retry**: BLOCKED -> READY (via state machine)
+- **record_attempt_failure** (exhausted): RUNNING -> FAILED (via state machine, terminal)
+- **complete_claimed_task**: RUNNING -> COMPLETED (via state machine)
+- FAILED is terminal and cannot return to READY
 
 ### claim_task
 
@@ -103,18 +112,21 @@ def claim_task(
 
 Behavior:
 1. Validates agent is executable via registry.
-2. Reads task under transaction lock.
-3. Rejects if task is not READY.
-4. Rejects if `assigned_agent` does not match `agent_id`.
-5. If task already has a claim:
-   - If `claim_token` matches: idempotent return.
-   - If `claim_token` is None or mismatches: reject.
-6. If task is unclaimed:
+2. Attempt-budget guard: READY task with `attempt_count >= max_attempts` raises `AttemptLimitExceededError`.
+3. Reads task under transaction lock.
+4. Rejects if task is not READY.
+5. Rejects if `assigned_agent` does not match `agent_id`.
+6. If task already has a claim:
+   - Idempotent re-claim requires same `agent_id` AND same `claim_token`.
+   - Another executable agent with the same token is rejected.
+   - If `claim_token` matches and `agent_id` matches: idempotent return.
+   - Otherwise: reject with `ClaimTokenMismatchError`.
+7. If task is unclaimed:
    - Generate or accept `claim_token`.
    - Set `claimed_by`, `claimed_at`, `claim_token`.
-   - Transition task to RUNNING.
+   - Transition task to RUNNING via state machine.
    - Increment `attempt_count` by 1.
-   - Append `task.claimed` audit event.
+   - Append `task.claimed` audit event with `outcome=SUCCESS`.
    - Return `TaskClaim`.
 
 ### complete_claimed_task
@@ -133,12 +145,13 @@ def complete_claimed_task(
 
 Behavior:
 1. Reads task under transaction lock.
-2. Rejects if task is not RUNNING.
+2. Verifies ownership: `agent_id == claimed_by` AND `agent_id == assigned_agent`.
 3. Rejects if `claim_token` does not match.
-4. Transitions task to COMPLETED.
-5. Clears `claim_token`, `claimed_by`, `claimed_at`.
-6. Appends `task.completed` audit event.
-7. Returns (completed task, audit event).
+4. Rejects if task is not RUNNING.
+5. Transitions task to COMPLETED via state machine.
+6. Clears `claim_token`, `claimed_by`, `claimed_at`.
+7. Appends `task.completed` audit event with `outcome=SUCCESS`.
+8. Returns (completed task, audit event).
 
 ### record_attempt_failure
 
@@ -157,19 +170,20 @@ def record_attempt_failure(
 
 Behavior:
 1. Reads task under transaction lock.
-2. Rejects if task is not RUNNING.
+2. Verifies ownership: `agent_id == claimed_by` AND `agent_id == assigned_agent`.
 3. Rejects if `claim_token` does not match.
-4. If `attempt_count >= max_attempts`:
-   - Transitions task to FAILED (terminal).
+4. Rejects if task is not RUNNING.
+5. If `attempt_count >= max_attempts`:
+   - Transitions task to FAILED via state machine (terminal).
    - Sets `last_error`.
    - Clears claim fields.
-   - Appends `task.failed` audit event with `terminal: true`.
+   - Appends `task.failed` audit event with `outcome=FAILURE` and `terminal: True`.
    - Returns `terminal_failure=True, retry_available=False`.
-5. Otherwise:
+6. Otherwise (first failure):
+   - Transitions task to BLOCKED via state machine.
    - Sets `last_error`.
-   - Clears claim fields (allows re-claim).
-   - Keeps task in current status (or transitions to FAILED non-terminal).
-   - Appends `task.attempt_failed` audit event with `terminal: false`.
+   - Clears claim fields.
+   - Appends `task.attempt_failed` audit event with `outcome=FAILURE` and `terminal: False`.
    - Returns `retry_available=True, terminal_failure=False`.
 
 ### prepare_retry
@@ -187,34 +201,61 @@ def prepare_retry(
 
 Behavior:
 1. Reads task under transaction lock.
-2. Rejects if task is not FAILED.
-3. Transitions task to READY.
-4. Clears `last_error`.
-5. Appends `task.retry_prepared` audit event.
-6. Returns RetryPreparationResult.
+2. Checks attempt budget first: if `attempt_count >= max_attempts`, raises `AttemptLimitExceededError`.
+3. Rejects if task is not BLOCKED.
+4. Transitions task to READY via state machine.
+5. Clears `last_error`.
+6. Appends `task.retry_prepared` audit event with `outcome=SUCCESS`.
+7. Returns RetryPreparationResult.
 
 ## D06-A Acceptance Criteria
 
 - Task model accepts legacy JSON without new fields.
+- `attempt_count >= 0` and `max_attempts >= 1` enforced.
 - `claim_task` atomically claims a READY task.
-- Same-token re-claim is idempotent.
-- Competing claim is rejected without side effects.
+- Same agent and token re-claim is idempotent.
+- Different agent with same token is rejected.
+- Competing claim without token is rejected.
 - Wrong agent assignment is rejected.
-- `complete_claimed_task` requires matching token.
+- Non-executable agent is rejected.
+- READY task with exhausted attempt budget cannot be claimed.
+- `complete_claimed_task` requires matching token and agent.
 - Completion clears claim fields.
-- First failure sets `last_error` and allows retry.
-- Second failure (at `max_attempts`) produces terminal FAILED.
-- `prepare_retry` moves FAILED task back to READY.
-- Retry after exhaustion raises `AttemptLimitExceededError`.
-- Executive prompt exposes only executable agents (3 of 6).
+- First failure transitions to BLOCKED.
+- `prepare_retry` accepts only BLOCKED.
+- FAILED is terminal and cannot retry.
+- Second failure (at max_attempts) produces terminal FAILED.
+- Failure audit outcome is FAILURE.
+- Terminal failure audit outcome is FAILURE.
+- All lifecycle transitions use LifecycleStateMachine.
+- Executive prompt exposes only 3 executable agents.
 - All new code passes targeted tests, full suite, and Ruff.
 - No infrastructure files modified.
 
-## D06-B through D06-D Preview
+## D06-B: Filesystem Artifact Store
 
-These sub-tasks are deferred. Rough scope:
+D06-B introduces a filesystem-backed artifact store for task inputs and outputs.
+Artifacts are stored under `data/runs/<run_id>/artifacts/` with metadata in
+JSON files and content in files.
 
-- **D06-B**: ProductAgent with product-analysis system prompt.
-- **D06-C**: FinanceAgent with financial-analysis system prompt.
-- **D06-D**: ResearchAgent, OperationsAgent placeholders, and agent
-  selection wiring.
+## D06-C: Product Agent
+
+D06-C introduces the Product Agent specialization with:
+- Product-analysis system prompt
+- `ProductAgent` class that uses `AgentExecutionService`
+- Integration with Gateway for execution
+- Product result schemas
+
+## D06-D: Product Lifecycle Integration
+
+D06-D wires the Product Agent into the orchestration workflow:
+- Automatic task claiming and execution
+- Artifact registration after completion
+- Integration with Executive Orchestrator's `activate_ready_tasks`
+
+## D07: Finance Agent
+
+D07 introduces the Finance Agent specialization with:
+- Financial-analysis system prompt
+- `FinanceAgent` class
+- Financial result schemas

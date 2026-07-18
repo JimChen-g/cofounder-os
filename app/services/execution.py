@@ -3,6 +3,8 @@
 This service provides the reusable execution contract for D06. It manages
 task claims, attempt tracking, retry logic, and audit events. It does not
 call providers directly and does not expose HTTP routes.
+
+Lifecycle transitions use LifecycleStateMachine to keep D03 as the authority.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from app.domain import (
     TaskStatus,
     utc_now,
 )
-from app.state import FileStateRepository
+from app.state import FileStateRepository, LifecycleStateMachine
 
 
 class AgentExecutionError(RuntimeError):
@@ -99,6 +101,7 @@ def _event(
     actor: str,
     action: str,
     details: dict[str, object],
+    outcome: AuditOutcome = AuditOutcome.SUCCESS,
     correlation_id: str | None = None,
 ) -> AuditEvent:
     """Create an audit event for execution operations."""
@@ -110,7 +113,7 @@ def _event(
         action=action,
         target_type="task",
         target_id=str(task_id),
-        outcome=AuditOutcome.SUCCESS,
+        outcome=outcome,
         correlation_id=correlation_id,
         details=details,
     )
@@ -121,7 +124,7 @@ class AgentExecutionService:
 
     This service enforces:
     - Only executable agents can claim tasks
-    - Atomic claim with idempotent same-token re-claim
+    - Atomic claim with idempotent same-agent-and-token re-claim
     - Competing claim rejection
     - One increment per real attempt
     - Bounded retry (max_attempts)
@@ -129,15 +132,18 @@ class AgentExecutionService:
     - Terminal failure after exhaustion
     - Claim cleanup on completion
     - Append-only audit events
+    - Lifecycle transitions via LifecycleStateMachine
     """
 
     def __init__(
         self,
         repository: FileStateRepository,
         registry: AgentRegistry | None = None,
+        state_machine: "LifecycleStateMachine | None" = None,
     ) -> None:
         self.repository = repository
         self.registry = registry or AgentRegistry()
+        self.state_machine = state_machine or LifecycleStateMachine(repository)
 
     def claim_task(
         self,
@@ -162,9 +168,10 @@ class AgentExecutionService:
 
         Raises:
             TaskNotReadyError: If the task is not in READY status.
-            AgentNotExecutableError: If the agent is not executable.
+            AgentNotExecutableError: If the agent is not executable or not assigned.
             TaskAlreadyClaimedError: If the task is already claimed.
             ClaimTokenMismatchError: If the token doesn't match.
+            AttemptLimitExceededError: If attempt budget is exhausted.
         """
         run_uuid = UUID(str(run_id))
         task_uuid = UUID(str(task_id))
@@ -180,6 +187,15 @@ class AgentExecutionService:
         with self.repository.transaction(run_uuid) as transaction:
             task = transaction.get_task(task_uuid)
 
+            # Attempt-budget guard: READY task with exhausted budget cannot be claimed
+            if (
+                TaskStatus(task.status) == TaskStatus.READY
+                and task.attempt_count >= task.max_attempts
+            ):
+                raise AttemptLimitExceededError(
+                    f"Task has exhausted {task.max_attempts} attempts"
+                )
+
             # Handle existing claim first (before status check)
             if task.claim_token is not None:
                 if claim_token is None:
@@ -190,9 +206,21 @@ class AgentExecutionService:
                     raise ClaimTokenMismatchError(
                         "Claim token does not match existing claim"
                     )
-                # Idempotent re-claim with same token
+                # Idempotent re-claim requires same agent_id AND same token
+                if task.claimed_by != agent_id:
+                    raise ClaimTokenMismatchError(
+                        f"Claim is owned by {task.claimed_by}, not {agent_id}"
+                    )
+                if (task.assigned_agent or "") != agent_id:
+                    raise AgentNotExecutableError(
+                        f"Task assigned to '{task.assigned_agent}', "
+                        f"not '{agent_id}'"
+                    )
+
                 claimed_at_value = task.claimed_at
-                if claimed_at_value is not None and not isinstance(claimed_at_value, str):
+                if claimed_at_value is not None and not isinstance(
+                    claimed_at_value, str
+                ):
                     claimed_at_value = claimed_at_value.isoformat()
 
                 return TaskClaim(
@@ -216,17 +244,20 @@ class AgentExecutionService:
                     f"not '{agent_id}'"
                 )
 
-            # New claim
-            new_token = claim_token or _generate_claim_token()
-            now = utc_now()
+            # New claim: use state machine to transition READY -> RUNNING
+            updated_task, _ = self.state_machine.transition_task_in_transaction(
+                transaction,
+                task_uuid,
+                TaskStatus.RUNNING,
+                actor=agent_id,
+                reason="Task claimed for execution.",
+                correlation_id=correlation_id,
+            )
 
-            updated_task = task.model_copy(deep=True)
-            updated_task.claim_token = new_token
+            # Set claim fields
+            updated_task.claim_token = claim_token or _generate_claim_token()
             updated_task.claimed_by = agent_id
-            updated_task.claimed_at = now
-            updated_task.status = TaskStatus.RUNNING.value
-            updated_task.started_at = now
-            updated_task.updated_at = now
+            updated_task.claimed_at = utc_now()
             updated_task.attempt_count = task.attempt_count + 1
 
             transaction.save_task(updated_task)
@@ -237,8 +268,9 @@ class AgentExecutionService:
                 event_type="task.claimed",
                 actor=agent_id,
                 action="claim",
+                outcome=AuditOutcome.SUCCESS,
                 details={
-                    "claim_token": new_token,
+                    "claim_token": updated_task.claim_token,
                     "attempt_number": updated_task.attempt_count,
                 },
                 correlation_id=correlation_id,
@@ -247,9 +279,9 @@ class AgentExecutionService:
 
             return TaskClaim(
                 task_id=str(task_uuid),
-                claim_token=new_token,
+                claim_token=updated_task.claim_token,
                 claimed_by=agent_id,
-                claimed_at=now.isoformat(),
+                claimed_at=updated_task.claimed_at.isoformat(),
                 attempt_number=updated_task.attempt_count,
             )
 
@@ -276,6 +308,7 @@ class AgentExecutionService:
 
         Raises:
             TaskNotReadyError: If the task is not in running status.
+            AgentNotExecutableError: If actor doesn't match claim ownership.
             ClaimTokenMismatchError: If the token doesn't match.
         """
         run_uuid = UUID(str(run_id))
@@ -284,27 +317,41 @@ class AgentExecutionService:
         with self.repository.transaction(run_uuid) as transaction:
             task = transaction.get_task(task_uuid)
 
-            if TaskStatus(task.status) != TaskStatus.RUNNING:
-                raise TaskNotReadyError(
-                    f"Task must be RUNNING; current status: {task.status}"
+            # Verify ownership: agent_id == claimed_by == assigned_agent
+            if (task.assigned_agent or "") != actor:
+                raise AgentNotExecutableError(
+                    f"Task assigned to '{task.assigned_agent}', "
+                    f"not '{actor}'"
                 )
-
+            if task.claimed_by != actor:
+                raise AgentNotExecutableError(
+                    f"Claim is owned by {task.claimed_by}, not {actor}"
+                )
             if task.claim_token != claim_token:
                 raise ClaimTokenMismatchError(
                     "Claim token does not match"
                 )
 
-            now = utc_now()
-            updated_task = task.model_copy(deep=True)
-            updated_task.status = TaskStatus.COMPLETED.value
-            updated_task.completed_at = now
-            updated_task.updated_at = now
-            # Clean up claim fields
-            updated_task.claim_token = None
-            updated_task.claimed_by = None
-            updated_task.claimed_at = None
+            if TaskStatus(task.status) != TaskStatus.RUNNING:
+                raise TaskNotReadyError(
+                    f"Task must be RUNNING; current status: {task.status}"
+                )
 
-            transaction.save_task(updated_task)
+            # Use state machine to transition RUNNING -> COMPLETED
+            completed_task, _ = self.state_machine.transition_task_in_transaction(
+                transaction,
+                task_uuid,
+                TaskStatus.COMPLETED,
+                actor=actor,
+                reason="Task completed successfully.",
+                correlation_id=correlation_id,
+            )
+
+            # Clean up claim fields
+            completed_task.claim_token = None
+            completed_task.claimed_by = None
+            completed_task.claimed_at = None
+            transaction.save_task(completed_task)
 
             event = _event(
                 run_id=run_uuid,
@@ -312,6 +359,7 @@ class AgentExecutionService:
                 event_type="task.completed",
                 actor=actor,
                 action="complete",
+                outcome=AuditOutcome.SUCCESS,
                 details={
                     "attempt_number": task.attempt_count,
                 },
@@ -319,7 +367,7 @@ class AgentExecutionService:
             )
             transaction.append_event(event)
 
-            return updated_task, event
+            return completed_task, event
 
     def record_attempt_failure(
         self,
@@ -346,6 +394,7 @@ class AgentExecutionService:
 
         Raises:
             TaskNotReadyError: If the task is not in running status.
+            AgentNotExecutableError: If actor doesn't match claim ownership.
             ClaimTokenMismatchError: If the token doesn't match.
             AttemptLimitExceededError: If max_attempts is reached.
         """
@@ -355,30 +404,43 @@ class AgentExecutionService:
         with self.repository.transaction(run_uuid) as transaction:
             task = transaction.get_task(task_uuid)
 
-            if TaskStatus(task.status) != TaskStatus.RUNNING:
-                raise TaskNotReadyError(
-                    f"Task must be RUNNING; current status: {task.status}"
+            # Verify ownership: agent_id == claimed_by == assigned_agent
+            if (task.assigned_agent or "") != actor:
+                raise AgentNotExecutableError(
+                    f"Task assigned to '{task.assigned_agent}', "
+                    f"not '{actor}'"
                 )
-
+            if task.claimed_by != actor:
+                raise AgentNotExecutableError(
+                    f"Claim is owned by {task.claimed_by}, not {actor}"
+                )
             if task.claim_token != claim_token:
                 raise ClaimTokenMismatchError(
                     "Claim token does not match"
                 )
 
+            if TaskStatus(task.status) != TaskStatus.RUNNING:
+                raise TaskNotReadyError(
+                    f"Task must be RUNNING; current status: {task.status}"
+                )
+
             # Check if we've exceeded max attempts
             if task.attempt_count >= task.max_attempts:
-                # Terminal failure
-                now = utc_now()
-                updated_task = task.model_copy(deep=True)
-                updated_task.status = TaskStatus.FAILED.value
-                updated_task.completed_at = now
-                updated_task.updated_at = now
-                updated_task.last_error = error
+                # Terminal failure: RUNNING -> FAILED via state machine
+                updated_task, _ = self.state_machine.transition_task_in_transaction(
+                    transaction,
+                    task_uuid,
+                    TaskStatus.FAILED,
+                    actor=actor,
+                    reason=f"Task failed: {error}",
+                    correlation_id=correlation_id,
+                )
+
                 # Clean up claim fields
                 updated_task.claim_token = None
                 updated_task.claimed_by = None
                 updated_task.claimed_at = None
-
+                updated_task.last_error = error
                 transaction.save_task(updated_task)
 
                 event = _event(
@@ -387,6 +449,7 @@ class AgentExecutionService:
                     event_type="task.failed",
                     actor=actor,
                     action="fail",
+                    outcome=AuditOutcome.FAILURE,
                     details={
                         "error": error,
                         "attempt_number": task.attempt_count,
@@ -403,18 +466,22 @@ class AgentExecutionService:
                     terminal_failure=True,
                 )
 
-            # Record failure, transition to FAILED (retryable)
-            now = utc_now()
-            updated_task = task.model_copy(deep=True)
-            updated_task.status = TaskStatus.FAILED.value
-            updated_task.last_error = error
-            updated_task.updated_at = now
-            # Clear claim to allow re-claim
-            updated_task.claim_token = None
-            updated_task.claimed_by = None
-            updated_task.claimed_at = None
+            # First retryable failure: RUNNING -> BLOCKED via state machine
+            blocked_task, _ = self.state_machine.transition_task_in_transaction(
+                transaction,
+                task_uuid,
+                TaskStatus.BLOCKED,
+                actor=actor,
+                reason=f"Attempt failed: {error}",
+                correlation_id=correlation_id,
+            )
 
-            transaction.save_task(updated_task)
+            # Clear claim fields to allow re-claim
+            blocked_task.claim_token = None
+            blocked_task.claimed_by = None
+            blocked_task.claimed_at = None
+            blocked_task.last_error = error
+            transaction.save_task(blocked_task)
 
             event = _event(
                 run_id=run_uuid,
@@ -422,6 +489,7 @@ class AgentExecutionService:
                 event_type="task.attempt_failed",
                 actor=actor,
                 action="fail_attempt",
+                outcome=AuditOutcome.FAILURE,
                 details={
                     "error": error,
                     "attempt_number": task.attempt_count,
@@ -432,7 +500,7 @@ class AgentExecutionService:
             transaction.append_event(event)
 
             return AttemptFailureResult(
-                task=updated_task,
+                task=blocked_task,
                 audit_event=event,
                 retry_available=True,
                 terminal_failure=False,
@@ -446,7 +514,7 @@ class AgentExecutionService:
         actor: str,
         correlation_id: str | None = None,
     ) -> RetryPreparationResult:
-        """Prepare a failed task for retry by moving it back to READY.
+        """Prepare a blocked task for retry by moving it back to READY.
 
         Args:
             run_id: The run ID.
@@ -458,7 +526,7 @@ class AgentExecutionService:
             RetryPreparationResult with the updated task and audit event.
 
         Raises:
-            TaskNotReadyError: If the task is not in FAILED status.
+            TaskNotReadyError: If the task is not in BLOCKED status.
             AttemptLimitExceededError: If the task has exhausted retries.
         """
         run_uuid = UUID(str(run_id))
@@ -467,25 +535,30 @@ class AgentExecutionService:
         with self.repository.transaction(run_uuid) as transaction:
             task = transaction.get_task(task_uuid)
 
-            if TaskStatus(task.status) != TaskStatus.FAILED:
-                raise TaskNotReadyError(
-                    f"Task must be FAILED; current status: {task.status}"
-                )
-
-            # Check if retry is allowed (not terminal)
+            # Check if retry is allowed first (before status check)
             if task.attempt_count >= task.max_attempts:
                 raise AttemptLimitExceededError(
                     f"Task has exhausted {task.max_attempts} attempts"
                 )
 
-            now = utc_now()
-            updated_task = task.model_copy(deep=True)
-            updated_task.status = TaskStatus.READY.value
-            updated_task.updated_at = now
-            # Clear last_error for clean retry
-            updated_task.last_error = None
+            if TaskStatus(task.status) != TaskStatus.BLOCKED:
+                raise TaskNotReadyError(
+                    f"Task must be BLOCKED; current status: {task.status}"
+                )
 
-            transaction.save_task(updated_task)
+            # Use state machine to transition BLOCKED -> READY
+            ready_task, _ = self.state_machine.transition_task_in_transaction(
+                transaction,
+                task_uuid,
+                TaskStatus.READY,
+                actor=actor,
+                reason="Task prepared for retry.",
+                correlation_id=correlation_id,
+            )
+
+            # Clear last_error for clean retry
+            ready_task.last_error = None
+            transaction.save_task(ready_task)
 
             event = _event(
                 run_id=run_uuid,
@@ -493,6 +566,7 @@ class AgentExecutionService:
                 event_type="task.retry_prepared",
                 actor=actor,
                 action="prepare_retry",
+                outcome=AuditOutcome.SUCCESS,
                 details={
                     "attempt_number": task.attempt_count,
                 },
@@ -501,6 +575,11 @@ class AgentExecutionService:
             transaction.append_event(event)
 
             return RetryPreparationResult(
-                task=updated_task,
+                task=ready_task,
                 audit_event=event,
             )
+
+
+# Resolve forward references after all classes are defined
+AttemptFailureResult.model_rebuild()
+RetryPreparationResult.model_rebuild()

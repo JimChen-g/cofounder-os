@@ -8,6 +8,7 @@ from app.agents import (
     AgentRegistry,
 )
 from app.domain import (
+    AuditOutcome,
     Run,
     Task,
     TaskStatus,
@@ -87,7 +88,7 @@ class TestClaimTask:
         assert updated.attempt_count == 1
 
     def test_same_token_idempotent_re_claim(self, tmp_path):
-        """Re-claiming with the same token is idempotent."""
+        """Re-claiming with the same token and agent is idempotent."""
         repository, service = build_execution_service(tmp_path)
         run, task = setup_ready_task(repository)
 
@@ -110,6 +111,25 @@ class TestClaimTask:
         # Verify task state unchanged
         updated = repository.get_task(run.id, task.id)
         assert updated.attempt_count == 1
+
+    def test_same_token_from_different_agent_rejected(self, tmp_path):
+        """Same token from a different executable agent is rejected."""
+        repository, service = build_execution_service(tmp_path)
+        run, task = setup_ready_task(repository)
+
+        claim1 = service.claim_task(
+            run.id,
+            task.id,
+            agent_id="product-agent",
+        )
+
+        with pytest.raises(ClaimTokenMismatchError, match="owned by"):
+            service.claim_task(
+                run.id,
+                task.id,
+                agent_id="finance-agent",
+                claim_token=claim1.claim_token,
+            )
 
     def test_competing_token_rejected(self, tmp_path):
         """Competing claim with different token is rejected."""
@@ -196,12 +216,29 @@ class TestClaimTask:
                 agent_id="product-agent",
             )
 
+    def test_exhausted_attempt_budget_blocks_claim(self, tmp_path):
+        """READY task with attempt_count >= max_attempts cannot be claimed."""
+        repository, service = build_execution_service(tmp_path)
+        run, task = setup_ready_task(repository)
+
+        # Exhaust the attempt budget
+        task.attempt_count = 2
+        task.max_attempts = 2
+        repository.save_task(task)
+
+        with pytest.raises(AttemptLimitExceededError):
+            service.claim_task(
+                run.id,
+                task.id,
+                agent_id="product-agent",
+            )
+
 
 class TestCompleteClaimedTask:
     """Tests for the complete_claimed_task method."""
 
-    def test_completion_requires_matching_token(self, tmp_path):
-        """Completing a task requires the correct claim token."""
+    def test_completion_requires_matching_token_and_agent(self, tmp_path):
+        """Completing a task requires matching token and agent."""
         repository, service = build_execution_service(tmp_path)
         run, task = setup_ready_task(repository)
 
@@ -224,6 +261,26 @@ class TestCompleteClaimedTask:
         assert completed.claimed_at is None
         assert completed.completed_at is not None
         assert event.event_type == "task.completed"
+        assert event.outcome == AuditOutcome.SUCCESS
+
+    def test_completion_by_different_agent_rejected(self, tmp_path):
+        """Completing by a different agent is rejected."""
+        repository, service = build_execution_service(tmp_path)
+        run, task = setup_ready_task(repository)
+
+        claim = service.claim_task(
+            run.id,
+            task.id,
+            agent_id="product-agent",
+        )
+
+        with pytest.raises(AgentNotExecutableError, match="finance-agent"):
+            service.complete_claimed_task(
+                run.id,
+                task.id,
+                claim_token=claim.claim_token,
+                actor="finance-agent",
+            )
 
     def test_completion_with_wrong_token_rejected(self, tmp_path):
         """Completing with wrong token is rejected."""
@@ -271,8 +328,8 @@ class TestCompleteClaimedTask:
 class TestRecordAttemptFailure:
     """Tests for the record_attempt_failure method."""
 
-    def test_first_failure_allows_retry(self, tmp_path):
-        """First failure sets last_error and allows retry."""
+    def test_first_failure_status_is_blocked(self, tmp_path):
+        """First failure transitions task to BLOCKED."""
         repository, service = build_execution_service(tmp_path)
         run, task = setup_ready_task(repository)
 
@@ -292,9 +349,31 @@ class TestRecordAttemptFailure:
 
         assert result.retry_available is True
         assert result.terminal_failure is False
+        assert result.task.status == TaskStatus.BLOCKED.value
         assert result.task.last_error == "Gateway timeout"
         assert result.task.claim_token is None  # Claim cleared
         assert result.audit_event.event_type == "task.attempt_failed"
+        assert result.audit_event.outcome == AuditOutcome.FAILURE
+
+    def test_failure_by_different_agent_rejected(self, tmp_path):
+        """Recording failure by a different agent is rejected."""
+        repository, service = build_execution_service(tmp_path)
+        run, task = setup_ready_task(repository)
+
+        claim = service.claim_task(
+            run.id,
+            task.id,
+            agent_id="product-agent",
+        )
+
+        with pytest.raises(AgentNotExecutableError, match="finance-agent"):
+            service.record_attempt_failure(
+                run.id,
+                task.id,
+                claim_token=claim.claim_token,
+                error="Test error",
+                actor="finance-agent",
+            )
 
     def test_second_failure_is_terminal(self, tmp_path):
         """Second failure (at max_attempts) produces terminal FAILED."""
@@ -315,14 +394,15 @@ class TestRecordAttemptFailure:
             actor="product-agent",
         )
         assert result1.retry_available is True
+        assert result1.task.status == TaskStatus.BLOCKED.value
 
         # Prepare retry
-        retry = service.prepare_retry(
+        retry1 = service.prepare_retry(
             run.id,
             task.id,
             actor="orchestrator",
         )
-        assert retry.task.status == TaskStatus.READY.value
+        assert retry1.task.status == TaskStatus.READY.value
 
         # Second claim and fail
         claim2 = service.claim_task(
@@ -346,6 +426,7 @@ class TestRecordAttemptFailure:
         assert result2.task.last_error == "Second failure"
         assert result2.task.claim_token is None
         assert result2.audit_event.event_type == "task.failed"
+        assert result2.audit_event.outcome == AuditOutcome.FAILURE
 
     def test_retry_after_exhaustion_raises(self, tmp_path):
         """Retry after max_attempts exhaustion raises error."""
@@ -377,7 +458,7 @@ class TestRecordAttemptFailure:
         updated = repository.get_task(run.id, task.id)
         assert updated.status == TaskStatus.FAILED.value
 
-        # Cannot prepare retry on terminal task (exhausted attempts)
+        # Cannot prepare retry on terminal task
         with pytest.raises(AttemptLimitExceededError):
             service.prepare_retry(
                 run.id,
@@ -430,8 +511,39 @@ class TestRecordAttemptFailure:
 class TestPrepareRetry:
     """Tests for the prepare_retry method."""
 
-    def test_prepare_retry_moves_to_ready(self, tmp_path):
-        """Prepare retry moves FAILED task to READY."""
+    def test_prepare_retry_moves_blocked_to_ready(self, tmp_path):
+        """Prepare retry moves BLOCKED task to READY."""
+        repository, service = build_execution_service(tmp_path)
+        run, task = setup_ready_task(repository)
+
+        claim = service.claim_task(
+            run.id,
+            task.id,
+            agent_id="product-agent",
+        )
+        result = service.record_attempt_failure(
+            run.id,
+            task.id,
+            claim_token=claim.claim_token,
+            error="Temporary failure",
+            actor="product-agent",
+        )
+        assert result.task.status == TaskStatus.BLOCKED.value
+
+        retry = service.prepare_retry(
+            run.id,
+            task.id,
+            actor="orchestrator",
+        )
+
+        assert isinstance(retry, RetryPreparationResult)
+        assert retry.task.status == TaskStatus.READY.value
+        assert retry.task.last_error is None
+        assert retry.audit_event.event_type == "task.retry_prepared"
+        assert retry.audit_event.outcome == AuditOutcome.SUCCESS
+
+    def test_prepare_retry_on_failed_rejected(self, tmp_path):
+        """Preparing retry on FAILED task is rejected (terminal)."""
         repository, service = build_execution_service(tmp_path)
         run, task = setup_ready_task(repository)
 
@@ -444,27 +556,49 @@ class TestPrepareRetry:
             run.id,
             task.id,
             claim_token=claim.claim_token,
-            error="Temporary failure",
+            error="Terminal failure",
             actor="product-agent",
         )
-
-        retry = service.prepare_retry(
+        # Exhaust attempts
+        service.prepare_retry(
             run.id,
             task.id,
             actor="orchestrator",
         )
+        claim2 = service.claim_task(
+            run.id,
+            task.id,
+            agent_id="product-agent",
+        )
+        result2 = service.record_attempt_failure(
+            run.id,
+            task.id,
+            claim_token=claim2.claim_token,
+            error="Second failure",
+            actor="product-agent",
+        )
+        assert result2.task.status == TaskStatus.FAILED.value
 
-        assert isinstance(retry, RetryPreparationResult)
-        assert retry.task.status == TaskStatus.READY.value
-        assert retry.task.last_error is None
-        assert retry.audit_event.event_type == "task.retry_prepared"
+        # Cannot retry terminal task
+        with pytest.raises(AttemptLimitExceededError):
+            service.prepare_retry(
+                run.id,
+                task.id,
+                actor="orchestrator",
+            )
 
-    def test_prepare_retry_on_non_failed_rejected(self, tmp_path):
-        """Preparing retry on non-FAILED task is rejected."""
+    def test_prepare_retry_on_running_rejected(self, tmp_path):
+        """Preparing retry on RUNNING task is rejected."""
         repository, service = build_execution_service(tmp_path)
         run, task = setup_ready_task(repository)
 
-        with pytest.raises(TaskNotReadyError, match="FAILED"):
+        _claim = service.claim_task(
+            run.id,
+            task.id,
+            agent_id="product-agent",
+        )
+
+        with pytest.raises(TaskNotReadyError, match="BLOCKED"):
             service.prepare_retry(
                 run.id,
                 task.id,
