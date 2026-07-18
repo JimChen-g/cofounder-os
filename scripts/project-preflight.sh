@@ -35,6 +35,7 @@ cd "$REPO"
 
 # Track overall result
 FINAL_RESULT="PASS"
+WORKTREE_STATE="CLEAN"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -54,24 +55,25 @@ fi
 
 # 2. Branch and clean status
 section "BRANCH"
-BRANCH="$(git branch --show-current 2>/dev/null || echo "unknown")"
+BRANCH="$(/usr/bin/git branch --show-current 2>/dev/null || echo "unknown")"
 echo "BRANCH=$BRANCH"
 if [[ "$BRANCH" != "main" ]]; then
   fail "Local branch is '$BRANCH', expected 'main'"
 fi
 
-STATUS="$(git status --porcelain --untracked-files=all 2>/dev/null || true)"
+STATUS="$(/usr/bin/git status --porcelain --untracked-files=all 2>/dev/null || true)"
 if [[ -n "$STATUS" ]]; then
   fail "Local working tree is not clean"
   echo "STATUS_LINES:"
-  echo "$STATUS" | sed 's/^/  /'
+  echo "$STATUS" | /bin/sed 's/^/  /'
+  WORKTREE_STATE="DIRTY"
 else
   echo "WORKTREE_STATUS=CLEAN"
 fi
 
 # 3. Local HEAD
 section "LOCAL_HEAD"
-LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || echo "unknown")"
+LOCAL_HEAD="$(/usr/bin/git rev-parse HEAD 2>/dev/null || echo "unknown")"
 echo "LOCAL_HEAD=$LOCAL_HEAD"
 if [[ "$LOCAL_HEAD" == "unknown" ]]; then
   fail "Cannot resolve local HEAD"
@@ -79,7 +81,7 @@ fi
 
 # 4. origin/main HEAD
 section "ORIGIN_MAIN"
-ORIGIN_HEAD="$(git ls-remote origin main 2>/dev/null | awk '{print $1}' || echo "unknown")"
+ORIGIN_HEAD="$(/usr/bin/git ls-remote origin main 2>/dev/null | /usr/bin/awk '{print $1}' || echo "unknown")"
 echo "ORIGIN_MAIN_HEAD=$ORIGIN_HEAD"
 if [[ "$ORIGIN_HEAD" == "unknown" ]]; then
   fail "Cannot resolve origin/main HEAD"
@@ -98,14 +100,21 @@ if [[ "$SPARK_HEAD" == "unknown" ]]; then
   fail "Cannot resolve Spark HEAD (SSH or remote git failed)"
 fi
 
-# 6. Active stage
+# 6. Active stage — parse PROJECT_STATE.md
 section "ACTIVE_STAGE"
 ACTIVE_STAGE=""
+STAGE_LINE=""
 if [[ -f "$REPO/docs/project-control/PROJECT_STATE.md" ]]; then
-  ACTIVE_STAGE="$(grep -E '^\*\*Current governance stage\*\*:' "$REPO/docs/project-control/PROJECT_STATE.md" 2>/dev/null \
-    | sed 's/.*: //' || echo "unknown")"
+  # Try Current governance stage first, then Current accepted HEAD line
+  STAGE_LINE="$(/bin/grep -E '^\*\*Current (governance )?stage\*\*:' "$REPO/docs/project-control/PROJECT_STATE.md" 2>/dev/null | /usr/bin/head -1 || echo "")"
+  if [[ -n "$STAGE_LINE" ]]; then
+    ACTIVE_STAGE="$(echo "$STAGE_LINE" | /bin/sed 's/.*: //')"
+  fi
 fi
 echo "ACTIVE_STAGE=$ACTIVE_STAGE"
+if [[ -z "$ACTIVE_STAGE" ]]; then
+  fail "Cannot parse active stage from PROJECT_STATE.md"
+fi
 
 # 7. Service status and health
 section "SERVICES"
@@ -117,6 +126,7 @@ if [[ -x "$LOCAL_COFOUNDERCTL" ]]; then
   "$LOCAL_COFOUNDERCTL" health 2>/dev/null || fail "Local cofounderctl health failed"
 else
   echo "LOCAL_COFOUNDERCTL=not_found"
+  fail "Local cofounderctl not found at $LOCAL_COFOUNDERCTL"
 fi
 
 echo "--- Remote Status ---"
@@ -126,7 +136,7 @@ echo "--- Remote Health ---"
 ssh "${SSH_ARGS[@]}" \
   '/home/cofounder/.local/bin/cofounderctl health 2>/dev/null' || fail "Remote cofounderctl health failed"
 
-# 8. Clipboard summary
+# 8. Clipboard summary — report real worktree state
 section "CLIPBOARD"
 CLIPBOARD_LINES=(
   "PREFLIGHT $FINAL_RESULT"
@@ -135,7 +145,7 @@ CLIPBOARD_LINES=(
   "ORIGIN_MAIN_HEAD=$ORIGIN_HEAD"
   "SPARK_HEAD=$SPARK_HEAD"
   "ACTIVE_STAGE=$ACTIVE_STAGE"
-  "WORKTREE=CLEAN"
+  "WORKTREE=$WORKTREE_STATE"
 )
 CLIPBOARD_TEXT="$(printf '%s\n' "${CLIPBOARD_LINES[@]}")"
 echo "$CLIPBOARD_TEXT" | pbcopy 2>/dev/null && echo "Copied to clipboard" || echo "pbcopy unavailable — summary follows:"

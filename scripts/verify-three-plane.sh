@@ -11,6 +11,11 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 #   - Local HEAD == origin/main HEAD == Spark HEAD
 #   - Status, health, and smoke checks pass on both local and Spark
 #
+# Environment overrides (for testing):
+#   COFOUNDER_TEST_LOCAL_HEAD    — override local HEAD for testing
+#   COFOUNDER_TEST_ORIGIN_HEAD   — override origin HEAD for testing
+#   COFOUNDER_TEST_SPARK_HEAD    — override Spark HEAD for testing
+#
 # Outputs:
 #   Machine-readable PASS/FAIL block
 #   Clipboard copy of summary
@@ -39,7 +44,9 @@ SSH_ARGS=(
 cd "$REPO"
 
 FINAL_RESULT="PASS"
-RESULT_BLOCK=""
+WORKTREE_STATE="CLEAN"
+VALIDATION_STATE="PASS"
+HEAD_EQUAL="yes"
 
 fail() {
   local msg="$1"
@@ -53,17 +60,18 @@ section() {
 
 # 1. Local worktree must be clean
 section "WORKTREE"
-STATUS="$(git status --porcelain --untracked-files=all 2>/dev/null || true)"
+STATUS="$(/usr/bin/git status --porcelain --untracked-files=all 2>/dev/null || true)"
 if [[ -n "$STATUS" ]]; then
   fail "Local working tree is not clean"
-  echo "$STATUS" | sed 's/^/  /' >&2
+  echo "$STATUS" | /bin/sed 's/^/  /' >&2
+  WORKTREE_STATE="DIRTY"
 else
   echo "WORKTREE_STATUS=CLEAN"
 fi
 
 # 2. Local HEAD
 section "LOCAL_HEAD"
-LOCAL_HEAD="$(git rev-parse HEAD 2>/dev/null || echo "unknown")"
+LOCAL_HEAD="${COFOUNDER_TEST_LOCAL_HEAD:-$(/usr/bin/git rev-parse HEAD 2>/dev/null || echo "unknown")}"
 echo "LOCAL_HEAD=$LOCAL_HEAD"
 if [[ "$LOCAL_HEAD" == "unknown" ]]; then
   fail "Cannot resolve local HEAD"
@@ -71,7 +79,7 @@ fi
 
 # 3. origin/main HEAD
 section "ORIGIN_MAIN"
-ORIGIN_HEAD="$(git ls-remote origin main 2>/dev/null | awk '{print $1}' || echo "unknown")"
+ORIGIN_HEAD="${COFOUNDER_TEST_ORIGIN_HEAD:-$(/usr/bin/git ls-remote origin main 2>/dev/null | /usr/bin/awk '{print $1}' || echo "unknown")}"
 echo "ORIGIN_MAIN_HEAD=$ORIGIN_HEAD"
 if [[ "$ORIGIN_HEAD" == "unknown" ]]; then
   fail "Cannot resolve origin/main HEAD"
@@ -79,23 +87,25 @@ fi
 
 # 4. Spark HEAD
 section "SPARK_HEAD"
-SPARK_HEAD="$(ssh "${SSH_ARGS[@]}" \
-  "git -C '$REMOTE_REPO' rev-parse HEAD 2>/dev/null || echo 'unknown'" || echo "unknown")"
+SPARK_HEAD="${COFOUNDER_TEST_SPARK_HEAD:-$(ssh "${SSH_ARGS[@]}" \
+  "git -C '$REMOTE_REPO' rev-parse HEAD 2>/dev/null || echo 'unknown'" || echo "unknown")}"
 echo "SPARK_HEAD=$SPARK_HEAD"
 if [[ "$SPARK_HEAD" == "unknown" ]]; then
   fail "Cannot resolve Spark HEAD"
 fi
 
-# 5. Compare all three
+# 5. Compare all three — HEAD equality only, independent of service health
 section "COMPARISON"
 echo "LOCAL_HEAD=$LOCAL_HEAD"
 echo "ORIGIN_MAIN_HEAD=$ORIGIN_HEAD"
 echo "SPARK_HEAD=$SPARK_HEAD"
 if [[ "$LOCAL_HEAD" == "$ORIGIN_HEAD" && "$LOCAL_HEAD" == "$SPARK_HEAD" ]]; then
   echo "THREE_PLANE_STATUS=EQUAL"
+  HEAD_EQUAL="yes"
 else
   fail "HEAD mismatch: local=$LOCAL_HEAD origin=$ORIGIN_HEAD spark=$SPARK_HEAD"
   echo "THREE_PLANE_STATUS=MISMATCH"
+  HEAD_EQUAL="no"
 fi
 
 # 6. Local status, health, smoke
@@ -103,48 +113,55 @@ section "LOCAL_VALIDATION"
 LOCAL_COFOUNDERCTL="$HOME/.local/bin/cofounderctl"
 if [[ -x "$LOCAL_COFOUNDERCTL" ]]; then
   echo "--- Local Status ---"
-  "$LOCAL_COFOUNDERCTL" status 2>/dev/null || fail "Local status failed"
+  "$LOCAL_COFOUNDERCTL" status 2>/dev/null || { fail "Local status failed"; VALIDATION_STATE="FAIL"; }
   echo "--- Local Health ---"
-  "$LOCAL_COFOUNDERCTL" health 2>/dev/null || fail "Local health failed"
+  "$LOCAL_COFOUNDERCTL" health 2>/dev/null || { fail "Local health failed"; VALIDATION_STATE="FAIL"; }
   echo "--- Local Smoke ---"
-  "$LOCAL_COFOUNDERCTL" smoke 2>/dev/null || fail "Local smoke failed"
+  "$LOCAL_COFOUNDERCTL" smoke 2>/dev/null || { fail "Local smoke failed"; VALIDATION_STATE="FAIL"; }
 else
-  echo "LOCAL_COFOUNDERCTL=not_found — skipping local validation"
+  echo "LOCAL_COFOUNDERCTL=not_found at $LOCAL_COFOUNDERCTL"
+  fail "Local cofounderctl not found — local validation cannot proceed"
+  VALIDATION_STATE="FAIL"
 fi
 
 # 7. Spark status, health, smoke
 section "SPARK_VALIDATION"
 echo "--- Remote Status ---"
 ssh "${SSH_ARGS[@]}" \
-  '/home/cofounder/.local/bin/cofounderctl status 2>/dev/null' || fail "Remote status failed"
+  '/home/cofounder/.local/bin/cofounderctl status 2>/dev/null' || { fail "Remote status failed"; VALIDATION_STATE="FAIL"; }
 echo "--- Remote Health ---"
 ssh "${SSH_ARGS[@]}" \
-  '/home/cofounder/.local/bin/cofounderctl health 2>/dev/null' || fail "Remote health failed"
+  '/home/cofounder/.local/bin/cofounderctl health 2>/dev/null' || { fail "Remote health failed"; VALIDATION_STATE="FAIL"; }
 echo "--- Remote Smoke ---"
 ssh "${SSH_ARGS[@]}" \
-  '/home/cofounder/.local/bin/cofounderctl smoke 2>/dev/null' || fail "Remote smoke failed"
+  '/home/cofounder/.local/bin/cofounderctl smoke 2>/dev/null' || { fail "Remote smoke failed"; VALIDATION_STATE="FAIL"; }
 
 # 8. Build machine-readable result block
 section "RESULT"
-cat > /tmp/three-plane-result.txt <<EOF
+THREE_PLANE_EQ="EQUAL"
+if [[ "$HEAD_EQUAL" != "yes" ]]; then
+  THREE_PLANE_EQ="MISMATCH"
+fi
+
+/bin/cat > /tmp/three-plane-result.txt <<EOF
 THREE_PLANE_VERIFICATION
 FINAL_RESULT=$FINAL_RESULT
 LOCAL_HEAD=$LOCAL_HEAD
 ORIGIN_MAIN_HEAD=$ORIGIN_HEAD
 SPARK_HEAD=$SPARK_HEAD
-THREE_PLANE_STATUS=$([[ "$FINAL_RESULT" == "PASS" ]] && echo "EQUAL" || echo "MISMATCH")
-WORKTREE_STATUS=CLEAN
-VALIDATION=PASS
+THREE_PLANE_STATUS=$THREE_PLANE_EQ
+WORKTREE_STATUS=$WORKTREE_STATE
+VALIDATION=$VALIDATION_STATE
 EOF
 
-cat /tmp/three-plane-result.txt
+/bin/cat /tmp/three-plane-result.txt
 
 # 9. Clipboard
-CLIPBOARD_TEXT="THREE_PLANE $FINAL_RESULT | local=$LOCAL_HEAD spark=$SPARK_HEAD origin=$ORIGIN_HEAD"
+CLIPBOARD_TEXT="THREE_PLANE $FINAL_RESULT | heads=$THREE_PLANE_EQ worktree=$WORKTREE_STATE validation=$VALIDATION_STATE | local=$LOCAL_HEAD spark=$SPARK_HEAD origin=$ORIGIN_HEAD"
 echo "$CLIPBOARD_TEXT" | pbcopy 2>/dev/null && echo "Copied to clipboard" || echo "pbcopy unavailable — summary follows:"
 echo "$CLIPBOARD_TEXT"
 
-rm -f /tmp/three-plane-result.txt
+/bin/rm -f /tmp/three-plane-result.txt
 
 if [[ "$FINAL_RESULT" != "PASS" ]]; then
   exit 1

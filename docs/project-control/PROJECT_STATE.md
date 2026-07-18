@@ -19,7 +19,7 @@ This document must be updated in the same commit as every accepted stage.
 | D04 | Orchestration service | 076f97c |
 | D05 | Executive Orchestrator | 63ded5f |
 | D06-A | Agent execution contract | 4f29e18 |
-| G01 | Project delivery unification | 028f6d5 |
+| G01 | Project delivery unification | g01-accepted (tag; live HEAD resolved via Git) |
 
 ## Corrective History
 
@@ -35,13 +35,15 @@ This document must be updated in the same commit as every accepted stage.
 | 1f0691a | Fix zsh read-only variable in backup script | Corrective for full G01 scope |
 | 2dbfc2b | Add PATH exports to G01 governance scripts | Corrective for full G01 scope |
 | 37cf702 | Replace awk with zsh builtins for portability | Corrective for full G01 scope |
-| 58af6ed | Use full git paths in backup script | Corrective for full G01 scope |
+| 58af6ed | Use full path for git commands in backup script | Corrective for full G01 scope |
 | 03de57c | Use full paths for date and shasum | Corrective for full G01 scope |
-| 028f6d5 | Final G01 corrective — all gates passed | Accepted G01 |
+| 028f6d5 | Final G01 closeout — all gates passed | Accepted G01 |
+| 102f6cb | Mark G01 accepted after all checks pass | Final G01 acceptance record |
 
 ## Current State
 
-- **Current accepted HEAD**: 028f6d55d85a3c5bb182a13549c83eafb9abf94b (G01)
+- **Current accepted tag**: g01-accepted (annotated tag; resolve live HEAD via `git rev-parse g01-accepted`)
+- **Current accepted HEAD**: 028f6d55d85a3c5bb182a13549c83eafb9abf94b (verified by tag)
 - **Current governance stage**: (none — G01 accepted)
 - **Next product stage**: D06-B
 - **Current G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/20260718-162536Z`
