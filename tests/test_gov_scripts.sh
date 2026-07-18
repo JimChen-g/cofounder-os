@@ -13,9 +13,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
-BACKUP_SCRIPT="$SCRIPT_DIR/create-stage-backup.sh"
-PREFLIGHT_SCRIPT="$SCRIPT_DIR/project-preflight.sh"
-VERIFY_SCRIPT="$SCRIPT_DIR/verify-three-plane.sh"
+BACKUP_SCRIPT="$REPO/scripts/create-stage-backup.sh"
+PREFLIGHT_SCRIPT="$REPO/scripts/project-preflight.sh"
+VERIFY_SCRIPT="$REPO/scripts/verify-three-plane.sh"
 
 PASS_COUNT=0
 FAIL_COUNT=0
