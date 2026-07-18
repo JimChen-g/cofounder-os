@@ -106,7 +106,7 @@ ACTIVE_STAGE=""
 STAGE_LINE=""
 if [[ -f "$REPO/docs/project-control/PROJECT_STATE.md" ]]; then
   # Try Current governance stage first, then Current accepted HEAD line
-  STAGE_LINE="$(/usr/bin/grep -E '^\*\*Current (governance )?stage\*\*[[:space:]]*:' "$REPO/docs/project-control/PROJECT_STATE.md" 2>/dev/null | /usr/bin/head -1 || echo "")"
+  STAGE_LINE="$(/usr/bin/grep -E 'Current (governance )?stage\*\*[[:space:]]*:' "$REPO/docs/project-control/PROJECT_STATE.md" 2>/dev/null | /usr/bin/head -1 || echo "")"
   if [[ -n "$STAGE_LINE" ]]; then
     ACTIVE_STAGE="$(echo "$STAGE_LINE" | /usr/bin/sed 's/.*: //')"
   fi
