@@ -44,13 +44,13 @@ BACKUP_RC=$?
 if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$BACKUP_LOG"; then
   # Verify it went to the temp directory, not the real stage-backups
   BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
-  if echo "$BACKUP_DIR_LINE" | /usr/usr/bin/grep -q "$TMPDIR"; then
+  if echo "$BACKUP_DIR_LINE" | /usr/bin/grep -Fq "$TMPDIR"; then
     pass "isolated backup creates package in temp directory"
   else
     fail "isolated backup — package not in temp directory: $BACKUP_DIR_LINE"
   fi
   # Verify manifest has all required keys
-  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/usr/bin/sed 's/BACKUP_DIR=//')"
+  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
   if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
     missing=""
     for key in STAGE_ID BASELINE_COMMIT ACCEPTED_COMMIT LOCAL_HEAD DEPLOYED_HEAD DEPLOYED_AT DEPLOYMENT_RESULT FINAL_RESULT TEST_RESULT SECRETS_REVIEW RUNTIME_DATA_REVIEW; do
