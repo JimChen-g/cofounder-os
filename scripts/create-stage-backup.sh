@@ -1,8 +1,6 @@
 #!/bin/zsh
 set -euo pipefail
 
-export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-
 # ---------------------------------------------------------------------------
 # create-stage-backup.sh — create a complete stage recovery package
 #
@@ -61,7 +59,9 @@ cd "$REPO"
 STATUS="$(git status --porcelain --untracked-files=all 2>/dev/null || true)"
 if [[ -n "$STATUS" ]]; then
   echo "ERROR: Working tree is not clean — stage backup aborted" >&2
-  echo "$STATUS" | sed 's/^/  /' >&2
+  while IFS= read -r line; do
+    echo "  $line" >&2
+  done <<< "$STATUS"
   exit 1
 fi
 
@@ -117,8 +117,8 @@ fi
   echo "# Format: <status> <path> — <description>"
   echo
   while IFS= read -r line; do
-    file_status="$(echo "$line" | awk '{print $1}')"
-    path="$(echo "$line" | awk '{print $2}')"
+    file_status="${line%% *}"
+    path="${line#* }"
     if [[ -n "$path" ]]; then
       desc=""
       case "$path" in
@@ -236,4 +236,4 @@ echo "=== Stage Backup Complete ==="
 echo "BACKUP_DIR=$BACKUP_DIR"
 echo
 echo "RECOVERY_PACKAGE_CONTENTS="
-ls -la "$BACKUP_DIR" | awk '{print "  " $9 " (" $5 " bytes)"}'
+ls -la "$BACKUP_DIR" | /usr/bin/awk '{print "  " $9 " (" $5 " bytes)"}'
