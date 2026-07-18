@@ -44,7 +44,7 @@ This document must be updated in the same commit as every accepted stage.
 
 - **Current accepted tag**: g01-accepted (annotated tag; resolve live HEAD via `git rev-parse g01-accepted`)
 - **Current accepted HEAD**: 028f6d55d85a3c5bb182a13549c83eafb9abf94b (verified by tag)
-- **Current governance stage**: (none — G01 accepted)
+- **Current governance stage**: G01 — accepted (tag g01-accepted)
 - **Next product stage**: D06-B
 - **Current G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/20260718-162536Z`
 - **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
