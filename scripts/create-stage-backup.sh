@@ -115,7 +115,7 @@ fi
   echo "# Format: <status> <path> — <description>"
   echo
   while IFS= read -r line; do
-    status="$(echo "$line" | awk '{print $1}')"
+    file_status="$(echo "$line" | awk '{print $1}')"
     path="$(echo "$line" | awk '{print $2}')"
     if [[ -n "$path" ]]; then
       desc=""
@@ -127,7 +127,7 @@ fi
         tasks/*) desc="task definition" ;;
         *) desc="other" ;;
       esac
-      echo "$status $path — $desc"
+      echo "$file_status $path — $desc"
     fi
   done < "$CHANGED_FILES"
 } > "${CHANGED_FILES}.tmp"
