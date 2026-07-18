@@ -6,15 +6,17 @@ This document is the single source of truth for how CoFounder OS is developed,
 reviewed, and deployed. Every implementation session must read and follow this
 contract before changing any file.
 
-## Source of Truth Hierarchy
+## Authority Hierarchy
 
-1. This contract (CLAUDE_MASTER_OPERATING_CONTRACT.md)
-2. Task definitions in `tasks/D##_*.md`
-3. Architecture documents in `docs/`
-4. Frozen infrastructure contract in `docs/architecture-contract.md`
+1. `CLAUDE_MASTER_OPERATING_CONTRACT.md` — immutable operating rules
+2. `docs/project-control/PROJECT_STATE.md` — accepted factual state
+3. `docs/project-control/ROADMAP.md` — approved development sequence
+4. `tasks/D##_*.md` — current stage requirements
+5. `docs/` architecture contracts
 
-When documents conflict, the higher-ranked document wins. Conflicts must be
-resolved by updating the lower-ranked document, not by ignoring the higher one.
+When documents conflict, stop and resolve the lower-priority document.
+Do not proceed until the conflict is resolved by updating the lower-priority
+document.
 
 ## Deployment Planes
 
