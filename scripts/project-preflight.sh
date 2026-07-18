@@ -66,6 +66,7 @@ if [[ -n "$STATUS" ]]; then
   fail "Local working tree is not clean"
   echo "STATUS_LINES:"
   echo "$STATUS" | /usr/bin/sed 's/^/  /'
+  echo "WORKTREE_STATUS=DIRTY"
   WORKTREE_STATE="DIRTY"
 else
   echo "WORKTREE_STATUS=CLEAN"
