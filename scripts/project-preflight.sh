@@ -149,6 +149,7 @@ CLIPBOARD_LINES=(
   "WORKTREE=$WORKTREE_STATE"
 )
 CLIPBOARD_TEXT="$(printf '%s\n' "${CLIPBOARD_LINES[@]}")"
+echo "$CLIPBOARD_TEXT"
 echo "$CLIPBOARD_TEXT" | pbcopy 2>/dev/null && echo "Copied to clipboard" || echo "pbcopy unavailable — summary follows:"
 
 echo
