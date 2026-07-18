@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # The package contains:
 #   cofounder-os.bundle      — complete Git bundle
-#   source.tar.gz            — git archive of source tree
+#   source.tar.gz            — /usr/bin/git archive of source tree
 #   SHA256SUMS               — SHA-256 checksums
 #   manifest.env             — stage metadata
 #   changed-files.txt        — list of changed files
@@ -56,7 +56,7 @@ fi
 cd "$REPO"
 
 # Require clean worktree
-STATUS="$(git status --porcelain --untracked-files=all 2>/dev/null || true)"
+STATUS="$(/usr/bin/git status --porcelain --untracked-files=all 2>/dev/null || true)"
 if [[ -n "$STATUS" ]]; then
   echo "ERROR: Working tree is not clean — stage backup aborted" >&2
   while IFS= read -r line; do
@@ -66,12 +66,12 @@ if [[ -n "$STATUS" ]]; then
 fi
 
 # Verify the commit exists
-if ! git cat-file -e "$COMMIT_SHA^{commit}" 2>/dev/null; then
+if ! /usr/bin/git cat-file -e "$COMMIT_SHA^{commit}" 2>/dev/null; then
   echo "ERROR: Commit not found: $COMMIT_SHA" >&2
   exit 1
 fi
 
-LOCAL_HEAD="$(git rev-parse HEAD)"
+LOCAL_HEAD="$(/usr/bin/git rev-parse HEAD)"
 
 # Create backup directory
 mkdir -p "$BACKUP_DIR"
@@ -87,8 +87,8 @@ echo
 # 1. Complete Git bundle
 echo "[1/9] Creating Git bundle..."
 BUNDLE="$BACKUP_DIR/cofounder-os.bundle"
-git bundle create "$BUNDLE" --all
-git bundle verify "$BUNDLE" >/dev/null 2>&1 || {
+/usr/bin/git bundle create "$BUNDLE" --all
+/usr/bin/git bundle verify "$BUNDLE" >/dev/null 2>&1 || {
   echo "ERROR: Bundle verification failed" >&2
   rm -rf "$BACKUP_DIR"
   exit 1
@@ -98,18 +98,18 @@ echo "  OK: $BUNDLE"
 # 2. Source archive
 echo "[2/9] Creating source archive..."
 ARCHIVE="$BACKUP_DIR/source.tar.gz"
-git -c tar.tarformat=oldgnu archive --format=tar.gz --prefix=cofounder-os/ "$COMMIT_SHA" > "$ARCHIVE"
+/usr/bin/git -c tar.tarformat=oldgnu archive --format=tar.gz --prefix=cofounder-os/ "$COMMIT_SHA" > "$ARCHIVE"
 echo "  OK: $ARCHIVE"
 
 # 3. Generate changed-files.txt from the commit range
 echo "[3/9] Generating changed-files.txt..."
 CHANGED_FILES="$BACKUP_DIR/changed-files.txt"
-PARENT="$(git rev-parse "$COMMIT_SHA^1" 2>/dev/null || echo "")"
+PARENT="$(/usr/bin/git rev-parse "$COMMIT_SHA^1" 2>/dev/null || echo "")"
 if [[ -n "$PARENT" ]]; then
-  git diff --name-status "$PARENT" "$COMMIT_SHA" > "$CHANGED_FILES" 2>/dev/null || true
+  /usr/bin/git diff --name-status "$PARENT" "$COMMIT_SHA" > "$CHANGED_FILES" 2>/dev/null || true
 else
   # Root commit — all files are new
-  git diff-tree --no-commit-id --name-status -r "$COMMIT_SHA" > "$CHANGED_FILES" 2>/dev/null || true
+  /usr/bin/git diff-tree --no-commit-id --name-status -r "$COMMIT_SHA" > "$CHANGED_FILES" 2>/dev/null || true
 fi
 # Add descriptions for each changed file
 {
@@ -139,7 +139,7 @@ echo "  OK: $CHANGED_FILES"
 # 4. Git log
 echo "[4/9] Generating git-log.txt..."
 GIT_LOG="$BACKUP_DIR/git-log.txt"
-git log --oneline --decorate -n 20 "$COMMIT_SHA" > "$GIT_LOG"
+/usr/bin/git log --oneline --decorate -n 20 "$COMMIT_SHA" > "$GIT_LOG"
 echo "  OK: $GIT_LOG"
 
 # 5. Test summary (best-effort)
@@ -220,7 +220,7 @@ echo "  OK: SHA256SUMS"
 # 9. Verify bundle and checksums
 echo "[9/9] Verifying..."
 cd "$REPO"
-git bundle verify "$BUNDLE" >/dev/null 2>&1 || {
+/usr/bin/git bundle verify "$BUNDLE" >/dev/null 2>&1 || {
   echo "ERROR: Bundle verification failed" >&2
   exit 1
 }
