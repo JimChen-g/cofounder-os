@@ -30,3 +30,11 @@ logs/
 .env.local
 
 id_ed25519
+
+.env.backup.*
+
+.venv-vllm/
+
+data/runs/
+
+.venv-vllm
