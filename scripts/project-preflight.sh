@@ -154,3 +154,7 @@ echo "$CLIPBOARD_TEXT" | pbcopy 2>/dev/null && echo "Copied to clipboard" || ech
 
 echo
 echo "FINAL_RESULT=$FINAL_RESULT"
+
+if [[ "$FINAL_RESULT" != "PASS" ]]; then
+  exit 1
+fi
