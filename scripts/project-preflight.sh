@@ -1,6 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
 
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
 # ---------------------------------------------------------------------------
 # project-preflight.sh — read-only project diagnostics
 #
