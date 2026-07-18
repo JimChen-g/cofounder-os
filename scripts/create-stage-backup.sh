@@ -34,7 +34,7 @@ EOF
 
 STAGE_ID="$1"
 COMMIT_SHA="$2"
-TIMESTAMP="$(date -u '+%Y%m%d-%H%M%SZ')"
+TIMESTAMP="$(/bin/date -u '+%Y%m%d-%H%M%SZ')"
 BACKUP_ROOT="/Users/jimcheng/Documents/CoFounderOS/stage-backups"
 BACKUP_DIR="$BACKUP_ROOT/$STAGE_ID/$TIMESTAMP"
 
@@ -147,7 +147,7 @@ echo "[5/9] Generating test-summary.txt..."
 TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
 {
   echo "# Test Summary for $STAGE_ID"
-  echo "# Generated at: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "# Generated at: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo
   echo "## Targeted Tests"
   echo "Command: pytest tests/ -x -q"
@@ -197,7 +197,7 @@ STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
 STAGE_ID: $STAGE_ID
 STAGE_NAME: $STAGE_ID
 BASELINE_COMMIT: $COMMIT_SHA
-REPORT_GENERATED_AT: $(date -u '+%Y-%m-%dT%H:%M:%SZ')
+REPORT_GENERATED_AT: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
 REPORT_GENERATED_BY: create-stage-backup.sh
 REPORT_VERSION: 1.0
 
@@ -213,7 +213,7 @@ echo "  OK: $STAGE_REPORT"
 # 8. SHA-256 checksums
 echo "[8/9] Generating SHA256SUMS..."
 cd "$BACKUP_DIR"
-shasum -a 256 cofounder-os.bundle source.tar.gz manifest.env changed-files.txt test-summary.txt git-log.txt stage-report.txt > SHA256SUMS
+/usr/bin/shasum -a 256 cofounder-os.bundle source.tar.gz manifest.env changed-files.txt test-summary.txt git-log.txt stage-report.txt > SHA256SUMS
 /bin/chmod 600 SHA256SUMS
 echo "  OK: SHA256SUMS"
 
@@ -225,7 +225,7 @@ cd "$REPO"
   exit 1
 }
 cd "$BACKUP_DIR"
-shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 || {
+/usr/bin/shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 || {
   echo "ERROR: Checksum verification failed" >&2
   exit 1
 }
