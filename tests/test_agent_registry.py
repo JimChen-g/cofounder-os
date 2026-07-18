@@ -23,10 +23,17 @@ def test_default_registry_contains_bounded_agent_set():
         "operations-agent",
     )
     assert registry.get(EXECUTIVE_AGENT_ID).can_plan is True
-    assert all(
-        definition.can_execute
+    # Only executive-orchestrator, product-agent, and finance-agent are executable
+    executable = [
+        definition.agent_id
         for definition in registry.list()
-    )
+        if definition.can_execute
+    ]
+    assert executable == [
+        "executive-orchestrator",
+        "product-agent",
+        "finance-agent",
+    ]
 
 
 def test_unknown_agent_is_rejected():

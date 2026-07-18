@@ -128,6 +128,12 @@ class Task(DomainRecord):
     input_artifact_ids: List[UUID] = Field(default_factory=list)
     output_artifact_ids: List[UUID] = Field(default_factory=list)
     approval_id: Optional[UUID] = None
+    attempt_count: int = 0
+    max_attempts: int = 2
+    last_error: Optional[str] = None
+    claimed_by: Optional[str] = None
+    claim_token: Optional[str] = None
+    claimed_at: Optional[datetime] = None
 
 
 class AgentMessage(DomainRecord):

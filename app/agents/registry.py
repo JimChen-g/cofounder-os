@@ -64,6 +64,7 @@ DEFAULT_AGENTS: tuple[AgentDefinition, ...] = (
             "market research",
             "fact synthesis",
         ),
+        can_execute=False,
     ),
     AgentDefinition(
         agent_id="product-agent",
@@ -105,6 +106,7 @@ DEFAULT_AGENTS: tuple[AgentDefinition, ...] = (
             "contract risk",
             "policy analysis",
         ),
+        can_execute=False,
     ),
     AgentDefinition(
         agent_id="operations-agent",
@@ -119,6 +121,7 @@ DEFAULT_AGENTS: tuple[AgentDefinition, ...] = (
             "process design",
             "operational risk",
         ),
+        can_execute=False,
     ),
 )
 

@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.agents import AgentRegistry
 from app.clients import GatewayCompletion
-from app.domain import ApprovalStatus, RunStatus, TaskStatus
+from app.domain import ApprovalStatus, RunStatus
 from app.orchestrators import (
     ExecutiveOrchestrator,
     ExecutivePlan,
@@ -33,7 +33,7 @@ def valid_plan_payload(approval_required=True):
                 "description": (
                     "Evaluate target users, competitors, and demand signals."
                 ),
-                "assigned_agent": "research-agent",
+                "assigned_agent": "product-agent",
                 "dependency_keys": [],
                 "deliverable": "Market evidence brief",
                 "requires_approval": False,
@@ -131,7 +131,7 @@ def test_plan_uses_registered_agents_and_strict_prompt(tmp_path):
 
     assert "Do not invent or dynamically create agents" in system_prompt
     assert "Do not create nested plans" in system_prompt
-    assert len(user_payload["registered_agents"]) == 6
+    assert len(user_payload["registered_agents"]) == 3
     assert user_payload["output_schema"]["type"] == "object"
 
 
