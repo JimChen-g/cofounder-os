@@ -63,7 +63,7 @@ section "WORKTREE"
 STATUS="$(/usr/bin/git status --porcelain --untracked-files=all 2>/dev/null || true)"
 if [[ -n "$STATUS" ]]; then
   fail "Local working tree is not clean"
-  echo "$STATUS" | /bin/sed 's/^/  /' >&2
+  echo "$STATUS" | /usr/bin/sed 's/^/  /' >&2
   WORKTREE_STATE="DIRTY"
 else
   echo "WORKTREE_STATUS=CLEAN"

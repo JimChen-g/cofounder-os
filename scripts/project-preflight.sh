@@ -65,7 +65,7 @@ STATUS="$(/usr/bin/git status --porcelain --untracked-files=all 2>/dev/null || t
 if [[ -n "$STATUS" ]]; then
   fail "Local working tree is not clean"
   echo "STATUS_LINES:"
-  echo "$STATUS" | /bin/sed 's/^/  /'
+  echo "$STATUS" | /usr/bin/sed 's/^/  /'
   WORKTREE_STATE="DIRTY"
 else
   echo "WORKTREE_STATUS=CLEAN"
@@ -106,9 +106,9 @@ ACTIVE_STAGE=""
 STAGE_LINE=""
 if [[ -f "$REPO/docs/project-control/PROJECT_STATE.md" ]]; then
   # Try Current governance stage first, then Current accepted HEAD line
-  STAGE_LINE="$(/bin/grep -E '^\*\*Current (governance )?stage\*\*:' "$REPO/docs/project-control/PROJECT_STATE.md" 2>/dev/null | /usr/bin/head -1 || echo "")"
+  STAGE_LINE="$(/usr/bin/grep -E '^\*\*Current (governance )?stage\*\*:' "$REPO/docs/project-control/PROJECT_STATE.md" 2>/dev/null | /usr/bin/head -1 || echo "")"
   if [[ -n "$STAGE_LINE" ]]; then
-    ACTIVE_STAGE="$(echo "$STAGE_LINE" | /bin/sed 's/.*: //')"
+    ACTIVE_STAGE="$(echo "$STAGE_LINE" | /usr/bin/sed 's/.*: //')"
   fi
 fi
 echo "ACTIVE_STAGE=$ACTIVE_STAGE"

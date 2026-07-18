@@ -44,17 +44,17 @@ BACKUP_RC=$?
 if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$BACKUP_LOG"; then
   # Verify it went to the temp directory, not the real stage-backups
   BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
-  if echo "$BACKUP_DIR_LINE" | /usr/bin/grep -q "$TMPDIR"; then
+  if echo "$BACKUP_DIR_LINE" | /usr/usr/bin/grep -q "$TMPDIR"; then
     pass "isolated backup creates package in temp directory"
   else
     fail "isolated backup — package not in temp directory: $BACKUP_DIR_LINE"
   fi
   # Verify manifest has all required keys
-  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
+  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/usr/bin/sed 's/BACKUP_DIR=//')"
   if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
     missing=""
     for key in STAGE_ID BASELINE_COMMIT ACCEPTED_COMMIT LOCAL_HEAD DEPLOYED_HEAD DEPLOYED_AT DEPLOYMENT_RESULT FINAL_RESULT TEST_RESULT SECRETS_REVIEW RUNTIME_DATA_REVIEW; do
-      if ! /bin/grep -q "^${key}=" "$BACKUP_DIR/manifest.env"; then
+      if ! /usr/bin/grep -q "^${key}=" "$BACKUP_DIR/manifest.env"; then
         missing="$missing $key"
       fi
     done
@@ -64,7 +64,7 @@ if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$B
       fail "manifest.env missing required keys:$missing"
     fi
     # Verify FINAL_RESULT is not PENDING
-    if /bin/grep -q "^FINAL_RESULT=PASS" "$BACKUP_DIR/manifest.env"; then
+    if /usr/bin/grep -q "^FINAL_RESULT=PASS" "$BACKUP_DIR/manifest.env"; then
       pass "manifest.env FINAL_RESULT is PASS (not PENDING)"
     else
       fail "manifest.env FINAL_RESULT is not PASS"
@@ -74,7 +74,7 @@ if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$B
   fi
   # Verify changed-files.txt covers the range (not just parent)
   if [[ -f "$BACKUP_DIR/changed-files.txt" ]]; then
-    if /bin/grep -q "baseline.*accepted" "$BACKUP_DIR/changed-files.txt"; then
+    if /usr/bin/grep -q "baseline.*accepted" "$BACKUP_DIR/changed-files.txt"; then
       pass "changed-files.txt covers baseline..accepted range"
     else
       fail "changed-files.txt missing range annotation"

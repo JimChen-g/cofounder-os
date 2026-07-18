@@ -126,16 +126,16 @@ REJECTED_PATTERNS=(
 TRACKED_FILES="$(/usr/bin/git ls-files 2>/dev/null || true)"
 REJECTED_FILES=""
 for pattern in "${REJECTED_PATTERNS[@]}"; do
-  hits="$(echo "$TRACKED_FILES" | /usr/bin/grep -E "$pattern" 2>/dev/null || true)"
+  hits="$(echo "$TRACKED_FILES" | /usr/usr/bin/grep -E "$pattern" 2>/dev/null || true)"
   if [[ -n "$hits" ]]; then
     REJECTED_FILES="$REJECTED_FILES$hits"$'\n'
   fi
 done
-REJECTED_FILES="$(echo "$REJECTED_FILES" | /bin/sed '/^$/d' | /usr/bin/sort -u || true)"
+REJECTED_FILES="$(echo "$REJECTED_FILES" | /usr/bin/sed '/^$/d' | /usr/bin/sort -u || true)"
 
 if [[ -n "$REJECTED_FILES" ]]; then
   echo "ERROR: Stage backup rejected — tracked sensitive files found:" >&2
-  echo "$REJECTED_FILES" | /bin/sed 's/^/  /' >&2
+  echo "$REJECTED_FILES" | /usr/bin/sed 's/^/  /' >&2
   echo "Remove or .gitignore these files before creating a stage backup." >&2
   exit 1
 fi
@@ -218,7 +218,7 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
   if [[ -d "$REPO/tests" ]]; then
     TEST_OUTPUT="$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q 2>&1)" || true
     echo "$TEST_OUTPUT"
-    PASSED="$(echo "$TEST_OUTPUT" | /usr/bin/grep -oE '[0-9]+ passed' | /usr/bin/awk '{print $1}' || echo "?")"
+    PASSED="$(echo "$TEST_OUTPUT" | /usr/usr/bin/grep -oE '[0-9]+ passed' | /usr/bin/awk '{print $1}' || echo "?")"
     echo
     echo "Result: $PASSED passed"
   else
