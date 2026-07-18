@@ -42,7 +42,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Validate stage ID format
-if [[ ! "$STAGE_ID" =~ ^[A-Z0-9]+-[A-Z0-9]+$ ]]; then
+if [[ ! "$STAGE_ID" =~ ^[A-Z0-9]+(-[A-Z0-9]+)?$ ]]; then
   echo "ERROR: Invalid stage ID format: $STAGE_ID" >&2
   exit 1
 fi
