@@ -177,7 +177,7 @@ CHANGED_FILES="$BACKUP_DIR/changed-files.txt"
 {
   echo "# Changed files in $STAGE_ID (range: $BASELINE_SHA..$ACCEPTED_SHA)"
   echo "# Format: <status> <path> — <description>"
-  echo "# Baseline: $BASELINE_SHA | Accepted: $ACCEPTED_SHA"
+  echo "# baseline: $BASELINE_SHA | accepted: $ACCEPTED_SHA"
   echo
   while IFS= read -r line; do
     file_status="${line%% *}"
