@@ -19,7 +19,7 @@ This document must be updated in the same commit as every accepted stage.
 | D04 | Orchestration service | 076f97c |
 | D05 | Executive Orchestrator | 63ded5f |
 | D06-A | Agent execution contract | 4f29e18 |
-| G01 | Project delivery unification | in_progress |
+| G01 | Project delivery unification | 028f6d5 |
 
 ## Corrective History
 
@@ -31,13 +31,20 @@ This document must be updated in the same commit as every accepted stage.
 | 4f29e18 | Accepted lifecycle and ownership correction | Current accepted D06-A |
 | e7dd0f4 | Complete G01 governance document set (partial) | Premature acceptance — corrective commit required |
 | be99554 | Mark G01 accepted in PROJECT_STATE.md (partial) | Premature acceptance — corrective commit required |
+| ca1fe04 | Correct G01 stage ID regex and add tests | Corrective for full G01 scope |
+| 1f0691a | Fix zsh read-only variable in backup script | Corrective for full G01 scope |
+| 2dbfc2b | Add PATH exports to G01 governance scripts | Corrective for full G01 scope |
+| 37cf702 | Replace awk with zsh builtins for portability | Corrective for full G01 scope |
+| 58af6ed | Use full git paths in backup script | Corrective for full G01 scope |
+| 03de57c | Use full paths for date and shasum | Corrective for full G01 scope |
+| 028f6d5 | Final G01 corrective — all gates passed | Accepted G01 |
 
 ## Current State
 
-- **Current accepted HEAD**: 4f29e1874cd9be8a9969b1c4f6478b0759a9a0d2 (D06-A)
-- **Current governance stage**: G01 — in progress (corrective commit pending)
+- **Current accepted HEAD**: 028f6d55d85a3c5bb182a13549c83eafb9abf94b (G01)
+- **Current governance stage**: (none — G01 accepted)
 - **Next product stage**: D06-B
-- **Current G01 recovery package path**: TBD (will be set after corrective commit)
+- **Current G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/20260718-162536Z`
 - **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
 
 ## Mandatory Update Block
