@@ -6,10 +6,8 @@ from app.agents.product_agent import (
     PRODUCT_AGENT_ID,
     ProductAgent,
     ProductAgentError,
-    ProductAgentExecutionError,
     ProductAgentResponseError,
-    ProductAgentServiceError,
-    ProductAgentValidationError,
+    ProductAgentValidationFailure,
     ProductGatewayProtocol,
 )
 from app.agents.registry import (
@@ -35,9 +33,7 @@ __all__ = [
     "PRODUCT_AGENT_ID",
     "ProductAgent",
     "ProductAgentError",
-    "ProductAgentExecutionError",
     "ProductAgentResponseError",
-    "ProductAgentServiceError",
-    "ProductAgentValidationError",
+    "ProductAgentValidationFailure",
     "ProductGatewayProtocol",
 ]

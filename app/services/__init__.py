@@ -32,7 +32,9 @@ from app.services.orchestration import (
     RunSnapshot,
 )
 from app.services.product_agent import (
+    ProductAgentContextError,
     ProductAgentExecutionError,
+    ProductAgentRouteEvidenceError,
     ProductAgentService,
     ProductAgentServiceError,
     ProductAgentValidationFailure,
@@ -57,7 +59,9 @@ __all__ = [
     "DependencyNotReady",
     "OrchestrationError",
     "OrchestrationService",
+    "ProductAgentContextError",
     "ProductAgentExecutionError",
+    "ProductAgentRouteEvidenceError",
     "ProductAgentService",
     "ProductAgentServiceError",
     "ProductAgentValidationFailure",

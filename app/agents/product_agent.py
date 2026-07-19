@@ -18,7 +18,7 @@ from app.domain import (
     ProductAgentResultV1,
     ProductTaskContext,
 )
-from app.domain.product_models import PRODUCT_SCHEMA_VERSION, ProductAgentValidationError  # noqa: F401
+from app.domain.product_models import PRODUCT_SCHEMA_VERSION
 from app.models import ChatMessage, Role
 
 
@@ -37,7 +37,7 @@ ALLOWED_VIRTUAL_MODELS = frozenset({
 })
 
 
-# ── Gateway Protocol ────────────────────────────────────────────────────────
+# ── Error hierarchy ─────────────────────────────────────────────────────────
 
 class ProductAgentError(RuntimeError):
     """Base error for Product Agent operations."""
@@ -47,21 +47,15 @@ class ProductAgentResponseError(ProductAgentError):
     """Raised when the Gateway returns an unusable response."""
 
 
-class ProductAgentExecutionError(ProductAgentError):
-    """Raised when Product Agent execution fails."""
-
-
-class ProductAgentServiceError(RuntimeError):
-    """Base error for Product Agent service operations."""
-
-
-class ProductAgentValidationFailure(ProductAgentServiceError):
+class ProductAgentValidationFailure(ProductAgentError):
     """Raised when Product Agent validation fails after repair."""
 
     def __init__(self, message: str, validation_errors: Optional[List[str]] = None) -> None:
         super().__init__(message)
         self.validation_errors = validation_errors or []
 
+
+# ── Gateway Protocol ────────────────────────────────────────────────────────
 
 class ProductGatewayProtocol(BaseModel):
     """Protocol configuration for Product Agent Gateway calls."""
@@ -108,9 +102,12 @@ def _build_system_prompt(context: ProductTaskContext) -> str:
     if context.dependency_artifact_ids:
         lines.extend([
             "## Dependency Artifacts",
-            *[f"- {aid}" for aid in context.dependency_artifact_ids],
-            "",
         ])
+        for dep_id, dep_summary in zip(context.dependency_artifact_ids, context.dependency_artifact_summaries):
+            lines.extend([
+                f"- {dep_id} (checksum: {dep_summary.checksum}): {dep_summary.summary}",
+            ])
+        lines.append("")
 
     lines.extend([
         "## Output Format",
@@ -241,8 +238,11 @@ def _build_user_message(context: ProductTaskContext) -> str:
         lines.extend([
             "",
             "Consider these dependency artifacts:",
-            *[f"- {aid}" for aid in context.dependency_artifact_ids],
         ])
+        for dep_id, dep_summary in zip(context.dependency_artifact_ids, context.dependency_artifact_summaries):
+            lines.extend([
+                f"- {dep_id} (checksum: {dep_summary.checksum}): {dep_summary.summary}",
+            ])
 
     return "\n".join(lines)
 

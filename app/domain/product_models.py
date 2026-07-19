@@ -12,7 +12,6 @@ from typing import Dict, List, Literal, Optional
 from uuid import UUID
 
 
-
 # ── Schema version ─────────────────────────────────────────────────────────
 
 PRODUCT_SCHEMA_VERSION = "1.0"
@@ -96,6 +95,21 @@ class RecommendedAction(BaseModel):
     owner: Optional[str] = Field(default=None, max_length=100)
 
 
+class DependencyArtifactSummary(BaseModel):
+    """Strict summary of a dependency artifact for prompt inclusion.
+
+    Only non-sensitive metadata is included: identity, checksum, and a
+    short human-readable summary.  Complete artifact bodies, audit logs,
+    secrets, and credentials are never included.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: UUID
+    checksum: str = Field(min_length=1, max_length=128)
+    summary: str = Field(min_length=1, max_length=500)
+
+
 # ── Context and request models ──────────────────────────────────────────────
 
 class ProductTaskContext(BaseModel):
@@ -105,7 +119,7 @@ class ProductTaskContext(BaseModel):
 
     schema_version: Literal["1.0"] = "1.0"
     run_id: UUID
-    task_id: Optional[UUID] = None
+    task_id: UUID
     correlation_id: Optional[str] = Field(default=None, max_length=100)
     objective: str = Field(min_length=1, max_length=2000)
     task_title: str = Field(min_length=1, max_length=500)
@@ -115,6 +129,9 @@ class ProductTaskContext(BaseModel):
     constraints: List[str] = Field(default_factory=list, max_length=20)
     dependency_artifact_ids: List[UUID] = Field(default_factory=list, max_length=50)
     dependency_artifact_checksums: Dict[str, str] = Field(default_factory=dict)
+    dependency_artifact_summaries: List[DependencyArtifactSummary] = Field(
+        default_factory=list, max_length=20
+    )
 
 
 class ProductAgentRequest(BaseModel):
@@ -159,21 +176,3 @@ class ProductAgentResultV1(BaseModel):
             if not isinstance(item, str) or not item.strip():
                 raise ValueError("Each item must be a non-empty string")
         return value
-
-
-# ── Error models ────────────────────────────────────────────────────────────
-
-class ProductAgentValidationError(RuntimeError):
-    """Raised when the Product Agent response cannot be validated."""
-
-    def __init__(self, message: str, validation_errors: Optional[List[str]] = None) -> None:
-        super().__init__(message)
-        self.validation_errors = validation_errors or []
-
-
-class ProductAgentError(RuntimeError):
-    """Base error for Product Agent operations."""
-
-
-class ProductAgentResponseError(ProductAgentError):
-    """Raised when the Gateway returns an unusable response."""

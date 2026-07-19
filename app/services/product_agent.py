@@ -10,16 +10,17 @@ automatic Task retry — those responsibilities belong to D06-D.
 from __future__ import annotations
 
 import hashlib
-import time
 from typing import Any, Optional
 from uuid import UUID
 
 from app.agents.product_agent import (
     PRODUCT_AGENT_ID,
     ProductAgent,
+    ProductAgentValidationFailure,
     ProductGatewayProtocol,
 )
 from app.artifacts import FileArtifactStore, StoredArtifact
+from app.artifacts.store import _canonical_json
 from app.domain import ProductAgentRequest, ProductAgentResultV1, ProductTaskContext
 from app.services import (
     ArtifactRegistrationService,
@@ -31,7 +32,7 @@ from app.clients.gateway import GatewayClient, GatewayCompletion
 def _compute_idempotency_key(
     schema_version: str,
     run_id: UUID,
-    task_id: Optional[UUID],
+    task_id: UUID,
     relation: str,
     logical_name: str,
     filename: str,
@@ -48,7 +49,7 @@ def _compute_idempotency_key(
         "product-agent",
         f"v{schema_version}",
         str(run_id),
-        str(task_id) if task_id is not None else "run",
+        str(task_id),
         relation,
         logical_name,
         filename,
@@ -62,8 +63,12 @@ class ProductAgentServiceError(RuntimeError):
     """Base error for Product Agent service operations."""
 
 
-class ProductAgentValidationFailure(ProductAgentServiceError):
-    """Raised when Product Agent validation fails after repair."""
+class ProductAgentContextError(ProductAgentServiceError):
+    """Raised when the Product Agent request context is invalid."""
+
+
+class ProductAgentRouteEvidenceError(ProductAgentServiceError):
+    """Raised when route evidence cannot be recorded."""
 
 
 class ProductAgentExecutionError(ProductAgentServiceError):
@@ -174,10 +179,11 @@ class ProductAgentService:
     """Coordinate Product Agent execution and artifact production.
 
     This service:
+    - Validates task_id is present (required for Task-output artifacts)
     - Calls ProductAgent with structured context
     - Validates the result against ProductAgentResultV1
-    - Records Gateway routing evidence
-    - Renders JSON and Markdown artifacts
+    - Records Gateway routing evidence from actual completion fields
+    - Renders JSON (canonical) and Markdown artifacts
     - Writes and registers artifacts through ArtifactRegistrationService
 
     It does NOT:
@@ -213,63 +219,75 @@ class ProductAgentService:
         Optional[Any],
         Optional[Any],
     ]:
-        """Execute the Product Agent and produce registered artifacts.
+        """Execute the Product Agent and produce registered Task-output artifacts.
+
+        Preconditions:
+          - request.context.task_id must be set (required for output relation)
 
         Returns:
             (result, completion, json_artifact, md_artifact, json_domain, md_domain)
         """
         context = request.context
-        start_time = time.time()
 
-        # Execute Product Agent
+        # Validate task_id before any Gateway call or artifact creation
+        if context.task_id is None:
+            raise ProductAgentContextError(
+                "ProductAgentService requires context.task_id for Task-output artifacts"
+            )
+
+        # Execute Product Agent and produce artifacts
         try:
             result, completion = await self.agent.execute(request)
+
+            # Record route decision from actual Gateway completion fields
+            self._record_route_decision(
+                context=context,
+                completion=completion,
+                correlation_id=correlation_id,
+            )
+
+            # Render Markdown
+            md_content = _render_markdown(result)
+
+            # Write and register JSON artifact via canonical JSON path
+            json_stored, json_domain, json_event = (
+                self._write_json_artifact(
+                    run_id=context.run_id,
+                    task_id=context.task_id,
+                    logical_name="product-brief",
+                    filename="product-brief.json",
+                    value=result.model_dump(mode="json", exclude_none=True),
+                    content_type="application/json; charset=utf-8",
+                    created_by=created_by,
+                    correlation_id=correlation_id,
+                )
+            )
+
+            # Write and register Markdown artifact
+            md_stored, md_domain, md_event = (
+                self._write_and_register(
+                    run_id=context.run_id,
+                    task_id=context.task_id,
+                    logical_name="product-brief-md",
+                    filename="product-brief.md",
+                    content=md_content.encode("utf-8"),
+                    content_type="text/markdown; charset=utf-8",
+                    created_by=created_by,
+                    correlation_id=correlation_id,
+                )
+            )
+        except ProductAgentValidationFailure as exc:
+            raise ProductAgentExecutionError(
+                f"Product Agent execution failed: {exc}"
+            ) from exc
+        except ProductAgentRouteEvidenceError as exc:
+            raise ProductAgentExecutionError(
+                f"Product Agent route evidence failed: {exc}"
+            ) from exc
         except Exception as exc:
             raise ProductAgentExecutionError(
                 f"Product Agent execution failed: {exc}"
             ) from exc
-
-        latency_ms = (time.time() - start_time) * 1000.0
-
-        # Record route decision
-        self._record_route_decision(
-            context=context,
-            completion=completion,
-            latency_ms=latency_ms,
-            correlation_id=correlation_id,
-        )
-
-        # Render artifacts
-        json_content = result.model_dump_json(indent=2, exclude_none=True) + "\n"
-        md_content = _render_markdown(result)
-
-        # Write and register JSON artifact
-        json_stored, json_domain, json_event = (
-            self._write_and_register(
-                run_id=context.run_id,
-                task_id=context.task_id,
-                logical_name="product-brief",
-                filename="product-brief.json",
-                content=json_content.encode("utf-8"),
-                content_type="application/json; charset=utf-8",
-                created_by=created_by,
-                correlation_id=correlation_id,
-            )
-        )
-
-        # Write and register Markdown artifact
-        md_stored, md_domain, md_event = (
-            self._write_and_register(
-                run_id=context.run_id,
-                task_id=context.task_id,
-                logical_name="product-brief-md",
-                filename="product-brief.md",
-                content=md_content.encode("utf-8"),
-                content_type="text/markdown; charset=utf-8",
-                created_by=created_by,
-                correlation_id=correlation_id,
-            )
-        )
 
         return (
             result,
@@ -280,10 +298,77 @@ class ProductAgentService:
             md_domain,
         )
 
+    def _write_json_artifact(
+        self,
+        run_id: UUID,
+        task_id: UUID,
+        logical_name: str,
+        filename: str,
+        value: Any,
+        content_type: str,
+        created_by: str,
+        correlation_id: Optional[str] = None,
+    ) -> tuple[StoredArtifact, Any, Any]:
+        """Write canonical JSON artifact and register in orchestration."""
+        # Produce the exact canonical bytes that FileArtifactStore.write_bytes
+        # will checksum.  Use the same _canonical_json function the store uses.
+        canonical_str = _canonical_json(value)
+        canonical_bytes = canonical_str.encode("utf-8")
+        content_checksum = hashlib.sha256(canonical_bytes).hexdigest()
+
+        idempotency_key = _compute_idempotency_key(
+            schema_version="1.0",
+            run_id=run_id,
+            task_id=task_id,
+            relation="output",
+            logical_name=logical_name,
+            filename=filename,
+            checksum=content_checksum,
+        )
+
+        # Write directly via the store's write_bytes to avoid a second
+        # canonical-serialization pass through write_json.
+        stored = self.artifact_store.write_bytes(
+            run_id=run_id,
+            logical_name=logical_name,
+            filename=filename,
+            content=canonical_bytes,
+            created_by=created_by,
+            task_id=task_id,
+            content_type=content_type,
+            idempotency_key=idempotency_key,
+        )
+
+        # Register in orchestration
+        domain_artifact, event = self.orchestration.register_artifact(
+            run_id=run_id,
+            kind="data",
+            name=logical_name,
+            uri=stored.uri,
+            created_by=created_by,
+            actor=created_by,
+            relation="output",
+            task_id=task_id,
+            content_type=content_type,
+            checksum_sha256=stored.checksum_sha256,
+            size_bytes=stored.size_bytes,
+            correlation_id=correlation_id,
+            metadata={
+                "filename": stored.filename,
+                "logical_name": stored.logical_name,
+                "format_version": stored.format_version,
+                "idempotency_key": stored.idempotency_key,
+                "provenance": stored.provenance,
+                "relation": "output",
+            },
+        )
+
+        return stored, domain_artifact, event
+
     def _write_and_register(
         self,
         run_id: UUID,
-        task_id: Optional[UUID],
+        task_id: UUID,
         logical_name: str,
         filename: str,
         content: bytes,
@@ -295,18 +380,14 @@ class ProductAgentService:
 
         writer = ArtifactRegistrationService(self.artifact_store, self.orchestration)
 
-        # Content checksum (used for both idempotency key and integrity)
+        # Content checksum from the exact bytes that will be stored
         content_checksum = hashlib.sha256(content).hexdigest()
-
-        relation = "run"
-        if task_id is not None:
-            relation = "output"
 
         idempotency_key = _compute_idempotency_key(
             schema_version="1.0",
             run_id=run_id,
             task_id=task_id,
-            relation=relation,
+            relation="output",
             logical_name=logical_name,
             filename=filename,
             checksum=content_checksum,
@@ -320,7 +401,7 @@ class ProductAgentService:
             created_by=created_by,
             task_id=task_id,
             content_type=content_type,
-            relation=relation,
+            relation="output",
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
         )
@@ -331,27 +412,51 @@ class ProductAgentService:
         self,
         context: ProductTaskContext,
         completion: GatewayCompletion,
-        latency_ms: float,
         correlation_id: Optional[str] = None,
     ) -> None:
-        """Record Gateway routing evidence."""
-        try:
-            self.orchestration.record_route_decision(
-                run_id=context.run_id,
-                task_id=context.task_id,
-                requested_model=self.protocol.virtual_model,
-                selected_model=completion.selected_model or self.protocol.virtual_model,
-                provider=completion.selected_provider or "gateway",
-                reason=completion.routing_reason or "Product Agent default routing",
-                fallback_used=completion.fallback_used,
-                latency_ms=latency_ms,
-                correlation_id=correlation_id,
-                metadata={
-                    "agent_id": PRODUCT_AGENT_ID,
-                    "schema_version": "1.0",
-                    "product_agent_version": "1.0",
-                },
+        """Record Gateway routing evidence from actual completion fields.
+
+        Uses only real GatewayCompletion data.  Missing required fields
+        cause a controlled ProductAgentRouteEvidenceError.  No synthetic
+        values are fabricated.
+        """
+        # Validate required fields from actual completion
+        if completion.selected_model is None:
+            raise ProductAgentRouteEvidenceError(
+                "GatewayCompletion.selected_model is required for route evidence"
             )
-        except Exception:
-            # Route recording failure must not prevent artifact creation
-            pass
+        if completion.selected_provider is None:
+            raise ProductAgentRouteEvidenceError(
+                "GatewayCompletion.selected_provider is required for route evidence"
+            )
+        if completion.routing_reason is None:
+            raise ProductAgentRouteEvidenceError(
+                "GatewayCompletion.routing_reason is required for route evidence"
+            )
+
+        # Use latency from raw_metadata only when present and valid
+        latency_ms = None
+        raw_meta = completion.raw_metadata or {}
+        raw_latency = raw_meta.get("latency_ms")
+        if raw_latency is not None:
+            try:
+                latency_ms = float(raw_latency)
+            except (TypeError, ValueError):
+                latency_ms = None
+
+        self.orchestration.record_route_decision(
+            run_id=context.run_id,
+            task_id=context.task_id,
+            requested_model=completion.requested_model,
+            selected_model=completion.selected_model,
+            provider=completion.selected_provider,
+            reason=completion.routing_reason,
+            fallback_used=completion.fallback_used,
+            latency_ms=latency_ms,
+            correlation_id=correlation_id,
+            metadata={
+                "agent_id": PRODUCT_AGENT_ID,
+                "schema_version": "1.0",
+                "product_agent_version": "1.0",
+            },
+        )

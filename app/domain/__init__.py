@@ -20,7 +20,6 @@ from app.domain.models import (
 from app.domain.product_models import (
     ProductAgentRequest,
     ProductAgentResultV1,
-    ProductAgentValidationError,
     ProductRisk,
     ProductTaskContext,
     RecommendedAction,
@@ -29,6 +28,7 @@ from app.domain.product_models import (
     UserPain,
     Milestone,
     ProductRequirement,
+    DependencyArtifactSummary,
 )
 
 __all__ = [
@@ -40,12 +40,11 @@ __all__ = [
     "AuditEvent",
     "AuditOutcome",
     "DomainRecord",
+    "DependencyArtifactSummary",
     "MessageRole",
     "Milestone",
     "ProductAgentRequest",
     "ProductAgentResultV1",
-    "ProductAgentValidationError",
-    "ProductAgentRequest",
     "ProductRequirement",
     "ProductRisk",
     "ProductTaskContext",
