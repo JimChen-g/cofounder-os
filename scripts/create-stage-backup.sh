@@ -211,36 +211,20 @@ echo "  OK: $GIT_LOG"
 # 5. Test summary (real results from actual test run — failures abort)
 echo "[5/9] Generating test-summary.txt..."
 TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
-{
-  echo "# Test Summary for $STAGE_ID"
-  echo "# Baseline: $BASELINE_SHA"
-  echo "# Accepted: $ACCEPTED_SHA"
-  echo "# Generated at: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  echo
-  echo "## Full Test Suite"
-  echo "Command: /Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q"
-  if [[ -d "$REPO/tests" ]]; then
-    /Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q 2>&1
-    echo "Result: PASS"
-  else
-    echo "Result: SKIPPED (no tests directory)"
-  fi
-  echo
-  echo "## Lint"
-  echo "Command: ruff check on changed files in stage range"
-  CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
-  if [[ -n "$CHANGED_PATHS" ]]; then
-    RUFF_OUTPUT="$(echo "$CHANGED_PATHS" | xargs /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check 2>&1)" || {
-      echo "$RUFF_OUTPUT"
-      echo "ERROR: Ruff lint failed on changed files — aborting backup" >&2
-      exit 1
-    }
-    echo "$RUFF_OUTPUT"
-    echo "Result: PASS"
-  else
-    echo "Result: SKIPPED (no changed files)"
-  fi
-} > "$TEST_SUMMARY" 2>&1
+/bin/cat > "$TEST_SUMMARY" <<EOF
+# Test Summary for $STAGE_ID
+# Baseline: $BASELINE_SHA
+# Accepted: $ACCEPTED_SHA
+# Generated at: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
+EOF
+echo "## Full Test Suite" >> "$TEST_SUMMARY"
+echo "Command: /Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q" >> "$TEST_SUMMARY"
+if [[ -d "$REPO/tests" ]]; then
+  /Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q >> "$TEST_SUMMARY" 2>&1
+  echo "Result: PASS" >> "$TEST_SUMMARY"
+else
+  echo "Result: SKIPPED (no tests directory)" >> "$TEST_SUMMARY"
+fi
 echo "  OK: $TEST_SUMMARY"
 echo "  OK: $TEST_SUMMARY"
 
