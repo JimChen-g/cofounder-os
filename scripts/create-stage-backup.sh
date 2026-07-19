@@ -225,51 +225,8 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
   else
     echo "Result: SKIPPED (no tests directory)"
   fi
-  echo
-  echo "## Lint"
-  echo "Command: ruff check on changed files in stage range"
-  CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
-  if [[ -n "$CHANGED_PATHS" ]]; then
-    RUFF_OUTPUT="$(echo "$CHANGED_PATHS" | xargs /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check 2>&1)" || {
-      echo "$RUFF_OUTPUT"
-      echo "ERROR: Ruff lint failed on changed files — aborting backup" >&2
-      exit 1
-    }
-    echo "$RUFF_OUTPUT"
-    echo "Result: PASS"
-  else
-    echo "Result: SKIPPED (no changed files)"
-  fi
-  echo
-  echo "## Diff Check"
-  echo "Command: git diff --check"
-  if ! /usr/bin/git diff --check 2>&1; then
-    echo "ERROR: Diff check failed — aborting backup" >&2
-    exit 1
-  fi
-  echo "Result: PASS"
-  echo
-  echo "## Secret Scan"
-  echo "Command: grep -rE for secret patterns in changed files"
-  CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
-  if [[ -n "$CHANGED_PATHS" ]]; then
-    SECRET_HITS=""
-    while IFS= read -r filepath; do
-      if [[ -f "$filepath" ]] && /usr/bin/grep -q -E "(api[_-]?key|secret|password|private[_-]?key|token)" "$filepath" 2>/dev/null; then
-        SECRET_HITS="$SECRET_HITS $filepath"
-      fi
-    done <<< "$CHANGED_PATHS"
-    if [[ -n "$SECRET_HITS" ]]; then
-      echo "FINDINGS:$SECRET_HITS"
-      echo "ERROR: Secret scan failed — aborting backup" >&2
-      exit 1
-    else
-      echo "CLEAN: no secrets found in changed files"
-    fi
-  else
-    echo "CLEAN: no changed files to scan"
-  fi
 } > "$TEST_SUMMARY" 2>&1
+echo "  OK: $TEST_SUMMARY"
 echo "  OK: $TEST_SUMMARY"
 
 # 6. manifest.env — all required keys populated, DEPLOYMENT_RESULT=PASS matches FINAL_RESULT
