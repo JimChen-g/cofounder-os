@@ -67,7 +67,7 @@ This document must be updated in the same commit as every accepted stage.
 - **Latest G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/<UTC timestamp>/`
 - **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
 - **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
-- **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-043444Z` (preliminary, review pending)
+- **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-045630Z` (corrective, review pending)
 
 ## Mandatory Update Block
 
