@@ -811,7 +811,7 @@ class TestIncludeFounderContextEnforcement:
         store = FileArtifactStore(tmp_path / "artifacts")
 
         # Unique founder secret marker
-        founder_secret = "FOUNDER_SECRET_MARKER_XYZ_12345"
+        founder_marker = "FOUNDER_MARKER_XYZ_12345"
 
         class MessageCapturingGateway:
             """Gateway that captures all messages for inspection."""
@@ -829,7 +829,7 @@ class TestIncludeFounderContextEnforcement:
         run, _ = orch.create_run(objective="test", actor="test")
         task, _ = orch.create_task(run.id, title="Product", actor="test")
         context = _make_context(run_id=run.id, task_id=task.id)
-        context.founder_context = founder_secret
+        context.founder_context = founder_marker
         request = _make_request(context=context, include_founder_context=False)
 
         await service.execute(request)
@@ -841,8 +841,8 @@ class TestIncludeFounderContextEnforcement:
         )
 
         # Founder secret marker must be absent from every message
-        assert founder_secret not in all_message_content
-        assert "FOUNDER_SECRET" not in all_message_content
+        assert founder_marker not in all_message_content
+        assert "FOUNDER_MARKER" not in all_message_content
 
     async def test_founder_context_included_in_gateway_messages_when_enabled(self, tmp_path):
         """Founder context marker is present in Gateway messages when enabled."""
@@ -852,7 +852,7 @@ class TestIncludeFounderContextEnforcement:
         store = FileArtifactStore(tmp_path / "artifacts")
 
         # Unique founder secret marker
-        founder_secret = "FOUNDER_SECRET_MARKER_ABC_67890"
+        founder_marker = "FOUNDER_MARKER_ABC_67890"
 
         class MessageCapturingGateway:
             """Gateway that captures all messages for inspection."""
@@ -870,7 +870,7 @@ class TestIncludeFounderContextEnforcement:
         run, _ = orch.create_run(objective="test", actor="test")
         task, _ = orch.create_task(run.id, title="Product", actor="test")
         context = _make_context(run_id=run.id, task_id=task.id)
-        context.founder_context = founder_secret
+        context.founder_context = founder_marker
         request = _make_request(context=context, include_founder_context=True)
 
         await service.execute(request)
@@ -882,7 +882,7 @@ class TestIncludeFounderContextEnforcement:
         )
 
         # Founder secret marker must be present in at least one message
-        assert founder_secret in all_message_content
+        assert founder_marker in all_message_content
 
 
 # ── Route evidence failure injection tests ────────────────────────────────────
