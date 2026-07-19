@@ -300,12 +300,12 @@ echo "[7/9] Generating stage-report.txt..."
 STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
 
 # Capture test results for the report
-TARGETED_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x -q"
-TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x -q --tb=no 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
-GOVERNANCE_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x -q"
-GOVERNANCE_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x -q --tb=no 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
-FULL_SUITE_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q"
-FULL_SUITE_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q --tb=no 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+TARGETED_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x"
+TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x --tb=short 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+GOVERNANCE_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x"
+GOVERNANCE_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x --tb=short 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+FULL_SUITE_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x"
+FULL_SUITE_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x --tb=short 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
 
 LOCAL_SHA="$(/usr/bin/git rev-parse HEAD)"
 ORIGIN_SHA="$(/usr/bin/git rev-parse origin/main 2>/dev/null || echo 'unavailable')"
