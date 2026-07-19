@@ -353,8 +353,16 @@ validate_manifest() {
   done
 
   # Check DEPLOYMENT_RESULT and FINAL_RESULT are consistent
-  deploy_result="$(/usr/bin/grep '^DEPLOYMENT_RESULT=' "$manifest" 2>/dev/null | cut -d= -f2)"
-  final_result="$(/usr/bin/grep '^FINAL_RESULT=' "$manifest" 2>/dev/null | cut -d= -f2)"
+  local deploy_result
+  local final_result
+  deploy_result="$(/usr/bin/grep '^DEPLOYMENT_RESULT=' "$manifest" 2>/dev/null | /usr/bin/cut -d= -f2)" || {
+    echo "ERROR: Could not read DEPLOYMENT_RESULT from manifest" >&2
+    return 1
+  }
+  final_result="$(/usr/bin/grep '^FINAL_RESULT=' "$manifest" 2>/dev/null | /usr/bin/cut -d= -f2)" || {
+    echo "ERROR: Could not read FINAL_RESULT from manifest" >&2
+    return 1
+  }
   if [[ "$deploy_result" == "PENDING" ]] && [[ "$final_result" == "PASS" ]]; then
     echo "ERROR: Manifest has DEPLOYMENT_RESULT=PENDING with FINAL_RESULT=PASS — schema violation" >&2
     errors=$((errors + 1))

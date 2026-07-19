@@ -210,8 +210,8 @@ if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-INT" "$(git rev
   BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
   BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
   if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
-    deploy_result="$(/usr/bin/grep '^DEPLOYMENT_RESULT=' "$BACKUP_DIR/manifest.env" | cut -d= -f2)"
-    final_result="$(/usr/bin/grep '^FINAL_RESULT=' "$BACKUP_DIR/manifest.env" | cut -d= -f2)"
+    deploy_result="$(/usr/bin/grep '^DEPLOYMENT_RESULT=' "$BACKUP_DIR/manifest.env" | /usr/bin/cut -d= -f2)"
+    final_result="$(/usr/bin/grep '^FINAL_RESULT=' "$BACKUP_DIR/manifest.env" | /usr/bin/cut -d= -f2)"
     if [[ "$final_result" == "PASS" ]] && [[ "$deploy_result" == "PENDING" ]]; then
       fail "manifest has FINAL_RESULT=PASS with DEPLOYMENT_RESULT=PENDING"
     else
