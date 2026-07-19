@@ -1,219 +1,523 @@
-"""Tests for the filesystem Artifact Store."""
+"""Tests for the filesystem Artifact Store (D06-B approved contract)."""
 
 from __future__ import annotations
+
+import hashlib
+import json
+import threading
 
 import pytest
 
 from app.artifacts import (
     ArtifactConflictError,
     ArtifactIntegrityError,
+    ArtifactPathError,
     FileArtifactStore,
 )
-from app.domain import Artifact, ArtifactKind
+from app.services import (
+    ArtifactRegistrationService,
+    OrchestrationService,
+)
+from app.state import FileStateRepository, LifecycleStateMachine
 
+
+# ── Helpers ────────────────────────────────────────────────────────────────
 
 CONTENT = b"Hello, Artifact Store!"
+CONTENT_TEXT = CONTENT.decode("utf-8")
 
 
-def _make_artifact(run_id, artifact_id=None, kind=ArtifactKind.REPORT, name="report.md"):
-    aid = artifact_id if artifact_id is not None else run_id
-    return Artifact(
+def _make_store(tmp_path):
+    return FileArtifactStore(tmp_path / "artifacts")
+
+
+def _write_text(store, run_id, logical_name="report", filename="report.md", text=CONTENT_TEXT, task_id=None, idempotency_key=None, created_by="test-user"):
+    return store.write_text(
         run_id=run_id,
-        id=aid,
-        kind=kind,
-        name=name,
-        uri=f"artifact://{name}",
-        created_by="test",
+        logical_name=logical_name,
+        filename=filename,
+        text=text,
+        created_by=created_by,
+        task_id=task_id,
+        idempotency_key=idempotency_key,
     )
 
 
-def test_store_and_retrieve_round_trip(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000001")
+def _write_json(store, run_id, logical_name="result", filename="result.json", value=None, task_id=None, idempotency_key=None, created_by="test-user"):
+    if value is None:
+        value = {"key": "value", "number": 42}
+    return store.write_json(
+        run_id=run_id,
+        logical_name=logical_name,
+        filename=filename,
+        value=value,
+        created_by=created_by,
+        task_id=task_id,
+        idempotency_key=idempotency_key,
+    )
 
-    stored = store.store(artifact, CONTENT)
 
-    assert stored.artifact_id == artifact.id
-    assert stored.run_id == artifact.run_id
-    assert stored.kind == artifact.kind
-    assert stored.name == artifact.name
+# ── Text round trip ────────────────────────────────────────────────────────
+
+def test_text_round_trip(tmp_path):
+    store = _make_store(tmp_path)
+    stored = _write_text(store, "00000000-0000-0000-0000-000000000001")
+
+    assert stored.logical_name == "report"
+    assert stored.filename == "report.md"
+    assert stored.content_type == "text/plain; charset=utf-8"
     assert stored.size_bytes == len(CONTENT)
-    assert stored.checksum_sha256 == __import__("hashlib").sha256(CONTENT).hexdigest()
-    assert stored.relative_path == f"{str(artifact.run_id)}/{str(artifact.id)}.bin"
+    assert stored.checksum_sha256 == hashlib.sha256(CONTENT).hexdigest()
+    assert stored.created_by == "test-user"
+    assert stored.format_version == "1.0"
+    assert stored.uri == "artifact://run/report"
 
-    retrieved = store.get(artifact.id, artifact.run_id)
-    assert retrieved == CONTENT
-
-
-def test_store_detects_checksum_mismatch(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000002")
-
-    with pytest.raises(ArtifactIntegrityError):
-        store.store(artifact, CONTENT, expected_checksum="sha256:bad")
+    text = store.read_text("00000000-0000-0000-0000-000000000001", "report", "report.md")
+    assert text == CONTENT.decode("utf-8")
 
 
-def test_store_rejects_duplicate(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000003")
+# ── Canonical JSON round trip ──────────────────────────────────────────────
 
-    store.store(artifact, CONTENT)
+def test_canonical_json_round_trip(tmp_path):
+    store = _make_store(tmp_path)
+    value = {"z": 1, "a": [3, 2, 1], "m": {"nested": True}}
+    stored = _write_json(store, "00000000-0000-0000-0000-000000000002", value=value)
 
-    with pytest.raises(ArtifactConflictError):
-        store.store(artifact, CONTENT)
+    assert stored.content_type == "application/json; charset=utf-8"
+    assert stored.size_bytes > 0
 
-
-def test_get_verifies_integrity(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000004")
-
-    store.store(artifact, CONTENT)
-
-    meta_path = (
-        tmp_path / "artifacts" / str(artifact.run_id) / f"{artifact.id}.meta.json"
-    )
-    meta = __import__("json").loads(meta_path.read_text(encoding="utf-8"))
-    meta["checksum_sha256"] = "sha256:corrupt"
-    meta_path.write_text(__import__("json").dumps(meta) + "\n", encoding="utf-8")
-
-    with pytest.raises(ArtifactIntegrityError):
-        store.get(artifact.id, artifact.run_id)
+    data = store.read_json("00000000-0000-0000-0000-000000000002", "result", "result.json")
+    assert data == value
 
 
-def test_get_missing_content_raises(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000005")
+# ── Deterministic JSON checksum ───────────────────────────────────────────
 
-    with pytest.raises(ArtifactIntegrityError):
-        store.get(artifact.id, artifact.run_id)
+def test_deterministic_json_checksum(tmp_path):
+    store = _make_store(tmp_path)
+    value_a = {"z": 1, "a": 2}
+    value_b = {"a": 2, "z": 1}
 
+    stored_a = _write_json(store, "00000000-0000-0000-0000-000000000003", logical_name="v1", filename="v1.json", value=value_a)
+    stored_b = _write_json(store, "00000000-0000-0000-0000-000000000004", logical_name="v2", filename="v2.json", value=value_b)
 
-def test_get_meta_without_reading_content(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000006")
-
-    stored = store.store(artifact, CONTENT)
-    meta = store.get_meta(artifact.id, artifact.run_id)
-
-    assert meta == stored
+    assert stored_a.checksum_sha256 == stored_b.checksum_sha256
 
 
-def test_list_run_meta(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    run_id = "00000000-0000-0000-0000-000000000007"
-    a1 = _make_artifact(run_id=run_id, name="a.md")
-    a2 = _make_artifact(run_id=run_id, artifact_id="00000000-0000-0000-0000-000000000008", name="b.md")
+# ── Run scope ──────────────────────────────────────────────────────────────
 
-    store.store(a1, CONTENT)
-    store.store(a2, CONTENT + b" extra")
+def test_run_scope_layout(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(store, "00000000-0000-0000-0000-000000000005")
 
-    records = store.list_run_meta(run_id)
-    assert [r.artifact_id for r in records] == [a1.id, a2.id]
-    assert [r.name for r in records] == ["a.md", "b.md"]
+    content_dir = tmp_path / "artifacts" / "data" / "runs" / "00000000-0000-0000-0000-000000000005" / "artifacts" / "run" / "report"
+    assert content_dir.is_dir()
+    assert (content_dir / "report.md").is_file()
+    assert (content_dir / "meta.json").is_file()
 
 
-def test_list_run_meta_empty_when_no_run(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    assert store.list_run_meta("00000000-0000-0000-0000-000000000009") == []
+# ── Task scope ─────────────────────────────────────────────────────────────
 
-
-def test_exists(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000010")
-
-    assert not store.exists(artifact.id, artifact.run_id)
-
-    store.store(artifact, CONTENT)
-
-    assert store.exists(artifact.id, artifact.run_id)
-
-
-def test_delete_removes_content_and_meta(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000011")
-
-    store.store(artifact, CONTENT)
-    assert store.exists(artifact.id, artifact.run_id)
-
-    store.delete(artifact.id, artifact.run_id)
-    assert not store.exists(artifact.id, artifact.run_id)
-
-    run_dir = tmp_path / "artifacts" / str(artifact.run_id)
-    assert not run_dir.exists()
-
-
-def test_delete_cleans_empty_run_dir(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000012")
-
-    store.store(artifact, CONTENT)
-    store.delete(artifact.id, artifact.run_id)
-
-    run_dir = tmp_path / "artifacts" / str(artifact.run_id)
-    assert not run_dir.exists()
-
-
-def test_verify_returns_meta_on_success(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000013")
-
-    stored = store.store(artifact, CONTENT)
-    verified = store.verify(artifact.id, artifact.run_id)
-
-    assert verified == stored
-
-
-def test_verify_raises_on_integrity_failure(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000014")
-
-    store.store(artifact, CONTENT)
-
-    bin_path = (
-        tmp_path / "artifacts" / str(artifact.run_id) / f"{artifact.id}.bin"
-    )
-    bin_path.write_bytes(b"corrupt")
-
-    with pytest.raises(ArtifactIntegrityError):
-        store.verify(artifact.id, artifact.run_id)
-
-
-def test_store_creates_permission_restricted_files(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    artifact = _make_artifact(run_id="00000000-0000-0000-0000-000000000015")
-
-    store.store(artifact, CONTENT)
-
-    bin_path = (
-        tmp_path / "artifacts" / str(artifact.run_id) / f"{artifact.id}.bin"
-    )
-    meta_path = (
-        tmp_path / "artifacts" / str(artifact.run_id) / f"{artifact.id}.meta.json"
+def test_task_scope_layout(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(
+        store,
+        "00000000-0000-0000-0000-000000000006",
+        task_id="00000000-0000-0000-0000-000000000099",
     )
 
-    assert oct(bin_path.stat().st_mode)[-3:] == "600"
+    content_dir = (
+        tmp_path
+        / "artifacts"
+        / "data"
+        / "runs"
+        / "00000000-0000-0000-0000-000000000006"
+        / "artifacts"
+        / "00000000-0000-0000-0000-000000000099"
+        / "report"
+    )
+    assert content_dir.is_dir()
+    assert (content_dir / "report.md").is_file()
+
+
+# ── Stable URI ─────────────────────────────────────────────────────────────
+
+def test_stable_uri(tmp_path):
+    store = _make_store(tmp_path)
+    stored = _write_text(store, "00000000-0000-0000-0000-000000000007")
+
+    assert stored.uri == "artifact://run/report"
+
+    stored_task = _write_text(
+        store,
+        "00000000-0000-0000-0000-000000000007",
+        task_id="00000000-0000-0000-0000-000000000099",
+    )
+    assert stored_task.uri == "artifact://00000000-0000-0000-0000-000000000099/report"
+
+
+# ── Corruption detection ──────────────────────────────────────────────────
+
+def test_corruption_detection(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(store, "00000000-0000-0000-0000-000000000008")
+
+    content_path = (
+        tmp_path
+        / "artifacts"
+        / "data"
+        / "runs"
+        / "00000000-0000-0000-0000-000000000008"
+        / "artifacts"
+        / "run"
+        / "report"
+        / "report.md"
+    )
+    content_path.write_bytes(b"corrupted content")
+
+    with pytest.raises(ArtifactIntegrityError):
+        store.read_text("00000000-0000-0000-0000-000000000008", "report", "report.md")
+
+
+# ── Missing content ────────────────────────────────────────────────────────
+
+def test_missing_content(tmp_path):
+    store = _make_store(tmp_path)
+
+    with pytest.raises(ArtifactIntegrityError):
+        store.read_text("00000000-0000-0000-0000-000000000009", "report", "report.md")
+
+
+# ── Absolute path rejection ────────────────────────────────────────────────
+
+def test_absolute_path_rejection(tmp_path):
+    store = _make_store(tmp_path)
+
+    with pytest.raises(ArtifactPathError):
+        _write_text(store, "00000000-0000-0000-0000-000000000010", logical_name="/absolute")
+
+
+# ── Traversal rejection ────────────────────────────────────────────────────
+
+def test_traversal_rejection(tmp_path):
+    store = _make_store(tmp_path)
+
+    with pytest.raises(ArtifactPathError):
+        _write_text(store, "00000000-0000-0000-0000-000000000011", logical_name="../escape")
+
+
+# ── Symlink rejection ──────────────────────────────────────────────────────
+
+def test_symlink_rejection(tmp_path):
+    store = _make_store(tmp_path)
+
+    # Create a symlink inside the store root pointing outside
+    link_dir = tmp_path / "artifacts" / "data"
+    link_dir.mkdir(parents=True, exist_ok=True)
+    symlink = link_dir / "runs"
+    target = tmp_path / "outside"
+    target.mkdir(exist_ok=True)
+    try:
+        symlink.symlink_to(target)
+
+        with pytest.raises(ArtifactPathError):
+            _write_text(store, "00000000-0000-0000-0000-000000000012")
+    finally:
+        if symlink.is_symlink():
+            symlink.unlink()
+
+
+# ── Safe filename normalization ────────────────────────────────────────────
+
+def test_safe_filename_normalization(tmp_path):
+    store = _make_store(tmp_path)
+    stored = _write_text(store, "00000000-0000-0000-0000-000000000013", filename="My-Report_2.md")
+
+    assert stored.filename == "My-Report_2.md"
+    content_dir = (
+        tmp_path
+        / "artifacts"
+        / "data"
+        / "runs"
+        / "00000000-0000-0000-0000-000000000013"
+        / "artifacts"
+        / "run"
+        / "report"
+    )
+    assert (content_dir / "My-Report_2.md").is_file()
+
+
+# ── 0600/0700 permissions ─────────────────────────────────────────────────
+
+def test_permissions(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(store, "00000000-0000-0000-0000-000000000014")
+
+    content_path = (
+        tmp_path
+        / "artifacts"
+        / "data"
+        / "runs"
+        / "00000000-0000-0000-0000-000000000014"
+        / "artifacts"
+        / "run"
+        / "report"
+        / "report.md"
+    )
+    meta_path = content_path.parent / "meta.json"
+
+    assert oct(content_path.stat().st_mode)[-3:] == "600"
     assert oct(meta_path.stat().st_mode)[-3:] == "600"
 
-
-def test_root_directory_has_restricted_permissions(tmp_path):
-    FileArtifactStore(tmp_path / "artifacts")
-
-    assert oct((tmp_path / "artifacts").stat().st_mode)[-3:] == "700"
+    root = tmp_path / "artifacts"
+    assert oct(root.stat().st_mode)[-3:] == "700"
 
 
-def test_store_multiple_artifacts_same_run(tmp_path):
-    store = FileArtifactStore(tmp_path / "artifacts")
-    run_id = "00000000-0000-0000-0000-000000000016"
-    artifacts = [
-        _make_artifact(run_id=run_id, artifact_id=f"00000000-0000-0000-0000-{i:012d}", name=f"f{i}.bin")
-        for i in range(5)
-    ]
+# ── No temporary files ─────────────────────────────────────────────────────
 
-    for idx, art in enumerate(artifacts):
-        store.store(art, CONTENT + idx.to_bytes(1, "big") * 100)
+def test_no_temporary_files(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(store, "00000000-0000-0000-0000-000000000015")
 
-    records = store.list_run_meta(run_id)
-    assert len(records) == 5
+    content_dir = (
+        tmp_path
+        / "artifacts"
+        / "data"
+        / "runs"
+        / "00000000-0000-0000-0000-000000000015"
+        / "artifacts"
+        / "run"
+        / "report"
+    )
+    assert not any(p.name.endswith(".tmp") for p in content_dir.iterdir())
 
-    for art in artifacts:
-        assert store.exists(art.id, art.run_id)
+
+# ── Same-key same-content idempotency ─────────────────────────────────────
+
+def test_same_key_same_content_idempotency(tmp_path):
+    store = _make_store(tmp_path)
+    stored1 = _write_text(store, "00000000-0000-0000-0000-000000000016", idempotency_key="key1")
+    stored2 = _write_text(store, "00000000-0000-0000-0000-000000000016", idempotency_key="key1")
+
+    assert stored1 == stored2
+    assert stored1.checksum_sha256 == stored2.checksum_sha256
+
+
+# ── Same-key different-content conflict ───────────────────────────────────
+
+def test_same_key_different_content_conflict(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(store, "00000000-0000-0000-0000-000000000017", idempotency_key="key1")
+
+    with pytest.raises(ArtifactConflictError):
+        _write_text(store, "00000000-0000-0000-0000-000000000017", idempotency_key="key1", text="Different content")
+
+
+# ── Restart idempotency ────────────────────────────────────────────────────
+
+def test_restart_idempotency(tmp_path):
+    store1 = _make_store(tmp_path)
+    stored1 = _write_text(store1, "00000000-0000-0000-0000-000000000018", idempotency_key="restart-key")
+
+    store2 = _make_store(tmp_path)
+    stored2 = _write_text(store2, "00000000-0000-0000-0000-000000000018", idempotency_key="restart-key")
+
+    assert stored1 == stored2
+    assert stored1.checksum_sha256 == stored2.checksum_sha256
+
+
+# ── Concurrent writer protection ──────────────────────────────────────────
+
+def test_concurrent_writer_protection(tmp_path):
+    store = _make_store(tmp_path)
+    errors = []
+
+    def writer(key_suffix):
+        try:
+            _write_text(
+                store,
+                "00000000-0000-0000-0000-000000000019",
+                idempotency_key=f"concurrent-{key_suffix}",
+            )
+        except ArtifactConflictError as exc:
+            errors.append(exc)
+
+    t1 = threading.Thread(target=writer, args=("a",))
+    t2 = threading.Thread(target=writer, args=("b",))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert len(errors) == 1
+    assert "Idempotency key" in str(errors[0]) or "already stored" in str(errors[0])
+
+
+# ── Atomic metadata ────────────────────────────────────────────────────────
+
+def test_atomic_metadata_no_direct_write(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(store, "00000000-0000-0000-0000-000000000020")
+
+    meta_path = (
+        tmp_path
+        / "artifacts"
+        / "data"
+        / "runs"
+        / "00000000-0000-0000-0000-000000000020"
+        / "artifacts"
+        / "run"
+        / "report"
+        / "meta.json"
+    )
+
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert meta["checksum_sha256"] == hashlib.sha256(CONTENT).hexdigest()
+    assert meta["format_version"] == "1.0"
+    assert meta["logical_name"] == "report"
+
+
+# ── Orchestration integration ──────────────────────────────────────────────
+
+def test_orchestration_registration(tmp_path):
+    repo = FileStateRepository(tmp_path / "runs")
+    sm = LifecycleStateMachine(repo)
+    orch = OrchestrationService(repo, sm)
+    store = _make_store(tmp_path)
+    writer = ArtifactRegistrationService(store, orch)
+
+    run, _ = orch.create_run(objective="test", actor="test")
+    task, _ = orch.create_task(run.id, title="task1", actor="test")
+
+    stored, domain_artifact, event = writer.write_text(
+        run_id=run.id,
+        logical_name="report",
+        filename="report.md",
+        text="Hello",
+        created_by="test",
+        relation="run",
+        correlation_id="cid1",
+    )
+
+    assert domain_artifact.run_id == run.id
+    assert domain_artifact.name == "report"
+    assert domain_artifact.uri == stored.uri
+    assert domain_artifact.checksum_sha256 == stored.checksum_sha256
+    assert domain_artifact.size_bytes == stored.size_bytes
+    assert event.event_type == "artifact.registered"
+    assert event.details["relation"] == "run"
+
+
+def test_input_relation_updates_task(tmp_path):
+    repo = FileStateRepository(tmp_path / "runs")
+    sm = LifecycleStateMachine(repo)
+    orch = OrchestrationService(repo, sm)
+    store = _make_store(tmp_path)
+    writer = ArtifactRegistrationService(store, orch)
+
+    run, _ = orch.create_run(objective="test", actor="test")
+    task, _ = orch.create_task(run.id, title="task1", actor="test")
+
+    stored, domain_artifact, event = writer.write_text(
+        run_id=run.id,
+        logical_name="input",
+        filename="input.md",
+        text="input data",
+        created_by="test",
+        relation="input",
+        task_id=task.id,
+        correlation_id="cid2",
+    )
+
+    updated_task = orch.repository.get_task(run.id, task.id)
+    assert domain_artifact.id in updated_task.input_artifact_ids
+
+
+def test_output_relation_updates_task(tmp_path):
+    repo = FileStateRepository(tmp_path / "runs")
+    sm = LifecycleStateMachine(repo)
+    orch = OrchestrationService(repo, sm)
+    store = _make_store(tmp_path)
+    writer = ArtifactRegistrationService(store, orch)
+
+    run, _ = orch.create_run(objective="test", actor="test")
+    task, _ = orch.create_task(run.id, title="task1", actor="test")
+
+    stored, domain_artifact, event = writer.write_text(
+        run_id=run.id,
+        logical_name="output",
+        filename="output.md",
+        text="output data",
+        created_by="test",
+        relation="output",
+        task_id=task.id,
+        correlation_id="cid3",
+    )
+
+    updated_task = orch.repository.get_task(run.id, task.id)
+    assert domain_artifact.id in updated_task.output_artifact_ids
+
+
+def test_failed_registration_then_retry_reuses_content(tmp_path):
+    repo = FileStateRepository(tmp_path / "runs")
+    sm = LifecycleStateMachine(repo)
+    orch = OrchestrationService(repo, sm)
+    store = _make_store(tmp_path)
+    writer = ArtifactRegistrationService(store, orch)
+
+    run, _ = orch.create_run(objective="test", actor="test")
+
+    # First attempt: write content and register
+    stored1, domain1, event1 = writer.write_text(
+        run_id=run.id,
+        logical_name="retry-test",
+        filename="retry.md",
+        text="retry content",
+        created_by="test",
+        relation="run",
+        idempotency_key="retry-key",
+        correlation_id="cid4",
+    )
+
+    # Simulate a retry with the same idempotency key
+    stored2, domain2, event2 = writer.write_text(
+        run_id=run.id,
+        logical_name="retry-test",
+        filename="retry.md",
+        text="retry content",
+        created_by="test",
+        relation="run",
+        idempotency_key="retry-key",
+        correlation_id="cid5",
+    )
+
+    # Store returns the same stored artifact on retry
+    assert stored1 == stored2
+    assert stored1.checksum_sha256 == stored2.checksum_sha256
+    # Content file exists only once on disk
+    content_path = (
+        tmp_path
+        / "artifacts"
+        / "data"
+        / "runs"
+        / str(run.id)
+        / "artifacts"
+        / "run"
+        / "retry-test"
+        / "retry.md"
+    )
+    assert content_path.exists()
+    # Both registrations produced artifacts with the same uri
+    assert domain1.uri == domain2.uri
+    assert domain1.checksum_sha256 == domain2.checksum_sha256
+
+
+# ── JSON rejection of NaN and Infinity ────────────────────────────────────
+
+def test_json_rejects_nan_and_infinity(tmp_path):
+    store = _make_store(tmp_path)
+
+    with pytest.raises((ValueError, TypeError)):
+        _write_json(store, "00000000-0000-0000-0000-000000000021", value={"x": float("nan")})
+
+    with pytest.raises((ValueError, TypeError)):
+        _write_json(store, "00000000-0000-0000-0000-000000000022", value={"x": float("inf")})

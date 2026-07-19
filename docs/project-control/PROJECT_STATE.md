@@ -19,8 +19,13 @@ This document must be updated in the same commit as every accepted stage.
 | D04 | Orchestration service | 076f97c |
 | D05 | Executive Orchestrator | 63ded5f |
 | D06-A | Agent execution contract | 4f29e18 |
-| D06-B | Filesystem Artifact Store | (pending commit) |
 | G01 | Project delivery unification | g01-accepted (annotated tag) |
+
+## Review Pending
+
+| Stage | Description | Status | Commit SHA |
+|-------|-------------|--------|------------|
+| D06-B | Filesystem Artifact Store | REVIEW_PENDING | aa4116a |
 
 ## Corrective History
 
@@ -56,13 +61,13 @@ This document must be updated in the same commit as every accepted stage.
 - **Resolve accepted commit with**: `git rev-parse 'g01-accepted^{}'`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D06-B — Filesystem Artifact Store
-- **Next product stage**: D06-C — Product Agent
+- **Current product stage**: D06-B — Filesystem Artifact Store — REVIEW_PENDING
+- **Next product stage**: D06-C — Product Agent — BLOCKED
 - **G01 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/`
 - **Latest G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/<UTC timestamp>/`
 - **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
 - **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
-- **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-043444Z`
+- **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-043444Z` (preliminary, review pending)
 
 ## Mandatory Update Block
 

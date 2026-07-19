@@ -24,6 +24,13 @@ from app.services.orchestration import (
     RunCompletionBlocked,
     RunSnapshot,
 )
+from app.services.artifact_write import (
+    ArtifactRegistrationService,
+    ArtifactWriteError,
+    ArtifactWriteConflict,
+    ArtifactWriteIntegrity,
+    ArtifactWritePath,
+)
 
 __all__ = [
     "ActiveApprovalExists",
@@ -33,6 +40,11 @@ __all__ = [
     "ApprovalResolutionError",
     "ApprovalWorkflowResult",
     "ArtifactRelationError",
+    "ArtifactRegistrationService",
+    "ArtifactWriteError",
+    "ArtifactWriteConflict",
+    "ArtifactWriteIntegrity",
+    "ArtifactWritePath",
     "AttemptFailureResult",
     "AttemptLimitExceededError",
     "ClaimTokenMismatchError",
