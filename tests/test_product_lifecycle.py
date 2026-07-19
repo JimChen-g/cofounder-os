@@ -621,7 +621,9 @@ class TestFailureAndRetry:
 
         # Inject retry policy decision for retry
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "product-lifecycle", "decision": "approved"
+            "actor": "product-lifecycle", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-1"
         }
 
         # Retry blocked task (BLOCKED → READY → execution → COMPLETED)
@@ -656,7 +658,9 @@ class TestFailureAndRetry:
 
         # Inject retry policy decision for retry
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "product-lifecycle", "decision": "approved"
+            "actor": "product-lifecycle", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-1"
         }
 
         # Retry blocked task (BLOCKED → READY → execution)
@@ -691,7 +695,9 @@ class TestFailureAndRetry:
 
         # Inject retry policy decision for retry
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "product-lifecycle", "decision": "approved"
+            "actor": "product-lifecycle", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-1"
         }
 
         # Retry blocked task
@@ -817,7 +823,9 @@ class TestFailureAndRetry:
 
         # Inject retry policy decision for retry
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "product-lifecycle", "decision": "approved"
+            "actor": "product-lifecycle", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-1"
         }
 
         # Retry blocked task via retry_blocked_task
@@ -905,7 +913,9 @@ class TestRetryAuthorization:
 
         # Inject retry policy decision for executive actor
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "executive", "decision": "approved"
+            "actor": "executive", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-3"
         }
 
         # Executive actor can retry via authorized retry_blocked_task
@@ -1354,6 +1364,7 @@ class TestRetryAuthorizationPersisted:
             reason="Retry needed",
             decided_by="executive",
             decision_reason="Approved retry",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
         )
         orch.repository.create_approval(approval)
 
@@ -1362,6 +1373,104 @@ class TestRetryAuthorizationPersisted:
             run_id=run.id, task_id=task.id, actor="executive"
         )
         assert result.status == "completed"
+
+    async def test_approval_without_expiry_rejected(self, tmp_path):
+        """Approval without expires_at is rejected for retry authorization."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Create approval WITHOUT expiry
+        approval = Approval(
+            run_id=run.id,
+            task_id=task.id,
+            status=ApprovalStatus.APPROVED.value,
+            requested_by="product-lifecycle",
+            reason="Retry needed",
+            decided_by="executive",
+            decision_reason="Approved retry",
+            # expires_at is None — should be rejected
+        )
+        orch.repository.create_approval(approval)
+
+        with pytest.raises(RetryAuthorizationError, match="lacks required expiry"):
+            await lifecycle.retry_blocked_task(
+                run_id=run.id, task_id=task.id, actor="executive"
+            )
+
+    async def test_approval_without_approver_rejected(self, tmp_path):
+        """Approval without decided_by is rejected for retry authorization."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Create approval WITHOUT decided_by
+        approval = Approval(
+            run_id=run.id,
+            task_id=task.id,
+            status=ApprovalStatus.APPROVED.value,
+            requested_by="product-lifecycle",
+            reason="Retry needed",
+            decided_by="",  # Empty approver
+            decision_reason="Approved retry",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        orch.repository.create_approval(approval)
+
+        with pytest.raises(RetryAuthorizationError, match="lacks required approver"):
+            await lifecycle.retry_blocked_task(
+                run_id=run.id, task_id=task.id, actor="executive"
+            )
+
+    async def test_retry_policy_decision_without_correlation_rejected(self, tmp_path):
+        """Retry policy decision without correlation_id is rejected."""
+        retry_policy = {}
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json",
+            retry_policy_decisions=retry_policy,
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Inject policy decision WITHOUT correlation_id
+        retry_policy[(str(run.id), str(task.id))] = {
+            "actor": "executive", "decision": "approved",
+            "purpose": "Retry", "approver": "executive",
+            # correlation_id missing
+        }
+
+        with pytest.raises(RetryAuthorizationError, match="not authorized"):
+            await lifecycle.retry_blocked_task(
+                run_id=run.id, task_id=task.id, actor="executive"
+            )
 
 
 # ── Blocker 4: post-claim failure paths ─────────────────────────────────────
@@ -1461,7 +1570,9 @@ class TestPostClaimFailurePaths:
 
         # Inject retry policy decision for reconciliation completion
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "executive", "decision": "approved"
+            "actor": "executive", "decision": "approved",
+            "purpose": "Reconciliation completion", "approver": "executive",
+            "correlation_id": "corr-4"
         }
 
         # Complete after reconciliation
@@ -1640,15 +1751,8 @@ class TestExactOutputRegistration:
         with pytest.raises(ProductArtifactVerificationError, match="product-brief"):
             lifecycle._verify_output_registration(task.id, task, fake_json, fake_md)
 
-
-# ── Blocker 7: real behavior tests ──────────────────────────────────────────
-
-
-class TestRealBehaviorTests:
-    """Real behavior tests replacing weak mocks."""
-
-    async def test_wrong_claim_token_rejected(self, tmp_path):
-        """Wrong claim token on completion is rejected."""
+    async def test_multiple_artifacts_same_name_rejected(self, tmp_path):
+        """Multiple Domain Artifacts with same expected Product artifact name are rejected."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
         pred = _make_predecessor_task(orch, run.id)
@@ -1657,10 +1761,65 @@ class TestRealBehaviorTests:
         orch.repository.save_task(task)
         task = orch.repository.get_task(run.id, task.id)
 
-        result = await lifecycle.execute_ready_task(
-            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        # Create two artifacts with the same name "product-brief"
+        art1 = Artifact(
+            run_id=run.id, task_id=task.id, kind=ArtifactKind.DATA,
+            name="product-brief", uri="artifact://1", checksum_sha256="sha256:a",
+            size_bytes=100, created_by="test",
         )
-        assert result.status == "completed"
+        art2 = Artifact(
+            run_id=run.id, task_id=task.id, kind=ArtifactKind.DATA,
+            name="product-brief", uri="artifact://2", checksum_sha256="sha256:b",
+            size_bytes=200, created_by="test",
+        )
+        orch.repository.create_artifact(art1)
+        orch.repository.create_artifact(art2)
+
+        # Set both as output artifact IDs
+        task.output_artifact_ids = [art1.id, art2.id]
+        orch.repository.save_task(task)
+
+        # _verify_outputs_exist should reject duplicates
+        with pytest.raises(ProductArtifactVerificationError, match="Multiple.*product-brief"):
+            lifecycle._verify_outputs_exist(run.id, task.id, task)
+
+
+# ── Blocker 7: real behavior tests ──────────────────────────────────────────
+
+
+class TestRealBehaviorTests:
+    """Real behavior tests replacing weak mocks."""
+
+    async def test_wrong_claim_token_rejected(self, tmp_path):
+        """Wrong claim token on completion raises ClaimTokenMismatchError."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        input_art = _make_input_artifact(orch, run.id, pred.id, store=store)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        task.input_artifact_ids = [input_art.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        # Claim the task
+        claim = lifecycle.agent_execution.claim_task(
+            run.id, task.id, agent_id="product-agent"
+        )
+
+        # Try to complete with wrong token — must raise ClaimTokenMismatchError
+        from app.services.execution import ClaimTokenMismatchError
+        with pytest.raises(ClaimTokenMismatchError, match="Claim token does not match"):
+            lifecycle.agent_execution.complete_claimed_task(
+                run.id, task.id,
+                claim_token="wrong-token-xyz",
+                actor="product-agent",
+            )
+
+        # Verify task is still RUNNING (not completed)
+        still_running = orch.repository.get_task(run.id, task.id)
+        assert still_running.status == "running"
+        assert still_running.claim_token == claim.claim_token  # Original claim intact
 
     async def test_wrong_claim_owner_rejected(self, tmp_path):
         """Wrong claim owner on completion is rejected at execution service level."""
@@ -1705,6 +1864,51 @@ class TestRealBehaviorTests:
                 run_id=run.id, task_id=task.id, actor="random-actor"
             )
 
+    async def test_json_success_markdown_failure_no_partial_artifacts(self, tmp_path):
+        """JSON success but Markdown failure → BLOCKED, JSON artifact registered."""
+        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        input_art = _make_input_artifact(orch, run.id, pred.id, store=store)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        task.input_artifact_ids = [input_art.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        # Mock _write_and_register to fail on Markdown after JSON succeeds
+        original_write = lifecycle.product_agent_service._write_and_register
+        call_count = [0]
+
+        def failing_md_write(*args, **kwargs):
+            call_count[0] += 1
+            if kwargs.get("logical_name") == "product-brief-md":
+                raise RuntimeError("Simulated Markdown write failure")
+            return original_write(*args, **kwargs)
+
+        lifecycle.product_agent_service._write_and_register = failing_md_write  # type: ignore[method-assign]
+
+        try:
+            result = await lifecycle.execute_ready_task(
+                run_id=run.id, task_id=task.id, actor="product-lifecycle"
+            )
+            assert result.status == "blocked"
+            assert result.terminal_failure is False
+            assert result.retry_available is True
+
+            # JSON artifact IS registered (it succeeded before Markdown failed)
+            # But no duplicate Domain Artifacts are created
+            all_artifacts = orch.repository.list_artifacts(run.id)
+            output_artifacts = [
+                a for a in all_artifacts
+                if (a.metadata or {}).get("relation") == "output"
+            ]
+            # Exactly one output artifact (JSON) — Markdown failed
+            assert len(output_artifacts) == 1
+            assert output_artifacts[0].name == "product-brief"
+        finally:
+            lifecycle.product_agent_service._write_and_register = original_write  # type: ignore[method-assign]
+
     async def test_approved_retry_with_policy_decision(self, tmp_path):
         """Approved retry via injected policy decision succeeds."""
         retry_policy = {}
@@ -1727,7 +1931,9 @@ class TestRealBehaviorTests:
         gateway.response = json.dumps(VALID_RESULT_DICT)
 
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "executive", "decision": "approved"
+            "actor": "executive", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-123"
         }
         result = await lifecycle.retry_blocked_task(
             run_id=run.id, task_id=task.id, actor="executive"
@@ -1759,19 +1965,39 @@ class TestGovernanceRecoveryEvidence:
         )
         assert gateway1.calls == 1
 
-        # Entirely new instances from same paths
+        # Entirely new instances from same paths — including gateway
         repo2 = FileStateRepository(tmp_path / "runs")
         sm2 = LifecycleStateMachine(repo2)
         orch2 = OrchestrationService(repo2, sm2)
         store2 = FileArtifactStore(tmp_path / "artifacts")
 
+        class FakeGateway2:
+            def __init__(self):
+                self.calls = 0
+            async def complete(self, messages, **kwargs):
+                self.calls += 1
+                return GatewayCompletion(
+                    content="{}",
+                    requested_model=DEFAULT_VIRTUAL_MODEL,
+                    selected_provider="qwen",
+                    selected_model=DEFAULT_VIRTUAL_MODEL,
+                    routing_reason="Default routing",
+                    fallback_used=False,
+                    request_id=f"req-{self.calls}",
+                    usage={"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300},
+                    raw_metadata={},
+                )
+
+        gateway2 = FakeGateway2()
+        product_service2 = ProductAgentService(
+            gateway_client=gateway2,
+            artifact_store=store2,
+            orchestration_service=orch2,
+        )
+
         lifecycle2 = ProductTaskLifecycleService(
             agent_execution=AgentExecutionService(repo2),
-            product_agent_service=ProductAgentService(
-                gateway_client=gateway1,
-                artifact_store=store2,
-                orchestration_service=orch2,
-            ),
+            product_agent_service=product_service2,
             artifact_store=store2,
             orchestration=orch2,
             retry_policy_decisions={},
@@ -1780,9 +2006,11 @@ class TestGovernanceRecoveryEvidence:
         reconcile = lifecycle2.reconcile_task(run.id, task.id)
         assert reconcile.status == "completed"
         assert reconcile.resumable is False
+        # Gateway must not be called for COMPLETED recovery
+        assert gateway2.calls == 0
 
     async def test_blocked_retry_after_restart_with_new_instances(self, tmp_path):
-        """BLOCKED retry after restart with new instances."""
+        """BLOCKED retry after restart with entirely new service/repository/store/gateway instances."""
         retry_policy = {}
         lifecycle1, orch1, repo1, sm1, store1, gateway1 = _make_lifecycle_service(
             tmp_path, gateway_response="not valid json",
@@ -1799,19 +2027,40 @@ class TestGovernanceRecoveryEvidence:
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
 
-        # New instances
+        # Entirely new instances — new gateway too
         repo2 = FileStateRepository(tmp_path / "runs")
         sm2 = LifecycleStateMachine(repo2)
         orch2 = OrchestrationService(repo2, sm2)
         store2 = FileArtifactStore(tmp_path / "artifacts")
 
+        class FakeGateway2:
+            def __init__(self):
+                self.calls = 0
+                self.response = json.dumps(VALID_RESULT_DICT)
+            async def complete(self, messages, **kwargs):
+                self.calls += 1
+                return GatewayCompletion(
+                    content=self.response,
+                    requested_model=DEFAULT_VIRTUAL_MODEL,
+                    selected_provider="qwen",
+                    selected_model=DEFAULT_VIRTUAL_MODEL,
+                    routing_reason="Default routing",
+                    fallback_used=False,
+                    request_id=f"req-{self.calls}",
+                    usage={"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300},
+                    raw_metadata={},
+                )
+
+        gateway2 = FakeGateway2()
+        product_service2 = ProductAgentService(
+            gateway_client=gateway2,
+            artifact_store=store2,
+            orchestration_service=orch2,
+        )
+
         lifecycle2 = ProductTaskLifecycleService(
             agent_execution=AgentExecutionService(repo2),
-            product_agent_service=ProductAgentService(
-                gateway_client=gateway1,
-                artifact_store=store2,
-                orchestration_service=orch2,
-            ),
+            product_agent_service=product_service2,
             artifact_store=store2,
             orchestration=orch2,
             retry_policy_decisions=retry_policy,
@@ -1821,17 +2070,17 @@ class TestGovernanceRecoveryEvidence:
         assert reconcile.status == "blocked"
         assert reconcile.action == "retry_authorization_required"
 
-        # Switch gateway for retry
-        gateway1.response = json.dumps(VALID_RESULT_DICT)
-
-        # Inject policy and retry
+        # Inject policy and retry with new gateway
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "executive", "decision": "approved"
+            "actor": "executive", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-456"
         }
         result = await lifecycle2.retry_blocked_task(
             run_id=run.id, task_id=task.id, actor="executive"
         )
         assert result.status == "completed"
+        assert gateway2.calls == 1  # New gateway was called
 
     async def test_completion_interrupted_then_completed_after_restart(self, tmp_path):
         """Completion interrupted after persisted outputs, then completed after restart."""
@@ -1865,7 +2114,9 @@ class TestGovernanceRecoveryEvidence:
 
         # After restart, complete via complete_after_reconciliation
         retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "executive", "decision": "approved"
+            "actor": "executive", "decision": "approved",
+            "purpose": "Retry after failure", "approver": "executive",
+            "correlation_id": "corr-2"
         }
         completed = await lifecycle.complete_after_reconciliation(
             run_id=run.id, task_id=task.id, actor="executive"

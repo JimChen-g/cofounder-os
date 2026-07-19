@@ -343,11 +343,12 @@ class ProductTaskLifecycleService:
             self._verify_output_content(stored_json, json_domain)
             self._verify_output_content(stored_md, md_domain)
             self._verify_output_registration(task_uuid, task, json_domain, md_domain)
-        except (ProductArtifactVerificationError, OutputArtifactCorruptError):
+        except Exception as exc:
             # Output verification failure — record as failure
+            # Catch ALL exceptions to prevent leaking claim tokens or creating partial artifacts
             failure = self._record_failure(
                 run_uuid, task_uuid, claim.claim_token,
-                "Product output verification failed", correlation_id
+                self._safe_error_message(exc), correlation_id
             )
             return LifecycleExecutionResult(
                 status=failure.task.status,
@@ -371,7 +372,11 @@ class ProductTaskLifecycleService:
             # Completion persistence failure — valid outputs exist, mark as reconciliation required
             # Preserve RUNNING state and ownership evidence
             safe_msg = self._safe_error_message(exc)
-            current_task = self.orchestration.repository.get_task(run_uuid, task_uuid)
+            try:
+                current_task = self.orchestration.repository.get_task(run_uuid, task_uuid)
+            except Exception:
+                # If repository read fails, use the task from before completion attempt
+                current_task = task
             return LifecycleExecutionResult(
                 status="running",
                 task=current_task,
@@ -608,17 +613,38 @@ class ProductTaskLifecycleService:
         """Authorize a retry or reconciliation completion operation.
 
         Requires either:
-        - A persisted Approval for this task with status APPROVED
+        - A persisted Approval for this task with status APPROVED, with
+          purpose (reason), expiry, approver (decided_by), and correlation evidence
         - An injected retry policy decision matching actor and task
 
         Actor names alone are never sufficient authorization.
         """
-        # Check persisted Approvals first
+        # Check persisted Approvals first — require complete evidence
         approvals = self.orchestration.repository.list_approvals(run_uuid)
         for approval in approvals:
             if approval.task_id == task_uuid:
                 if ApprovalStatus(approval.status) == ApprovalStatus.APPROVED:
-                    return  # Authorized by persisted approval
+                    # Require purpose, expiry, approver, and correlation evidence
+                    if not approval.reason or not approval.reason.strip():
+                        raise RetryAuthorizationError(
+                            f"Approval {approval.id} lacks required purpose (reason)"
+                        )
+                    if not approval.decided_by or not approval.decided_by.strip():
+                        raise RetryAuthorizationError(
+                            f"Approval {approval.id} lacks required approver (decided_by)"
+                        )
+                    if approval.expires_at is None:
+                        raise RetryAuthorizationError(
+                            f"Approval {approval.id} lacks required expiry (expires_at)"
+                        )
+                    # Verify the actor is the approver or the requester
+                    if approval.decided_by != actor and approval.requested_by != actor:
+                        raise RetryAuthorizationError(
+                            f"Actor '{actor}' is not the approver "
+                            f"'{approval.decided_by}' or requester "
+                            f"'{approval.requested_by}' for approval {approval.id}"
+                        )
+                    return  # Authorized by persisted approval with complete evidence
 
         # Check injected retry policy decisions
         key = (str(run_uuid), str(task_uuid))
@@ -627,8 +653,11 @@ class ProductTaskLifecycleService:
             if (
                 decision.get("actor") == actor
                 and decision.get("decision") == "approved"
+                and decision.get("purpose")
+                and decision.get("approver")
+                and decision.get("correlation_id")
             ):
-                return  # Authorized by injected decision
+                return  # Authorized by injected decision with complete evidence
 
         raise RetryAuthorizationError(
             f"Actor '{actor}' is not authorized for retry on task {task_uuid}. "
@@ -884,6 +913,7 @@ class ProductTaskLifecycleService:
         """Verify and return the two expected output domain artifacts.
 
         Requires exactly one product-brief JSON and one product-brief-md Markdown.
+        Rejects multiple Domain Artifacts with the same expected name.
         """
         if not task.output_artifact_ids:
             raise ProductArtifactVerificationError(
@@ -893,6 +923,11 @@ class ProductTaskLifecycleService:
         domain_artifacts: dict[str, Any] = {}
         for artifact_id in task.output_artifact_ids:
             art = self.orchestration.repository.get_artifact(run_uuid, artifact_id)
+            # Reject multiple Domain Artifacts with the same expected name
+            if art.name in domain_artifacts:
+                raise ProductArtifactVerificationError(
+                    f"Multiple Domain Artifacts with name '{art.name}' are not allowed"
+                )
             domain_artifacts[art.name] = art
 
         json_domain = domain_artifacts.get("product-brief")
