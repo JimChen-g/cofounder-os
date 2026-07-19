@@ -16,7 +16,7 @@ import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -126,35 +126,49 @@ class _PathComponents(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scope: str  # "run" or "task"
-    scope_id: str  # UUID string
+    run_id: str  # always the run UUID
+    scope_id: str  # task UUID for task scope, run UUID for run scope
     logical_name: str
     filename: str
-    relative_dir: str  # e.g. "run/plan" or "00000000-.../00000000-..."
+    relative_dir: str  # e.g. "run/plan" or "tasks/0000.../plan"
 
     @property
     def uri(self) -> str:
-        """Portable artifact URI."""
-        return f"artifact://{self.relative_dir}"
+        """Portable unique artifact URI.
+
+        Format:
+          run:   artifact://runs/<run-id>/artifacts/run/<logical-name>/<filename>
+          task:  artifact://runs/<run-id>/artifacts/tasks/<task-id>/<logical-name>/<filename>
+        """
+        if self.scope == "task":
+            return (
+                f"artifact://runs/{self.run_id}/artifacts"
+                f"/tasks/{self.scope_id}/{self.logical_name}/{self.filename}"
+            )
+        return (
+            f"artifact://runs/{self.run_id}/artifacts"
+            f"/run/{self.logical_name}/{self.filename}"
+        )
 
 
 class FileArtifactStore:
     """Atomic filesystem-backed artifact content store.
 
-    Layout under ``root``::
+    Layout under ``root`` (default ``data``)::
 
-        data/artifacts/
+        data/
           .locks/
-          data/runs/<run-id>/
+          runs/<run-id>/
             artifacts/
               run/<logical-name>/
-                content.bin
+                <filename>
                 meta.json
-              <task-id>/<logical-name>/
-                content.bin
+              tasks/<task-id>/<logical-name>/
+                <filename>
                 meta.json
     """
 
-    def __init__(self, root: Union[str, Path] = "data/artifacts") -> None:
+    def __init__(self, root: Union[str, Path] = "data") -> None:
         self.root = Path(root)
         self._ensure_directory(self.root)
 
@@ -241,10 +255,14 @@ class FileArtifactStore:
         self._validate_no_components(safe_logical)
         self._validate_no_components(safe_filename)
 
-        relative_dir = f"{scope_id}/{safe_logical}" if scope == "task" else f"run/{safe_logical}"
+        if scope == "task":
+            relative_dir = f"tasks/{scope_id}/{safe_logical}"
+        else:
+            relative_dir = f"run/{safe_logical}"
 
         return _PathComponents(
             scope=scope,
+            run_id=rid,
             scope_id=scope_id,
             logical_name=safe_logical,
             filename=safe_filename,
@@ -252,16 +270,10 @@ class FileArtifactStore:
         )
 
     def _content_dir(self, run_id: Union[UUID, str], components: _PathComponents) -> Path:
-        """Return the artifact content directory under data/runs."""
+        """Return the artifact content directory under root/runs/<run-id>/artifacts."""
         run_id_text = _uuid_text(run_id)
-        if components.scope == "task":
-            return (
-                self.root / "data" / "runs" / run_id_text / "artifacts"
-                / components.scope_id / components.logical_name
-            )
         return (
-            self.root / "data" / "runs" / run_id_text / "artifacts"
-            / "run" / components.logical_name
+            self.root / "runs" / run_id_text / "artifacts" / components.relative_dir
         )
 
     @staticmethod
@@ -290,7 +302,7 @@ class FileArtifactStore:
             finally:
                 fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
-    def _atomic_write_bytes(
+    def _atomic_write(
         self, destination: Path, payload: bytes
     ) -> str:
         """Write *payload* to *destination* atomically and return its checksum."""
@@ -338,6 +350,171 @@ class FileArtifactStore:
                 f"Artifact metadata corrupt: {meta_path}"
             ) from exc
 
+    @staticmethod
+    def _clean_temp_files(directory: Path) -> None:
+        """Remove controlled temporary files from *directory* under lock."""
+        if not directory.exists():
+            return
+        for tmp in directory.glob("*.tmp"):
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+    def _find_meta_by_idempotency(
+        self, idempotency_key: str
+    ) -> Iterator[tuple[Path, Dict[str, Any]]]:
+        """Yield (meta_path, meta_dict) for every meta.json matching *idempotency_key*."""
+        runs_dir = self.root / "runs"
+        if not runs_dir.exists():
+            return
+        for meta_path in runs_dir.glob("*/artifacts/**/meta.json"):
+            try:
+                meta = self._read_meta(meta_path)
+            except ArtifactIntegrityError:
+                continue
+            if meta.get("idempotency_key") == idempotency_key:
+                yield meta_path, meta
+
+    @staticmethod
+    def _check_idempotency_compatibility(
+        existing: Dict[str, Any],
+        requested: Dict[str, Any],
+    ) -> None:
+        """Raise ArtifactConflictError if *existing* and *requested* are incompatible."""
+        if existing.get("run_id") != requested.get("run_id"):
+            raise ArtifactConflictError("idempotency key run_id conflict")
+        if existing.get("task_id") != requested.get("task_id"):
+            raise ArtifactConflictError("idempotency key task_id conflict")
+        if existing.get("logical_name") != requested.get("logical_name"):
+            raise ArtifactConflictError("idempotency key logical_name conflict")
+        if existing.get("filename") != requested.get("filename"):
+            raise ArtifactConflictError("idempotency key filename conflict")
+        if existing.get("content_type") != requested.get("content_type"):
+            raise ArtifactConflictError("idempotency key content_type conflict")
+        if existing.get("checksum_sha256") != requested.get("checksum_sha256"):
+            raise ArtifactConflictError("idempotency key checksum conflict")
+        if existing.get("size_bytes") != requested.get("size_bytes"):
+            raise ArtifactConflictError("idempotency key size_bytes conflict")
+        if existing.get("created_by") != requested.get("created_by"):
+            raise ArtifactConflictError("idempotency key created_by conflict")
+        if existing.get("format_version") != requested.get("format_version"):
+            raise ArtifactConflictError("idempotency key format_version conflict")
+        if existing.get("provenance") != requested.get("provenance"):
+            raise ArtifactConflictError("idempotency key provenance conflict")
+
+    def _recover_or_validate(
+        self,
+        content_dir: Path,
+        content_path: Path,
+        meta_path: Path,
+        requested: "StoredArtifact",
+        requested_bytes: bytes,
+    ) -> "StoredArtifact":
+        """Handle partial-state recovery inside the run lock.
+
+        Returns an existing StoredArtifact for compatible idempotent requests.
+        Raises ArtifactIntegrityError or ArtifactConflictError for incompatible
+        or unrecoverable states.
+        """
+        has_content = content_path.exists()
+        has_meta = meta_path.exists()
+        content_corrupt = False
+        meta_corrupt = False
+
+        if has_content:
+            try:
+                actual_checksum = _sha256_file(content_path)
+            except OSError:
+                has_content = False
+
+        if has_meta:
+            try:
+                existing_meta = self._read_meta(meta_path)
+            except ArtifactIntegrityError:
+                has_meta = False
+                meta_corrupt = True
+
+        # State A: valid metadata + valid content
+        if has_meta and has_content and not meta_corrupt and not content_corrupt:
+            existing_key = existing_meta.get("idempotency_key")
+            if existing_key is not None and existing_key == requested.idempotency_key:
+                if actual_checksum != existing_meta.get("checksum_sha256"):
+                    raise ArtifactIntegrityError(
+                        f"Content checksum mismatch for idempotency key "
+                        f"{existing_key!r}"
+                    )
+                self._check_idempotency_compatibility(
+                    existing_meta,
+                    {
+                        "run_id": str(requested.run_id),
+                        "task_id": str(requested.task_id) if requested.task_id else None,
+                        "logical_name": requested.logical_name,
+                        "filename": requested.filename,
+                        "content_type": requested.content_type,
+                        "checksum_sha256": requested.checksum_sha256,
+                        "size_bytes": requested.size_bytes,
+                        "created_by": requested.created_by,
+                        "format_version": requested.format_version,
+                        "provenance": requested.provenance,
+                    },
+                )
+                return StoredArtifact(**existing_meta)
+
+        # Cross-run idempotency check: search ALL existing metadata for the key
+        if requested.idempotency_key is not None:
+            requested_dict = {
+                "run_id": str(requested.run_id),
+                "task_id": str(requested.task_id) if requested.task_id else None,
+                "logical_name": requested.logical_name,
+                "filename": requested.filename,
+                "content_type": requested.content_type,
+                "checksum_sha256": requested.checksum_sha256,
+                "size_bytes": requested.size_bytes,
+                "created_by": requested.created_by,
+                "format_version": requested.format_version,
+                "provenance": requested.provenance,
+            }
+            for _meta_path, existing_meta in self._find_meta_by_idempotency(requested.idempotency_key):
+                existing_key = existing_meta.get("idempotency_key")
+                if existing_key == requested.idempotency_key:
+                    try:
+                        self._check_idempotency_compatibility(existing_meta, requested_dict)
+                        return StoredArtifact(**existing_meta)
+                    except ArtifactConflictError:
+                        raise ArtifactConflictError(
+                            f"Idempotency key {requested.idempotency_key!r} "
+                            f"conflicts with existing artifact at {_meta_path.parent}"
+                        )
+
+        # State B: metadata exists but content is missing or corrupt
+        if has_meta and not has_content:
+            existing_key = existing_meta.get("idempotency_key")
+            if existing_key is not None and existing_key == requested.idempotency_key:
+                if existing_meta.get("checksum_sha256") == _sha256_bytes(requested_bytes):
+                    stored_checksum = self._atomic_write(content_path, requested_bytes)
+                    repaired = requested.model_copy(deep=True)
+                    repaired.checksum_sha256 = stored_checksum
+                    repaired.size_bytes = len(requested_bytes)
+                    self._atomic_write(meta_path, repaired.model_dump_json(indent=2).encode("utf-8") + b"\n")
+                    return repaired
+            raise ArtifactIntegrityError(
+                f"Artifact content missing for {content_path}"
+            )
+
+        # State C: content exists but metadata is absent or corrupt
+        if has_content and not has_meta:
+            if actual_checksum == _sha256_bytes(requested_bytes):
+                self._atomic_write(meta_path, requested.model_dump_json(indent=2).encode("utf-8") + b"\n")
+                return requested
+            raise ArtifactIntegrityError(
+                f"Artifact metadata missing for {content_path} and "
+                f"content checksum does not match request"
+            )
+
+        # No usable state found
+        return None
+
     # ── Internal bytes API ─────────────────────────────────────────────────
 
     def write_bytes(
@@ -371,57 +548,44 @@ class FileArtifactStore:
         canonical_checksum = _sha256_bytes(content)
         now = utc_now()
 
+        requested = StoredArtifact(
+            run_id=UUID(run_id_text),
+            task_id=UUID(components.scope_id) if components.scope == "task" else None,
+            logical_name=components.logical_name,
+            filename=components.filename,
+            uri=components.uri,
+            content_type=content_type,
+            checksum_sha256=canonical_checksum,
+            size_bytes=len(content),
+            created_by=created_by,
+            format_version="1.0",
+            idempotency_key=idempotency_key,
+            created_at=now,
+            provenance=dict(provenance or {}),
+        )
+
         with self._run_lock(run_id):
-            existing_meta = None
-            if meta_path.exists():
-                try:
-                    existing_meta = self._read_meta(meta_path)
-                except ArtifactIntegrityError:
-                    existing_meta = None
+            self._clean_temp_files(content_dir)
 
-            if existing_meta is not None:
-                existing_key = existing_meta.get("idempotency_key")
-                existing_checksum = existing_meta.get("checksum_sha256")
+            recovered = self._recover_or_validate(
+                content_dir, content_path, meta_path, requested, content
+            )
+            if recovered is not None:
+                return recovered
 
-                if idempotency_key is not None and existing_key == idempotency_key:
-                    if existing_checksum == canonical_checksum:
-                        return StoredArtifact(**existing_meta)
-                    raise ArtifactConflictError(
-                        f"Idempotency key {idempotency_key!r} conflicts: "
-                        f"stored content differs"
-                    )
-
-            if content_path.exists():
+            if content_path.exists() or meta_path.exists():
                 raise ArtifactConflictError(
                     f"Artifact already stored: {content_path}"
                 )
 
-            stored_checksum = self._atomic_write_bytes(content_path, content)
+            stored_checksum = self._atomic_write(content_path, content)
+            requested.checksum_sha256 = stored_checksum
+            requested.size_bytes = len(content)
 
-            stored = StoredArtifact(
-                run_id=UUID(run_id_text),
-                task_id=UUID(components.scope_id) if components.scope == "task" else None,
-                logical_name=components.logical_name,
-                filename=components.filename,
-                uri=components.uri,
-                content_type=content_type,
-                checksum_sha256=stored_checksum,
-                size_bytes=len(content),
-                created_by=created_by,
-                format_version="1.0",
-                idempotency_key=idempotency_key,
-                created_at=now,
-                provenance=dict(provenance or {}),
-            )
+            meta_payload = requested.model_dump_json(indent=2) + "\n"
+            self._atomic_write(meta_path, meta_payload.encode("utf-8"))
 
-            meta_path.write_text(
-                stored.model_dump_json(indent=2) + "\n",
-                encoding="utf-8",
-            )
-            os.chmod(meta_path, 0o600)
-            self._fsync_directory(meta_path.parent)
-
-        return stored
+        return requested
 
     def read_bytes(
         self,
@@ -598,3 +762,25 @@ class FileArtifactStore:
 
         if content_dir.exists() and not any(content_dir.iterdir()):
             content_dir.rmdir()
+
+    def list_run_meta(
+        self, run_id: Union[UUID, str]
+    ) -> List[StoredArtifact]:
+        """Return StoredArtifact records for every artifact in *run_id*."""
+        rid = _uuid_text(run_id)
+        run_dir = self.root / "runs" / rid / "artifacts"
+
+        self._validate_store_root(run_dir)
+
+        if not run_dir.exists():
+            return []
+
+        records: List[StoredArtifact] = []
+        for meta_path in sorted(run_dir.glob("**/meta.json")):
+            try:
+                meta = self._read_meta(meta_path)
+                records.append(StoredArtifact(**meta))
+            except ArtifactIntegrityError:
+                continue
+
+        return records

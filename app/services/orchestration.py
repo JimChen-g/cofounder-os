@@ -13,6 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.artifacts import ArtifactConflictError
 from app.domain import (
     AgentMessage,
     Approval,
@@ -866,6 +867,27 @@ class OrchestrationService:
             task=transitioned_task,
         )
 
+    def _find_artifact_by_idempotency(
+        self,
+        transaction: RunTransaction,
+        run_id: UUID | str,
+        task_id: UUID | str | None,
+        idempotency_key: str | None,
+    ) -> Artifact | None:
+        """Return an existing Artifact matching the idempotency key, or None."""
+        if idempotency_key is None:
+            return None
+
+        candidates = transaction.list_artifacts()
+        for candidate in candidates:
+            if candidate.run_id != UUID(str(run_id)):
+                continue
+            if candidate.task_id != (UUID(str(task_id)) if task_id is not None else None):
+                continue
+            if candidate.metadata.get("idempotency_key") == idempotency_key:
+                return candidate
+        return None
+
     def register_artifact(
         self,
         run_id: UUID | str,
@@ -908,12 +930,52 @@ class OrchestrationService:
             metadata=dict(metadata or {}),
         )
 
+        idempotency_key = artifact.metadata.get("idempotency_key")
+
         with self.repository.transaction(run_id) as transaction:
             run = transaction.get_run()
             task = None
 
             if artifact.task_id is not None:
                 task = transaction.get_task(artifact.task_id)
+
+            # Domain-level idempotency: reuse existing artifact with matching key
+            if idempotency_key is not None:
+                existing = self._find_artifact_by_idempotency(
+                    transaction, run_id, task_id, idempotency_key
+                )
+                if existing is not None:
+                    if (
+                        existing.uri == artifact.uri
+                        and existing.checksum_sha256 == artifact.checksum_sha256
+                        and existing.size_bytes == artifact.size_bytes
+                        and existing.content_type == artifact.content_type
+                    ):
+                        event = _event(
+                            run_id=artifact.run_id,
+                            task_id=artifact.task_id,
+                            event_type="artifact.registered",
+                            actor=normalized_actor,
+                            action="register",
+                            target_type="artifact",
+                            target_id=str(existing.id),
+                            correlation_id=correlation_id,
+                            details={
+                                "name": existing.name,
+                                "kind": existing.kind,
+                                "uri": existing.uri,
+                                "relation": relation,
+                                "content_type": existing.content_type,
+                                "size_bytes": existing.size_bytes,
+                                "idempotent": True,
+                            },
+                        )
+                        transaction.append_event(event)
+                        return existing, event
+                    raise ArtifactConflictError(
+                        f"Artifact idempotency key {idempotency_key!r} "
+                        f"conflicts with existing record {existing.id}"
+                    )
 
             transaction.create_artifact(artifact)
 
