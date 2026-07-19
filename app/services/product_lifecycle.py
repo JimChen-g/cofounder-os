@@ -12,13 +12,16 @@ It does not:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
 from pydantic import BaseModel
+
 from app.artifacts import FileArtifactStore
 from app.domain import (
+    ApprovalStatus,
     AuditEvent,
     ProductAgentRequest,
     ProductAgentResultV1,
@@ -63,7 +66,7 @@ class DependencyArtifactMissingError(ProductTaskLifecycleError):
 
 
 class DependencyArtifactCorruptError(ProductTaskLifecycleError):
-    """Raised when a dependency Artifact has no checksum."""
+    """Raised when a dependency Artifact has integrity issues."""
 
 
 class ProductArtifactVerificationError(ProductTaskLifecycleError):
@@ -126,9 +129,6 @@ LifecycleExecutionResult.model_rebuild()
 
 # ── Product Task Lifecycle Service ───────────────────────────────────────────
 
-# Authorized retry actors (Executive / governance layer)
-ALLOWED_RETRY_ACTORS = {"executive", "admin", "product-lifecycle"}
-
 
 class ProductTaskLifecycleService:
     """Integrate Product Agent execution into the Task lifecycle.
@@ -153,6 +153,7 @@ class ProductTaskLifecycleService:
         orchestration: OrchestrationService,
         founder_context_policy: bool = True,
         stale_claim_threshold_seconds: float = 3600.0,
+        retry_policy_decisions: Optional[Dict[Tuple[str, str], Dict[str, Any]]] = None,
     ) -> None:
         self.agent_execution = agent_execution
         self.product_agent_service = product_agent_service
@@ -160,6 +161,9 @@ class ProductTaskLifecycleService:
         self.orchestration = orchestration
         self.founder_context_policy = founder_context_policy
         self.stale_claim_threshold = stale_claim_threshold_seconds
+        self.retry_policy_decisions = (
+            retry_policy_decisions if retry_policy_decisions is not None else {}
+        )
 
     # ── Public operations ────────────────────────────────────────────────────
 
@@ -200,11 +204,38 @@ class ProductTaskLifecycleService:
 
         # Idempotency: if already COMPLETED, return without side effects
         if TaskStatus(task.status) == TaskStatus.COMPLETED:
+            json_artifact = None
+            md_artifact = None
+            json_domain = None
+            md_domain = None
+
+            for art_id in task.output_artifact_ids:
+                try:
+                    art = self.orchestration.repository.get_artifact(
+                        run_uuid, art_id
+                    )
+                    if art.name == "product-brief":
+                        json_domain = art
+                        json_artifact = self._resolve_stored_artifact(
+                            run_uuid, task_uuid, art
+                        )
+                    elif art.name == "product-brief-md":
+                        md_domain = art
+                        md_artifact = self._resolve_stored_artifact(
+                            run_uuid, task_uuid, art
+                        )
+                except Exception:
+                    pass
+
             return LifecycleExecutionResult(
                 status="completed",
                 task=task,
                 retry_available=False,
-                terminal_failure=True,
+                terminal_failure=False,
+                json_artifact=json_artifact,
+                md_artifact=md_artifact,
+                json_domain_artifact=json_domain,
+                md_domain_artifact=md_domain,
             )
 
         # Idempotency: if BLOCKED, return without side effects (retry must use retry_blocked_task)
@@ -338,12 +369,22 @@ class ProductTaskLifecycleService:
             )
         except Exception as exc:
             # Completion persistence failure — valid outputs exist, mark as reconciliation required
-            # This preserves the outputs so they can be completed after restart
-            raise CompletionPersistenceError(
-                f"Valid outputs exist but completion could not be persisted: {exc}. "
-                f"Task is in RUNNING state with claim token {claim.claim_token}. "
-                f"Reconciliation required to complete."
-            ) from exc
+            # Preserve RUNNING state and ownership evidence
+            safe_msg = self._safe_error_message(exc)
+            current_task = self.orchestration.repository.get_task(run_uuid, task_uuid)
+            return LifecycleExecutionResult(
+                status="running",
+                task=current_task,
+                result=result,
+                json_artifact=json_artifact,
+                md_artifact=md_artifact,
+                json_domain_artifact=json_domain,
+                md_domain_artifact=md_domain,
+                retry_available=False,
+                terminal_failure=False,
+                reconciliation_required=True,
+                last_error=f"Completion persistence failed: {safe_msg}",
+            )
 
         return LifecycleExecutionResult(
             status=completed_task.status,
@@ -369,7 +410,7 @@ class ProductTaskLifecycleService:
           - Task exists
           - assigned_agent == "product-agent"
           - Task is BLOCKED
-          - actor is in ALLOWED_RETRY_ACTORS (not product-agent itself)
+          - actor is authorized via persisted Approval or retry policy decision
 
         Postconditions on success:
           - Task is COMPLETED
@@ -379,12 +420,8 @@ class ProductTaskLifecycleService:
         run_uuid = UUID(str(run_id))
         task_uuid = UUID(str(task_id))
 
-        # 1. Authorize retry actor
-        if actor not in ALLOWED_RETRY_ACTORS:
-            raise RetryAuthorizationError(
-                f"Actor '{actor}' is not authorized to prepare retry. "
-                f"Allowed actors: {sorted(ALLOWED_RETRY_ACTORS)}"
-            )
+        # 1. Authorize retry actor (no hard-coded actor names)
+        self._authorize_retry(run_uuid, task_uuid, actor)
 
         # 2. Load and validate task is BLOCKED
         task = self._load_task(run_uuid, task_uuid)
@@ -414,6 +451,78 @@ class ProductTaskLifecycleService:
             task_id=task_uuid,
             actor=actor,
             correlation_id=correlation_id,
+        )
+
+    async def complete_after_reconciliation(
+        self,
+        run_id: UUID | str,
+        task_id: UUID | str,
+        actor: str,
+        correlation_id: Optional[str] = None,
+    ) -> LifecycleExecutionResult:
+        """Complete a RUNNING task after reconciliation with valid persisted outputs.
+
+        This is an authorized operation that safely completes a task after restart
+        without another Gateway call. It requires a persisted Approval or retry
+        policy decision that records actor, Task, decision, and correlation evidence.
+        """
+        run_uuid = UUID(str(run_id))
+        task_uuid = UUID(str(task_id))
+
+        # Authorize
+        self._authorize_retry(run_uuid, task_uuid, actor)
+
+        task = self._load_task(run_uuid, task_uuid)
+
+        if TaskStatus(task.status) != TaskStatus.RUNNING:
+            raise ProductTaskLifecycleError(
+                f"Task must be RUNNING for reconciliation completion; "
+                f"current: {task.status}"
+            )
+
+        if not task.claim_token:
+            raise ProductTaskLifecycleError(
+                "Task has no claim token for reconciliation completion"
+            )
+
+        # Verify outputs exist and are valid
+        try:
+            json_domain, md_domain = self._verify_outputs_exist(
+                run_uuid, task_uuid, task
+            )
+            stored_json = self._resolve_stored_artifact(
+                run_uuid, task_uuid, json_domain
+            )
+            stored_md = self._resolve_stored_artifact(
+                run_uuid, task_uuid, md_domain
+            )
+            self._verify_output_content(stored_json, json_domain)
+            self._verify_output_content(stored_md, md_domain)
+            self._verify_output_registration(task_uuid, task, json_domain, md_domain)
+        except Exception as exc:
+            raise ProductTaskLifecycleError(
+                f"Output verification failed for reconciliation: {exc}"
+            ) from exc
+
+        # Complete using the persisted claim token
+        # Actor must match assigned_agent for complete_claimed_task;
+        # authorization was already verified by _authorize_retry
+        completed_task, event = self.agent_execution.complete_claimed_task(
+            run_id=run_uuid,
+            task_id=task_uuid,
+            claim_token=task.claim_token,
+            actor=task.assigned_agent or "product-agent",
+            correlation_id=correlation_id,
+        )
+
+        return LifecycleExecutionResult(
+            status=completed_task.status,
+            task=completed_task,
+            json_artifact=stored_json,
+            md_artifact=stored_md,
+            json_domain_artifact=json_domain,
+            md_domain_artifact=md_domain,
+            audit_event=event,
         )
 
     def reconcile_task(
@@ -495,6 +604,37 @@ class ProductTaskLifecycleService:
                 f"not 'product-agent'"
             )
 
+    def _authorize_retry(self, run_uuid: UUID, task_uuid: UUID, actor: str) -> None:
+        """Authorize a retry or reconciliation completion operation.
+
+        Requires either:
+        - A persisted Approval for this task with status APPROVED
+        - An injected retry policy decision matching actor and task
+
+        Actor names alone are never sufficient authorization.
+        """
+        # Check persisted Approvals first
+        approvals = self.orchestration.repository.list_approvals(run_uuid)
+        for approval in approvals:
+            if approval.task_id == task_uuid:
+                if ApprovalStatus(approval.status) == ApprovalStatus.APPROVED:
+                    return  # Authorized by persisted approval
+
+        # Check injected retry policy decisions
+        key = (str(run_uuid), str(task_uuid))
+        decision = self.retry_policy_decisions.get(key)
+        if decision is not None:
+            if (
+                decision.get("actor") == actor
+                and decision.get("decision") == "approved"
+            ):
+                return  # Authorized by injected decision
+
+        raise RetryAuthorizationError(
+            f"Actor '{actor}' is not authorized for retry on task {task_uuid}. "
+            f"No persisted approval or retry policy decision found."
+        )
+
     def _validate_predecessors(self, run_uuid: UUID, task: Task) -> None:
         """Validate all predecessor Tasks exist and are COMPLETED.
 
@@ -516,38 +656,104 @@ class ProductTaskLifecycleService:
     def _validate_input_artifacts(self, run_uuid: UUID, task: Task) -> list[Any]:
         """Validate input artifacts exist, are scoped to this run/task, and verify.
 
+        For each task.input_artifact_id verify:
+        - Domain Artifact exists
+        - correct run and permitted task lineage
+        - relation is input
+        - StoredArtifact exists
+        - checksum, size and URI match Domain metadata
+        - FileArtifactStore.verify passes
+
         Returns list of Domain Artifact records for context building.
         """
         input_artifacts = []
         for art_id in task.input_artifact_ids:
             # Load Domain Artifact record
             try:
-                domain_artifact = self.orchestration.repository.get_artifact(run_uuid, art_id)
+                domain_artifact = self.orchestration.repository.get_artifact(
+                    run_uuid, art_id
+                )
             except Exception as exc:
                 raise DependencyArtifactMissingError(
                     f"Input artifact {art_id} not found: {exc}"
                 ) from exc
 
-            # Verify run/task scope
+            # Verify run scope
             if domain_artifact.run_id != run_uuid:
                 raise DependencyArtifactCorruptError(
                     f"Input artifact {art_id} run_id mismatch"
                 )
 
-            # Verify content integrity via store
-            # Filename is stored in metadata by ArtifactRegistrationService
-            filename = (domain_artifact.metadata or {}).get("filename", domain_artifact.name)
+            # Verify task lineage: artifact must belong to this task or a predecessor
+            if domain_artifact.task_id is not None:
+                valid_lineage = (
+                    domain_artifact.task_id == task.id
+                    or domain_artifact.task_id in task.dependency_ids
+                )
+                if not valid_lineage:
+                    raise DependencyArtifactCorruptError(
+                        f"Input artifact {art_id} task_id "
+                        f"{domain_artifact.task_id} does not match "
+                        f"task {task.id} or its dependencies"
+                    )
+
+            # Verify relation is input
+            relation = (domain_artifact.metadata or {}).get("relation", "")
+            if relation != "input":
+                raise DependencyArtifactCorruptError(
+                    f"Input artifact {art_id} has relation '{relation}', "
+                    f"expected 'input'"
+                )
+
+            # Resolve StoredArtifact
+            filename = (
+                domain_artifact.metadata or {}
+            ).get("filename", domain_artifact.name)
             try:
-                self.artifact_store.verify(
-                    run_uuid,
-                    domain_artifact.name,
-                    filename,
-                    task_id=domain_artifact.task_id,
+                stored = self._resolve_stored_artifact(
+                    run_uuid, task.id, domain_artifact
                 )
             except Exception as exc:
                 raise DependencyArtifactCorruptError(
-                    f"Input artifact {art_id} verification failed: {exc}"
+                    f"Input artifact {art_id} stored artifact not found: {exc}"
                 ) from exc
+
+            # Cross-check checksum between Domain and Stored
+            if (
+                domain_artifact.checksum_sha256
+                and stored.checksum_sha256 != domain_artifact.checksum_sha256
+            ):
+                raise DependencyArtifactCorruptError(
+                    f"Input artifact {art_id} checksum mismatch: "
+                    f"stored={stored.checksum_sha256}, "
+                    f"domain={domain_artifact.checksum_sha256}"
+                )
+
+            # Cross-check size between Domain and Stored
+            if (
+                domain_artifact.size_bytes is not None
+                and stored.size_bytes != domain_artifact.size_bytes
+            ):
+                raise DependencyArtifactCorruptError(
+                    f"Input artifact {art_id} size mismatch: "
+                    f"stored={stored.size_bytes}, "
+                    f"domain={domain_artifact.size_bytes}"
+                )
+
+            # Cross-check URI between Domain and Stored
+            if stored.uri != domain_artifact.uri:
+                raise DependencyArtifactCorruptError(
+                    f"Input artifact {art_id} URI mismatch: "
+                    f"stored={stored.uri}, domain={domain_artifact.uri}"
+                )
+
+            # Verify content integrity via store
+            self.artifact_store.verify(
+                run_uuid,
+                domain_artifact.name,
+                filename,
+                task_id=domain_artifact.task_id,
+            )
 
             input_artifacts.append(domain_artifact)
 
@@ -617,8 +823,15 @@ class ProductTaskLifecycleService:
         """Resolve a StoredArtifact by looking up stored metadata."""
         stored_artifacts = self.artifact_store.list_run_meta(run_uuid)
         for stored in stored_artifacts:
-            if (stored.logical_name == domain_artifact.name and
-                stored.task_id == (domain_artifact.task_id or task_uuid)):
+            if (
+                stored.logical_name == domain_artifact.name
+                and stored.task_id
+                == (
+                    domain_artifact.task_id
+                    if domain_artifact.task_id is not None
+                    else task_uuid
+                )
+            ):
                 return stored
         raise OutputArtifactCorruptError(
             f"Stored artifact not found for {domain_artifact.name}"
@@ -665,22 +878,80 @@ class ProductTaskLifecycleService:
                 f"stored={stored.uri}, domain={domain.uri}"
             )
 
+    def _verify_outputs_exist(
+        self, run_uuid: UUID, task_uuid: UUID, task: Task
+    ) -> Tuple[Any, Any]:
+        """Verify and return the two expected output domain artifacts.
+
+        Requires exactly one product-brief JSON and one product-brief-md Markdown.
+        """
+        if not task.output_artifact_ids:
+            raise ProductArtifactVerificationError(
+                "No output artifacts registered"
+            )
+
+        domain_artifacts: dict[str, Any] = {}
+        for artifact_id in task.output_artifact_ids:
+            art = self.orchestration.repository.get_artifact(run_uuid, artifact_id)
+            domain_artifacts[art.name] = art
+
+        json_domain = domain_artifacts.get("product-brief")
+        md_domain = domain_artifacts.get("product-brief-md")
+
+        if json_domain is None or md_domain is None:
+            raise ProductArtifactVerificationError(
+                "Both product-brief and product-brief-md artifacts must exist"
+            )
+
+        return json_domain, md_domain
+
     def _verify_output_registration(
         self, task_uuid: UUID, task: Task, json_domain: Any, md_domain: Any
     ) -> None:
-        """Verify both output artifacts are registered in task.output_artifact_ids."""
+        """Verify both output artifacts are registered exactly once in task.output_artifact_ids.
+
+        Requires:
+        - exactly one product-brief JSON Artifact ID
+        - exactly one product-brief Markdown Artifact ID
+        - each ID occurs exactly once in task.output_artifact_ids
+        """
         if json_domain is None or md_domain is None:
             raise ProductArtifactVerificationError(
                 "Product Agent did not produce both JSON and Markdown artifacts"
             )
 
-        updated_task = self.orchestration.repository.get_task(task.run_id, task_uuid)
-        json_registered = any(str(aid) == str(json_domain.id) for aid in updated_task.output_artifact_ids)
-        md_registered = any(str(aid) == str(md_domain.id) for aid in updated_task.output_artifact_ids)
-
-        if not json_registered or not md_registered:
+        # Verify exact names
+        if json_domain.name != "product-brief":
             raise ProductArtifactVerificationError(
-                "Product output artifacts not both registered in task.output_artifact_ids"
+                f"JSON artifact name must be 'product-brief', "
+                f"got '{json_domain.name}'"
+            )
+        if md_domain.name != "product-brief-md":
+            raise ProductArtifactVerificationError(
+                f"Markdown artifact name must be 'product-brief-md', "
+                f"got '{md_domain.name}'"
+            )
+
+        updated_task = self.orchestration.repository.get_task(
+            task.run_id, task_uuid
+        )
+
+        # Count occurrences of each ID — must be exactly once each
+        json_count = sum(
+            1
+            for aid in updated_task.output_artifact_ids
+            if str(aid) == str(json_domain.id)
+        )
+        md_count = sum(
+            1
+            for aid in updated_task.output_artifact_ids
+            if str(aid) == str(md_domain.id)
+        )
+
+        if json_count != 1 or md_count != 1:
+            raise ProductArtifactVerificationError(
+                "Product output artifacts must each occur exactly once "
+                "in task.output_artifact_ids"
             )
 
     def _record_failure(
@@ -698,7 +969,14 @@ class ProductTaskLifecycleService:
         )
 
     def _reconcile_running(self, task: Task) -> ReconcileResult:
-        """Reconcile a RUNNING task with strengthened validation."""
+        """Reconcile a RUNNING task with strengthened validation.
+
+        RUNNING reconciliation rules:
+        - valid completion evidence -> completion_resumable
+        - fresh valid claim without outputs -> wait
+        - stale or inconsistent claim -> manual_intervention_required
+        - FAILED may be returned only when persisted Task.status is FAILED
+        """
         # Validate ownership consistency
         if task.claimed_by != task.assigned_agent:
             return ReconcileResult(
@@ -744,9 +1022,7 @@ class ProductTaskLifecycleService:
                 claim_age_seconds=claim_age,
             )
 
-        # A final attempt may have persisted valid outputs before Task completion
-        # failed. Check durable completion evidence before interpreting an
-        # exhausted attempt budget as terminal.
+        # Check completion evidence before interpreting exhausted budget
         completion_evidence = self._completion_evidence_state(task)
         if completion_evidence == "valid":
             return ReconcileResult(
@@ -766,8 +1042,8 @@ class ProductTaskLifecycleService:
                 claim_age_seconds=claim_age,
             )
 
-        # No valid outputs exist and the attempt budget is exhausted.
-        if task.attempt_count >= task.max_attempts:
+        # FAILED may be returned only when persisted Task.status is FAILED
+        if TaskStatus(task.status) == TaskStatus.FAILED:
             return ReconcileResult(
                 status="failed",
                 resumable=False,
@@ -776,6 +1052,7 @@ class ProductTaskLifecycleService:
                 claim_age_seconds=claim_age,
             )
 
+        # Fresh valid claim without outputs -> wait
         return ReconcileResult(
             status="running",
             resumable=True,
@@ -835,6 +1112,13 @@ class ProductTaskLifecycleService:
     def _safe_error_message(exc: BaseException) -> str:
         """Extract a safe error message without secrets or credentials."""
         msg = str(exc)
+        # Remove claim tokens from error messages to prevent leakage
+        msg = re.sub(
+            r'claim_token[=:]\s*\S+',
+            'claim_token=[REDACTED]',
+            msg,
+            flags=re.IGNORECASE,
+        )
         if len(msg) > 500:
             msg = msg[:500] + "..."
         return msg

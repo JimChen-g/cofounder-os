@@ -182,9 +182,7 @@ CHANGED_FILES="$BACKUP_DIR/changed-files.txt"
   echo "# Format: <status> <path> — <description>"
   echo "# baseline: $BASELINE_SHA | accepted: $ACCEPTED_SHA"
   echo
-  while IFS= read -r line; do
-    file_status="${line%% *}"
-    path="${line#* }"
+  while IFS=$'\t' read -r file_status path; do
     if [[ -n "$path" ]]; then
       desc=""
       case "$path" in

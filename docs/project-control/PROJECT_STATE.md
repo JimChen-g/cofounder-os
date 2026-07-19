@@ -56,6 +56,7 @@ This document must be updated in the same commit as every accepted stage.
 | c9efda1 | Print WORKTREE_STATUS=DIRTY when worktree is dirty | Corrective |
 | e1101d9 | Echo clipboard content to stdout in project-preflight.sh | Corrective |
 | aff5e67 | Fix preflight exit code and complete G01 final closeout | Final G01 commit |
+| [pending] | D06-D corrective: close 8 lifecycle blockers per independent review | Corrective: product_lifecycle, tests, backup script |
 
 ## Current State
 
@@ -70,6 +71,8 @@ This document must be updated in the same commit as every accepted stage.
 - **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
 - **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-065500Z` (accepted)
 - **D06-D recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-D/`
+- **D06-D final pending implementation HEAD**: see corrective commit for D06-D review
+- **D06-D recovery package**: created by `scripts/create-stage-backup.sh` D06-D $(date -u '+%Y%m%d-%H%M%SZ')
 
 ## Mandatory Update Block
 
