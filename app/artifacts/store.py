@@ -649,6 +649,14 @@ class FileArtifactStore:
             provenance=provenance,
         )
 
+    def canonical_json_bytes(self, value: Any) -> bytes:
+        """Return the canonical JSON bytes for *value* without writing.
+
+        The returned bytes are identical to what ``write_json`` persists,
+        so callers can compute checksums or idempotency keys before writing.
+        """
+        return _canonical_json(value).encode("utf-8")
+
     def write_json(
         self,
         run_id: Union[UUID, str],

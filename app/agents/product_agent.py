@@ -70,7 +70,10 @@ class ProductGatewayProtocol(BaseModel):
 
 # ── Prompt construction ─────────────────────────────────────────────────────
 
-def _build_system_prompt(context: ProductTaskContext) -> str:
+def _build_system_prompt(
+    context: ProductTaskContext,
+    include_founder_context: bool,
+) -> str:
     """Build the system prompt for the Product Agent."""
     lines = [
         f"You are the CoFounder OS Product Agent (schema {PRODUCT_SCHEMA_VERSION}).",
@@ -85,7 +88,7 @@ def _build_system_prompt(context: ProductTaskContext) -> str:
         "",
     ]
 
-    if context.founder_context:
+    if include_founder_context and context.founder_context:
         lines.extend([
             "## Founder Context",
             context.founder_context,
@@ -210,7 +213,10 @@ def _build_repair_prompt(
     return "\n".join(lines)
 
 
-def _build_user_message(context: ProductTaskContext) -> str:
+def _build_user_message(
+    context: ProductTaskContext,
+    include_founder_context: bool,
+) -> str:
     """Build the user message for the Product Agent."""
     lines = [
         f"Analyze the product opportunity for: {context.task_title}",
@@ -220,7 +226,7 @@ def _build_user_message(context: ProductTaskContext) -> str:
         f"Deliverable: {context.required_deliverable}",
     ]
 
-    if context.founder_context:
+    if include_founder_context and context.founder_context:
         lines.extend([
             "",
             "Founder context:",
@@ -282,8 +288,8 @@ class ProductAgent:
         Raises ProductAgentValidationFailure if validation fails after repair.
         """
         context = request.context
-        system_prompt = _build_system_prompt(context)
-        user_message = _build_user_message(context)
+        system_prompt = _build_system_prompt(context, request.include_founder_context)
+        user_message = _build_user_message(context, request.include_founder_context)
 
         messages = [
             ChatMessage(role=Role.SYSTEM, content=system_prompt),

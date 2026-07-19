@@ -23,6 +23,7 @@ from app.domain import (
     ProductTaskContext,
 )
 from app.services import (
+    ArtifactWriteConflict,
     OrchestrationService,
     ProductAgentContextError,
     ProductAgentExecutionError,
@@ -722,10 +723,10 @@ class TestFounderAndDependencyContext:
         context = _make_context()
         context.founder_context = "First-time founder with technical background"
 
-        # Build prompts directly
+        # Build prompts directly with include_founder_context=True
         from app.agents.product_agent import _build_system_prompt, _build_user_message
-        sys_prompt = _build_system_prompt(context)
-        user_msg = _build_user_message(context)
+        sys_prompt = _build_system_prompt(context, include_founder_context=True)
+        user_msg = _build_user_message(context, include_founder_context=True)
 
         assert "Founder Context" in sys_prompt
         assert "First-time founder with technical background" in sys_prompt
@@ -736,25 +737,10 @@ class TestFounderAndDependencyContext:
         context = _make_context()
         context.founder_context = "First-time founder with technical background"
 
-        # Build prompts with founder context disabled
+        # Build prompts with founder context disabled - context is NOT mutated
         from app.agents.product_agent import _build_system_prompt, _build_user_message
-        # Simulate disabled by clearing founder_context (agent respects context field)
-        context_no_founder = ProductTaskContext(
-            schema_version="1.0",
-            run_id=context.run_id,
-            task_id=context.task_id,
-            objective=context.objective,
-            task_title=context.task_title,
-            task_description=context.task_description,
-            required_deliverable=context.required_deliverable,
-            founder_context=None,
-            constraints=context.constraints,
-            dependency_artifact_ids=context.dependency_artifact_ids,
-            dependency_artifact_checksums=context.dependency_artifact_checksums,
-            dependency_artifact_summaries=[],
-        )
-        sys_prompt = _build_system_prompt(context_no_founder)
-        user_msg = _build_user_message(context_no_founder)
+        sys_prompt = _build_system_prompt(context, include_founder_context=False)
+        user_msg = _build_user_message(context, include_founder_context=False)
 
         assert "Founder Context" not in sys_prompt
         assert "Founder context:" not in user_msg
@@ -782,8 +768,8 @@ class TestFounderAndDependencyContext:
             ],
         )
 
-        sys_prompt = _build_system_prompt(context)
-        user_msg = _build_user_message(context)
+        sys_prompt = _build_system_prompt(context, include_founder_context=True)
+        user_msg = _build_user_message(context, include_founder_context=True)
 
         # System prompt includes dependency info
         assert "00000000-0000-0000-0000-000000000010" in sys_prompt
@@ -800,7 +786,7 @@ class TestFounderAndDependencyContext:
         from app.agents.product_agent import _build_system_prompt
 
         context = _make_context()
-        sys_prompt = _build_system_prompt(context)
+        sys_prompt = _build_system_prompt(context, include_founder_context=True)
         # No secrets
         assert "password" not in sys_prompt.lower()
         assert "api_key" not in sys_prompt.lower()
@@ -810,6 +796,294 @@ class TestFounderAndDependencyContext:
         # No raw audit logs or credential references
         assert "audit" not in sys_prompt.lower()
         assert "credential" not in sys_prompt.lower()
+
+
+# ── include_founder_context end-to-end tests ───────────────────────────────────
+
+class TestIncludeFounderContextEnforcement:
+    """End-to-end tests for include_founder_context enforcement."""
+
+    async def test_founder_context_excluded_from_gateway_messages_when_disabled(self, tmp_path):
+        """Founder context marker is absent from all Gateway messages when disabled."""
+        repo = FileStateRepository(tmp_path / "runs")
+        sm = LifecycleStateMachine(repo)
+        orch = OrchestrationService(repo, sm)
+        store = FileArtifactStore(tmp_path / "artifacts")
+
+        # Unique founder secret marker
+        founder_secret = "FOUNDER_SECRET_MARKER_XYZ_12345"
+
+        class MessageCapturingGateway:
+            """Gateway that captures all messages for inspection."""
+
+            def __init__(self) -> None:
+                self.messages: List[Sequence[Any]] = []
+
+            async def complete(self, messages, **kwargs):
+                self.messages.append(list(messages))
+                return _make_completion(json.dumps(VALID_RESULT_DICT))
+
+        gateway = MessageCapturingGateway()
+        service = ProductAgentService(gateway, store, orch)
+
+        run, _ = orch.create_run(objective="test", actor="test")
+        task, _ = orch.create_task(run.id, title="Product", actor="test")
+        context = _make_context(run_id=run.id, task_id=task.id)
+        context.founder_context = founder_secret
+        request = _make_request(context=context, include_founder_context=False)
+
+        await service.execute(request)
+
+        # Inspect all messages sent to the Gateway
+        assert len(gateway.messages) == 1
+        all_message_content = " ".join(
+            msg.content for msg in gateway.messages[0]
+        )
+
+        # Founder secret marker must be absent from every message
+        assert founder_secret not in all_message_content
+        assert "FOUNDER_SECRET" not in all_message_content
+
+    async def test_founder_context_included_in_gateway_messages_when_enabled(self, tmp_path):
+        """Founder context marker is present in Gateway messages when enabled."""
+        repo = FileStateRepository(tmp_path / "runs")
+        sm = LifecycleStateMachine(repo)
+        orch = OrchestrationService(repo, sm)
+        store = FileArtifactStore(tmp_path / "artifacts")
+
+        # Unique founder secret marker
+        founder_secret = "FOUNDER_SECRET_MARKER_ABC_67890"
+
+        class MessageCapturingGateway:
+            """Gateway that captures all messages for inspection."""
+
+            def __init__(self) -> None:
+                self.messages: List[Sequence[Any]] = []
+
+            async def complete(self, messages, **kwargs):
+                self.messages.append(list(messages))
+                return _make_completion(json.dumps(VALID_RESULT_DICT))
+
+        gateway = MessageCapturingGateway()
+        service = ProductAgentService(gateway, store, orch)
+
+        run, _ = orch.create_run(objective="test", actor="test")
+        task, _ = orch.create_task(run.id, title="Product", actor="test")
+        context = _make_context(run_id=run.id, task_id=task.id)
+        context.founder_context = founder_secret
+        request = _make_request(context=context, include_founder_context=True)
+
+        await service.execute(request)
+
+        # Inspect all messages sent to the Gateway
+        assert len(gateway.messages) == 1
+        all_message_content = " ".join(
+            msg.content for msg in gateway.messages[0]
+        )
+
+        # Founder secret marker must be present in at least one message
+        assert founder_secret in all_message_content
+
+
+# ── Route evidence failure injection tests ────────────────────────────────────
+
+class TestRouteEvidenceFailureInjection:
+    """Tests for route-recording error classification with real failures."""
+
+    async def test_route_decision_repository_failure_raises_controlled_error(self, tmp_path):
+        """Repository failure during route recording raises controlled error with cause."""
+        repo = FileStateRepository(tmp_path / "runs")
+        sm = LifecycleStateMachine(repo)
+        orch = OrchestrationService(repo, sm)
+        store = FileArtifactStore(tmp_path / "artifacts")
+        gateway = FakeGateway([json.dumps(VALID_RESULT_DICT)])
+
+        # Create a valid run and task
+        run, _ = orch.create_run(objective="test", actor="test")
+        task, _ = orch.create_task(run.id, title="Product", actor="test")
+        context = _make_context(run_id=run.id, task_id=task.id)
+        request = _make_request(context=context)
+
+        service = ProductAgentService(gateway, store, orch)
+
+        # Inject failure by making record_route_decision raise
+        original_record = orch.record_route_decision
+        def failing_record(*args, **kwargs):
+            raise RuntimeError("Simulated repository failure")
+
+        orch.record_route_decision = failing_record  # type: ignore[method-assign]
+
+        try:
+            with pytest.raises(ProductAgentExecutionError) as exc_info:
+                await service.execute(request)
+
+            # Exception chain: ProductAgentExecutionError -> ProductAgentRouteEvidenceError -> RuntimeError
+            assert isinstance(exc_info.value.__cause__, ProductAgentRouteEvidenceError)
+            assert isinstance(exc_info.value.__cause__.__cause__, RuntimeError)
+            assert "Simulated repository failure" in str(exc_info.value.__cause__.__cause__)
+
+            # Verify zero Product content files
+            artifact_dir = tmp_path / "artifacts"
+            if artifact_dir.exists():
+                content_files = list(artifact_dir.rglob("*.json")) + list(artifact_dir.rglob("*.md"))
+                assert len(content_files) == 0
+
+            # Verify zero Domain Artifacts
+            all_artifacts = orch.repository.list_artifacts(run.id)
+            assert len(all_artifacts) == 0
+
+            # Verify zero artifact.registered events
+            events = orch.repository.list_events(run.id)
+            registered = [e for e in events if e.event_type == "artifact.registered"]
+            assert len(registered) == 0
+        finally:
+            orch.record_route_decision = original_record  # type: ignore[method-assign]
+
+
+# ── Dependency context consistency tests ──────────────────────────────────────
+
+class TestDependencyContextConsistency:
+    """Tests for dependency context consistency validation."""
+
+    async def test_mismatched_ids_and_summaries_length_raises(self):
+        """Mismatched dependency_artifact_ids and summaries lengths raises."""
+        with pytest.raises(ValueError, match="must have equal length"):
+            ProductTaskContext(
+                schema_version="1.0",
+                run_id=UUID("00000000-0000-0000-0000-000000000001"),
+                task_id=UUID("00000000-0000-0000-0000-000000000099"),
+                objective="test",
+                task_title="Test",
+                task_description="Test",
+                required_deliverable="Test",
+                dependency_artifact_ids=[
+                    UUID("00000000-0000-0000-0000-000000000010"),
+                    UUID("00000000-0000-0000-0000-000000000011"),
+                ],
+                dependency_artifact_checksums={},
+                dependency_artifact_summaries=[
+                    DependencyArtifactSummary(
+                        artifact_id=UUID("00000000-0000-0000-0000-000000000010"),
+                        checksum="sha256:abc",
+                        summary="First",
+                    ),
+                ],
+            )
+
+    async def test_summary_artifact_id_mismatch_raises(self):
+        """Summary artifact_id not matching corresponding dependency ID raises."""
+        with pytest.raises(ValueError, match="does not match"):
+            ProductTaskContext(
+                schema_version="1.0",
+                run_id=UUID("00000000-0000-0000-0000-000000000001"),
+                task_id=UUID("00000000-0000-0000-0000-000000000099"),
+                objective="test",
+                task_title="Test",
+                task_description="Test",
+                required_deliverable="Test",
+                dependency_artifact_ids=[
+                    UUID("00000000-0000-0000-0000-000000000010"),
+                ],
+                dependency_artifact_checksums={},
+                dependency_artifact_summaries=[
+                    DependencyArtifactSummary(
+                        artifact_id=UUID("00000000-0000-0000-0000-000000000999"),
+                        checksum="sha256:abc",
+                        summary="Wrong ID",
+                    ),
+                ],
+            )
+
+    async def test_duplicate_dependency_ids_raises(self):
+        """Duplicate dependency_artifact_ids raises."""
+        with pytest.raises(ValueError, match="Duplicate"):
+            ProductTaskContext(
+                schema_version="1.0",
+                run_id=UUID("00000000-0000-0000-0000-000000000001"),
+                task_id=UUID("00000000-0000-0000-0000-000000000099"),
+                objective="test",
+                task_title="Test",
+                task_description="Test",
+                required_deliverable="Test",
+                dependency_artifact_ids=[
+                    UUID("00000000-0000-0000-0000-000000000010"),
+                    UUID("00000000-0000-0000-0000-000000000010"),
+                ],
+                dependency_artifact_checksums={},
+                dependency_artifact_summaries=[
+                    DependencyArtifactSummary(
+                        artifact_id=UUID("00000000-0000-0000-0000-000000000010"),
+                        checksum="sha256:abc",
+                        summary="First",
+                    ),
+                    DependencyArtifactSummary(
+                        artifact_id=UUID("00000000-0000-0000-0000-000000000010"),
+                        checksum="sha256:def",
+                        summary="Second",
+                    ),
+                ],
+            )
+
+    async def test_checksum_mismatch_raises(self):
+        """Checksum in summary not matching dependency_artifact_checksums raises."""
+        with pytest.raises(ValueError, match="does not match"):
+            ProductTaskContext(
+                schema_version="1.0",
+                run_id=UUID("00000000-0000-0000-0000-000000000001"),
+                task_id=UUID("00000000-0000-0000-0000-000000000099"),
+                objective="test",
+                task_title="Test",
+                task_description="Test",
+                required_deliverable="Test",
+                dependency_artifact_ids=[
+                    UUID("00000000-0000-0000-0000-000000000010"),
+                ],
+                dependency_artifact_checksums={
+                    "00000000-0000-0000-0000-000000000010": "sha256:expected",
+                },
+                dependency_artifact_summaries=[
+                    DependencyArtifactSummary(
+                        artifact_id=UUID("00000000-0000-0000-0000-000000000010"),
+                        checksum="sha256:actual",
+                        summary="Mismatched checksum",
+                    ),
+                ],
+            )
+
+    async def test_valid_dependency_context_succeeds(self):
+        """Valid dependency context passes validation."""
+        context = ProductTaskContext(
+            schema_version="1.0",
+            run_id=UUID("00000000-0000-0000-0000-000000000001"),
+            task_id=UUID("00000000-0000-0000-0000-000000000099"),
+            objective="test",
+            task_title="Test",
+            task_description="Test",
+            required_deliverable="Test",
+            dependency_artifact_ids=[
+                UUID("00000000-0000-0000-0000-000000000010"),
+                UUID("00000000-0000-0000-0000-000000000011"),
+            ],
+            dependency_artifact_checksums={
+                "00000000-0000-0000-0000-000000000010": "sha256:abc",
+                "00000000-0000-0000-0000-000000000011": "sha256:def",
+            },
+            dependency_artifact_summaries=[
+                DependencyArtifactSummary(
+                    artifact_id=UUID("00000000-0000-0000-0000-000000000010"),
+                    checksum="sha256:abc",
+                    summary="First dependency",
+                ),
+                DependencyArtifactSummary(
+                    artifact_id=UUID("00000000-0000-0000-0000-000000000011"),
+                    checksum="sha256:def",
+                    summary="Second dependency",
+                ),
+            ],
+        )
+        # Should not raise
+        assert len(context.dependency_artifact_ids) == 2
+        assert len(context.dependency_artifact_summaries) == 2
 
 
 # ── Canonical JSON artifact tests ────────────────────────────────────────────
@@ -1065,8 +1339,8 @@ class TestProductAgentService:
         registered = [e for e in events if e.event_type == "artifact.registered"]
         assert len(registered) == 2  # One per call (different correlation IDs)
 
-    async def test_differing_content_same_key_raises_conflict(self, tmp_path):
-        """Differing content with same idempotency key raises exact conflict."""
+    async def test_changed_content_for_same_task_raises_conflict(self, tmp_path):
+        """Changed content for the same task raises exact ArtifactWriteConflict."""
         repo = FileStateRepository(tmp_path / "runs")
         sm = LifecycleStateMachine(repo)
         orch = OrchestrationService(repo, sm)
@@ -1082,22 +1356,28 @@ class TestProductAgentService:
         # First execution succeeds
         result1, _, json1, md1, domain1_json, domain1_md = await service1.execute(request, correlation_id="cid-1")
 
-        # Second execution with different result on the same task
-        bad = copy.deepcopy(VALID_RESULT_DICT)
-        bad["problem_statement"] = "Different problem"
-        gateway2 = FakeGateway([json.dumps(bad)])
+        # Second execution with different validated result on the same task
+        changed = copy.deepcopy(VALID_RESULT_DICT)
+        changed["problem_statement"] = "Different problem statement"
+        gateway2 = FakeGateway([json.dumps(changed)])
         service2 = ProductAgentService(gateway2, store, orch)
 
         with pytest.raises(ProductAgentExecutionError) as exc_info:
             await service2.execute(request, correlation_id="cid-2")
-        # The cause should be the underlying conflict
-        assert exc_info.value.__cause__ is not None
 
-        # Verify no partial second artifact or duplicate domain record
+        # Exact exception chain: ProductAgentExecutionError -> ArtifactWriteConflict
+        assert isinstance(exc_info.value.__cause__, ArtifactWriteConflict)
+
+        # Verify no partial second artifact on disk
         all_artifacts = orch.repository.list_artifacts(run.id)
         task_artifacts = [a for a in all_artifacts if a.task_id == task.id]
         # Only the original two domain artifacts should exist
         assert len(task_artifacts) == 2
+
+        # Verify no duplicate artifact.registered events
+        events = orch.repository.list_events(run.id)
+        registered = [e for e in events if e.event_type == "artifact.registered"]
+        assert len(registered) == 2  # Only from first execution
 
         # Verify original domain records unchanged
         updated_task = orch.repository.get_task(run.id, task.id)
@@ -1332,6 +1612,12 @@ class TestPublicImportsAndExceptions:
         assert issubclass(ProductAgentExecutionError, ProductAgentServiceError)
         assert issubclass(ProductAgentContextError, ProductAgentServiceError)
         assert issubclass(ProductAgentRouteEvidenceError, ProductAgentServiceError)
+
+    def test_services_does_not_export_agent_validation_failure(self):
+        """ProductAgentValidationFailure is not exported from app.services."""
+        import app.services as services_module
+        assert "ProductAgentValidationFailure" not in services_module.__all__
+        assert not hasattr(services_module, "ProductAgentValidationFailure")
 
     def test_domain_exports_product_models(self):
         """app.domain exports Product domain models without duplicate errors."""

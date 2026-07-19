@@ -37,7 +37,6 @@ from app.services.product_agent import (
     ProductAgentRouteEvidenceError,
     ProductAgentService,
     ProductAgentServiceError,
-    ProductAgentValidationFailure,
 )
 
 __all__ = [
@@ -64,7 +63,6 @@ __all__ = [
     "ProductAgentRouteEvidenceError",
     "ProductAgentService",
     "ProductAgentServiceError",
-    "ProductAgentValidationFailure",
     "RunCompletionBlocked",
     "RunSnapshot",
     "RetryPreparationResult",

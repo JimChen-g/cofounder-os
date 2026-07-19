@@ -7,7 +7,7 @@ output dictionaries for structured data.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Dict, List, Literal, Optional
 from uuid import UUID
 
@@ -132,6 +132,50 @@ class ProductTaskContext(BaseModel):
     dependency_artifact_summaries: List[DependencyArtifactSummary] = Field(
         default_factory=list, max_length=20
     )
+
+    @model_validator(mode="after")
+    def validate_dependency_context_consistency(self) -> "ProductTaskContext":
+        """Validate dependency context fields are internally consistent."""
+        ids = self.dependency_artifact_ids
+        summaries = self.dependency_artifact_summaries
+        checksums = self.dependency_artifact_checksums
+
+        # Lengths must match
+        if len(ids) != len(summaries):
+            raise ValueError(
+                f"dependency_artifact_ids ({len(ids)}) and "
+                f"dependency_artifact_summaries ({len(summaries)}) must have equal length"
+            )
+
+        # Each summary must reference the corresponding ID
+        for idx, (dep_id, summary) in enumerate(zip(ids, summaries)):
+            if summary.artifact_id != dep_id:
+                raise ValueError(
+                    f"dependency_artifact_summaries[{idx}].artifact_id "
+                    f"({summary.artifact_id}) does not match "
+                    f"dependency_artifact_ids[{idx}] ({dep_id})"
+                )
+
+        # Checksums must match when provided
+        if checksums:
+            for dep_id in ids:
+                if str(dep_id) in checksums:
+                    summary = next(
+                        (s for s in summaries if s.artifact_id == dep_id),
+                        None,
+                    )
+                    if summary and summary.checksum != checksums[str(dep_id)]:
+                        raise ValueError(
+                            f"dependency_artifact_summaries checksum for {dep_id} "
+                            f"({summary.checksum}) does not match "
+                            f"dependency_artifact_checksums ({checksums[str(dep_id)]})"
+                        )
+
+        # No duplicate dependency IDs
+        if len(ids) != len(set(ids)):
+            raise ValueError("Duplicate dependency_artifact_ids are not allowed")
+
+        return self
 
 
 class ProductAgentRequest(BaseModel):

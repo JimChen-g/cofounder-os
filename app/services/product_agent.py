@@ -20,7 +20,6 @@ from app.agents.product_agent import (
     ProductGatewayProtocol,
 )
 from app.artifacts import FileArtifactStore, StoredArtifact
-from app.artifacts.store import _canonical_json
 from app.domain import ProductAgentRequest, ProductAgentResultV1, ProductTaskContext
 from app.services import (
     ArtifactRegistrationService,
@@ -249,18 +248,34 @@ class ProductAgentService:
             # Render Markdown
             md_content = _render_markdown(result)
 
-            # Write and register JSON artifact via canonical JSON path
-            json_stored, json_domain, json_event = (
-                self._write_json_artifact(
-                    run_id=context.run_id,
-                    task_id=context.task_id,
-                    logical_name="product-brief",
-                    filename="product-brief.json",
-                    value=result.model_dump(mode="json", exclude_none=True),
-                    content_type="application/json; charset=utf-8",
-                    created_by=created_by,
-                    correlation_id=correlation_id,
-                )
+            # Compute canonical bytes and checksum for idempotency key
+            value = result.model_dump(mode="json", exclude_none=True)
+            canonical_bytes = self.artifact_store.canonical_json_bytes(value)
+            content_checksum = hashlib.sha256(canonical_bytes).hexdigest()
+
+            idempotency_key = _compute_idempotency_key(
+                schema_version="1.0",
+                run_id=context.run_id,
+                task_id=context.task_id,
+                relation="output",
+                logical_name="product-brief",
+                filename="product-brief.json",
+                checksum=content_checksum,
+            )
+
+            # Write and register JSON artifact via ArtifactRegistrationService
+            writer = ArtifactRegistrationService(self.artifact_store, self.orchestration)
+            json_stored, json_domain, json_event = writer.write_json(
+                run_id=context.run_id,
+                logical_name="product-brief",
+                filename="product-brief.json",
+                value=value,
+                content_type="application/json; charset=utf-8",
+                created_by=created_by,
+                task_id=context.task_id,
+                relation="output",
+                idempotency_key=idempotency_key,
+                correlation_id=correlation_id,
             )
 
             # Write and register Markdown artifact
@@ -297,73 +312,6 @@ class ProductAgentService:
             json_domain,
             md_domain,
         )
-
-    def _write_json_artifact(
-        self,
-        run_id: UUID,
-        task_id: UUID,
-        logical_name: str,
-        filename: str,
-        value: Any,
-        content_type: str,
-        created_by: str,
-        correlation_id: Optional[str] = None,
-    ) -> tuple[StoredArtifact, Any, Any]:
-        """Write canonical JSON artifact and register in orchestration."""
-        # Produce the exact canonical bytes that FileArtifactStore.write_bytes
-        # will checksum.  Use the same _canonical_json function the store uses.
-        canonical_str = _canonical_json(value)
-        canonical_bytes = canonical_str.encode("utf-8")
-        content_checksum = hashlib.sha256(canonical_bytes).hexdigest()
-
-        idempotency_key = _compute_idempotency_key(
-            schema_version="1.0",
-            run_id=run_id,
-            task_id=task_id,
-            relation="output",
-            logical_name=logical_name,
-            filename=filename,
-            checksum=content_checksum,
-        )
-
-        # Write directly via the store's write_bytes to avoid a second
-        # canonical-serialization pass through write_json.
-        stored = self.artifact_store.write_bytes(
-            run_id=run_id,
-            logical_name=logical_name,
-            filename=filename,
-            content=canonical_bytes,
-            created_by=created_by,
-            task_id=task_id,
-            content_type=content_type,
-            idempotency_key=idempotency_key,
-        )
-
-        # Register in orchestration
-        domain_artifact, event = self.orchestration.register_artifact(
-            run_id=run_id,
-            kind="data",
-            name=logical_name,
-            uri=stored.uri,
-            created_by=created_by,
-            actor=created_by,
-            relation="output",
-            task_id=task_id,
-            content_type=content_type,
-            checksum_sha256=stored.checksum_sha256,
-            size_bytes=stored.size_bytes,
-            correlation_id=correlation_id,
-            metadata={
-                "filename": stored.filename,
-                "logical_name": stored.logical_name,
-                "format_version": stored.format_version,
-                "idempotency_key": stored.idempotency_key,
-                "provenance": stored.provenance,
-                "relation": "output",
-            },
-        )
-
-        return stored, domain_artifact, event
 
     def _write_and_register(
         self,
@@ -444,19 +392,24 @@ class ProductAgentService:
             except (TypeError, ValueError):
                 latency_ms = None
 
-        self.orchestration.record_route_decision(
-            run_id=context.run_id,
-            task_id=context.task_id,
-            requested_model=completion.requested_model,
-            selected_model=completion.selected_model,
-            provider=completion.selected_provider,
-            reason=completion.routing_reason,
-            fallback_used=completion.fallback_used,
-            latency_ms=latency_ms,
-            correlation_id=correlation_id,
-            metadata={
-                "agent_id": PRODUCT_AGENT_ID,
-                "schema_version": "1.0",
-                "product_agent_version": "1.0",
-            },
-        )
+        try:
+            self.orchestration.record_route_decision(
+                run_id=context.run_id,
+                task_id=context.task_id,
+                requested_model=completion.requested_model,
+                selected_model=completion.selected_model,
+                provider=completion.selected_provider,
+                reason=completion.routing_reason,
+                fallback_used=completion.fallback_used,
+                latency_ms=latency_ms,
+                correlation_id=correlation_id,
+                metadata={
+                    "agent_id": PRODUCT_AGENT_ID,
+                    "schema_version": "1.0",
+                    "product_agent_version": "1.0",
+                },
+            )
+        except Exception as exc:
+            raise ProductAgentRouteEvidenceError(
+                f"Failed to record route decision: {exc}"
+            ) from exc
