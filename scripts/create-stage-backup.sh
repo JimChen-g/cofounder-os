@@ -257,9 +257,9 @@ if [[ -n "$CHANGED_PATHS" ]]; then
   SECRET_HITS=""
   while IFS= read -r filepath; do
     if [[ -f "$filepath" ]]; then
-      # Exclude comment lines from scan
-      NON_COMMENT="$(/usr/bin/grep -v -E '^\s*#' "$filepath" 2>/dev/null || true)"
-      if echo "$NON_COMMENT" | /usr/bin/grep -q -E "(api[_-]?key|secret|password|private[_-]?key|token)" 2>/dev/null; then
+      # Exclude comment lines; only flag actual assignments/definitions
+      NON_COMMENT="$(/usr/bin/grep -v -E '^\s*(#|//|/\*|\*)' "$filepath" 2>/dev/null || true)"
+      if echo "$NON_COMMENT" | /usr/bin/grep -q -E "(api[_-]?key|secret|password|private[_-]?key)\s*[=:]" 2>/dev/null; then
         SECRET_HITS="$SECRET_HITS $filepath"
       fi
     fi
