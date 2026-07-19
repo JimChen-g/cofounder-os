@@ -231,7 +231,7 @@ echo "Command: ruff check on changed Python files in stage range" >> "$TEST_SUMM
 CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
 PYTHON_CHANGED="$(echo "$CHANGED_PATHS" | /usr/bin/grep -E '\.py$' || true)"
 if [[ -n "$PYTHON_CHANGED" ]]; then
-  RUFF_OUTPUT="$(echo "$PYTHON_CHANGED" | xargs /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check 2>&1)" || {
+  RUFF_OUTPUT="$(echo "$PYTHON_CHANGED" | /usr/bin/xargs /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check 2>&1)" || {
     echo "$RUFF_OUTPUT" >> "$TEST_SUMMARY"
     echo "ERROR: Ruff lint failed on changed Python files — aborting backup" >&2
     exit 1
