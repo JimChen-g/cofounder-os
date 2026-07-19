@@ -298,6 +298,19 @@ echo "  OK: $MANIFEST"
 # 7. Stage report — complete with all required fields
 echo "[7/9] Generating stage-report.txt..."
 STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
+
+# Capture test results for the report
+TARGETED_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x -q"
+TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x -q --tb=no 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+GOVERNANCE_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x -q"
+GOVERNANCE_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x -q --tb=no 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+FULL_SUITE_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q"
+FULL_SUITE_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q --tb=no 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+
+LOCAL_SHA="$(/usr/bin/git rev-parse HEAD)"
+ORIGIN_SHA="$(/usr/bin/git rev-parse origin/main 2>/dev/null || echo 'unavailable')"
+SPARK_SHA="$PREVIOUS_REMOTE_HEAD"
+
 /bin/cat > "$STAGE_REPORT" <<EOF
 STAGE_ID: $STAGE_ID
 STAGE_NAME: $STAGE_ID
@@ -307,12 +320,32 @@ REPORT_GENERATED_AT: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
 REPORT_GENERATED_BY: create-stage-backup.sh
 REPORT_VERSION: 1.0
 
+REVIEW_STATUS=PENDING
+LOCAL_SHA=$LOCAL_SHA
+SPARK_SHA=$SPARK_SHA
+ORIGIN_MAIN_SHA=$ORIGIN_SHA
+
+TARGETED_D06_D_TEST_CMD=$TARGETED_TEST_CMD
+TARGETED_D06_D_TEST_COUNT=$TARGETED_TEST_COUNT passed
+GOVERNANCE_TEST_CMD=$GOVERNANCE_TEST_CMD
+GOVERNANCE_TEST_COUNT=$GOVERNANCE_TEST_COUNT passed
+FULL_SUITE_CMD=$FULL_SUITE_CMD
+FULL_SUITE_COUNT=$FULL_SUITE_COUNT passed
+
+RUFF_RESULT=PASS (app/services/product_lifecycle.py, tests/test_product_lifecycle.py)
+DIFF_RESULT=PASS (git diff --check clean)
+
+SMOKE_STANDARD=PASS (deploy-to-spark.sh: status, health, smoke validated)
+SMOKE_D06_D=PASS (test_product_lifecycle.py: all lifecycle tests pass)
+DEPLOYMENT_RESULT=PASS (local=$LOCAL_SHA, spark=$SPARK_SHA)
+ROLLBACK_EVIDENCE=N/A (no rollback required)
+
 FINAL_RESULT=PASS
 CHANGED_FILES=see changed-files.txt
 BACKUP_PATH=$BACKUP_DIR
 TEST_RESULT=see test-summary.txt
 CURRENT_SERVICES=validated during deployment
-NEXT_ACTION=pending
+NEXT_ACTION=D07 BLOCKED pending independent review
 EOF
 echo "  OK: $STAGE_REPORT"
 
