@@ -1,8 +1,13 @@
 """Tests for Product Task Lifecycle Service (D06-D).
 
-29 tests covering the full Product Task lifecycle:
-  READY -> claim -> RUNNING -> ProductAgent execution -> artifacts -> COMPLETED
-  with BLOCKED retry midpoint, failure handling, recovery, and idempotency.
+31 tests covering the full Product Task lifecycle with:
+- Correct predecessor Task dependency semantics
+- Post-claim failure path determinism
+- Output content verification
+- Retry authorization
+- Real restart recovery
+- Strengthened stale RUNNING reconciliation
+- Partial artifact production coverage
 """
 
 from __future__ import annotations
@@ -18,6 +23,10 @@ from app.agents.product_agent import (
     DEFAULT_VIRTUAL_MODEL,
 )
 from app.clients.gateway import GatewayCompletion
+from app.domain import (
+    Artifact,
+    ArtifactKind,
+)
 from app.artifacts import FileArtifactStore
 from app.services import (
     AgentExecutionService,
@@ -25,14 +34,13 @@ from app.services import (
     ProductAgentService,
     ProductTaskLifecycleError,
     ProductTaskLifecycleService,
+    PredecessorTaskNotCompletedError,
+    RetryAuthorizationError,
+    TaskNotFoundError,
     TaskNotProductAgentError,
 )
 from app.domain import TaskStatus
 from app.state import FileStateRepository, LifecycleStateMachine
-from app.services.product_lifecycle import (
-    DependencyArtifactCorruptError,
-    DependencyArtifactMissingError,
-)
 
 
 # ── Test data ───────────────────────────────────────────────────────────────
@@ -142,7 +150,6 @@ def _make_lifecycle_service(tmp_path, gateway_response=None):
     orch = OrchestrationService(repo, sm)
     store = FileArtifactStore(tmp_path / "artifacts")
 
-    # Create agent with a gateway that returns the response
     class FakeGateway:
         def __init__(self, response):
             self.response = response
@@ -181,18 +188,55 @@ def _make_lifecycle_service(tmp_path, gateway_response=None):
     return lifecycle, orch, repo, sm, store, fake_gateway
 
 
-def _make_dependency_artifact(orch, run_id, artifact_id, name="dep-artifact"):
-    """Create a dependency artifact in the repository."""
-    from app.domain import Artifact, ArtifactKind
-    artifact = Artifact(
-        run_id=run_id,
-        kind=ArtifactKind.INPUT,
-        name=name,
-        uri=f"artifact://{artifact_id}",
-        checksum_sha256=f"sha256:{artifact_id.hex[:16]}",
-        created_by="test",
-    )
+def _make_predecessor_task(orch, run_id, title="Predecessor"):
+    """Create a COMPLETED predecessor Task."""
+    task, _ = orch.create_task(run_id, title=title, actor="test")
+    task.assigned_agent = "product-agent"
+    task.max_attempts = 2
+    orch.repository.save_task(task)
+    # Transition PENDING -> READY -> RUNNING -> COMPLETED
+    orch.state_machine.transition_task(run_id, task.id, TaskStatus.READY, actor="test", reason="Setup")
+    orch.state_machine.transition_task(run_id, task.id, TaskStatus.RUNNING, actor="test", reason="Execute")
+    orch.state_machine.transition_task(run_id, task.id, TaskStatus.COMPLETED, actor="test", reason="Done")
+    return orch.repository.get_task(run_id, task.id)
+
+
+def _make_input_artifact(orch, run_id, task_id, store=None, name="input-artifact"):
+    """Create an input Artifact for a Task, optionally writing to store."""
+    if store is not None:
+        stored = store.write_text(
+            run_id=run_id,
+            logical_name=name,
+            filename=f"{name}.txt",
+            text=f"Content for {name}",
+            created_by="test",
+            task_id=task_id,
+            content_type="text/plain; charset=utf-8",
+        )
+        artifact = Artifact(
+            run_id=run_id,
+            task_id=task_id,
+            kind=ArtifactKind.DATA,
+            name=name,
+            uri=stored.uri,
+            checksum_sha256=stored.checksum_sha256,
+            size_bytes=stored.size_bytes,
+            created_by="test",
+            metadata={"filename": stored.filename},
+        )
+    else:
+        artifact = Artifact(
+            run_id=run_id,
+            task_id=task_id,
+            kind=ArtifactKind.DATA,
+            name=name,
+            uri=f"artifact://{task_id}/{name}",
+            checksum_sha256=f"sha256:{str(task_id)[:16]}",
+            size_bytes=100,
+            created_by="test",
+        )
     orch.repository.create_artifact(artifact)
+
     return artifact
 
 
@@ -203,16 +247,39 @@ class TestSuccessfulLifecycle:
     """Tests for the happy-path READY → COMPLETED lifecycle."""
 
     async def test_successful_ready_to_completed(self, tmp_path):
-        """READY task completes through full lifecycle."""
+        """READY task completes through full lifecycle with predecessor Tasks."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
-        task = _make_task(orch, run.id, title="Product Brief")
+
+        # Create predecessor Task and input artifact
+        pred = _make_predecessor_task(orch, run.id, title="Predecessor")
+        input_art = _make_input_artifact(orch, run.id, pred.id, store=store)
+
+        # Create product task with predecessor dependency and input artifact
+        task, _ = orch.create_task(
+            run.id,
+            title="Product Brief",
+            description="Create the validated product brief.",
+            actor="test",
+        )
+        task.assigned_agent = "product-agent"
+        task.max_attempts = 2
+        task.dependency_ids = [pred.id]  # predecessor Task ID
+        task.input_artifact_ids = [input_art.id]
+        orch.repository.save_task(task)
+        orch.mark_task_ready(
+            run.id,
+            task.id,
+            actor="test",
+            reason="Predecessors completed",
+        )
+        task = orch.repository.get_task(run.id, task.id)
 
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
 
-        assert result.status == "completed"
+        assert result.status == "completed", result.last_error
         assert result.task.status == "completed"
         assert result.task.claim_token is None
         assert result.task.claimed_by is None
@@ -224,22 +291,28 @@ class TestSuccessfulLifecycle:
         """Task with wrong assigned_agent is rejected."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task, _ = orch.create_task(run.id, title="Wrong Agent", actor="test")
         task.assigned_agent = "finance-agent"
+        task.dependency_ids = [pred.id]
         orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
-        with pytest.raises(TaskNotProductAgentError):
+        with pytest.raises(TaskNotProductAgentError, match="finance-agent"):
             await lifecycle.execute_ready_task(
                 run_id=run.id, task_id=task.id, actor="product-lifecycle"
             )
 
     async def test_wrong_agent_rejected(self, tmp_path):
-        """Task assigned to finance-agent is rejected even if executable."""
+        """Task assigned to finance-agent is rejected."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task, _ = orch.create_task(run.id, title="Finance", actor="test")
         task.assigned_agent = "finance-agent"
+        task.dependency_ids = [pred.id]
         orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         with pytest.raises(TaskNotProductAgentError, match="finance-agent"):
             await lifecycle.execute_ready_task(
@@ -250,64 +323,72 @@ class TestSuccessfulLifecycle:
         """Non-READY task is rejected."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
-        task = _make_task(orch, run.id, title="Pending")
-
-        # Force back to PENDING (not READY)
-        task.status = TaskStatus.PENDING
+        pred = _make_predecessor_task(orch, run.id)
+        task, _ = orch.create_task(run.id, title="Pending", actor="test")
+        task.assigned_agent = "product-agent"
+        task.dependency_ids = [pred.id]
         orch.repository.save_task(task)
+        # Leave as PENDING (not READY)
+        task = orch.repository.get_task(run.id, task.id)
 
         with pytest.raises(ProductTaskLifecycleError):
             await lifecycle.execute_ready_task(
                 run_id=run.id, task_id=task.id, actor="product-lifecycle"
             )
 
-    async def test_missing_dependency_rejected(self, tmp_path):
-        """Task with missing dependency artifact is rejected."""
+    async def test_predecessor_not_completed_rejected(self, tmp_path):
+        """Task with predecessor not COMPLETED is rejected."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
-        task = _make_task(orch, run.id, title="With Deps")
-        task.dependency_ids = [UUID("00000000-0000-0000-0000-000000000010")]
-        orch.repository.save_task(task)
 
-        with pytest.raises(DependencyArtifactMissingError):
+        # Create predecessor but leave it RUNNING (not COMPLETED)
+        pred, _ = orch.create_task(run.id, title="Incomplete Predecessor", actor="test")
+        pred.assigned_agent = "product-agent"
+        orch.repository.save_task(pred)
+        orch.state_machine.transition_task(
+            run.id, pred.id, TaskStatus.READY, actor="test", reason="Ready"
+        )
+        orch.state_machine.transition_task(run.id, pred.id, TaskStatus.RUNNING, actor="test", reason="Running")
+        pred = orch.repository.get_task(run.id, pred.id)
+
+        task, _ = orch.create_task(run.id, title="Product Brief", actor="test")
+        task.assigned_agent = "product-agent"
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        with pytest.raises(PredecessorTaskNotCompletedError):
             await lifecycle.execute_ready_task(
                 run_id=run.id, task_id=task.id, actor="product-lifecycle"
             )
 
-    async def test_corrupt_dependency_artifact_rejected(self, tmp_path):
-        """Task with dependency artifact missing checksum is rejected."""
+    async def test_missing_predecessor_rejected(self, tmp_path):
+        """Task with missing predecessor Task is rejected."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
-        task = _make_task(orch, run.id, title="With Deps")
 
-        # Create dependency artifact without checksum
-        from app.domain import Artifact, ArtifactKind
-        dep_artifact = Artifact(
-            run_id=run.id,
-            kind=ArtifactKind.INPUT,
-            name="corrupt-dep",
-            uri="artifact://corrupt",
-            checksum_sha256=None,
-            created_by="test",
-        )
-        orch.repository.create_artifact(dep_artifact)
-
-        task.dependency_ids = [dep_artifact.id]
+        task, _ = orch.create_task(run.id, title="Product Brief", actor="test")
+        task.assigned_agent = "product-agent"
+        task.dependency_ids = [UUID("00000000-0000-0000-0000-000000000010")]
         orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
-        with pytest.raises(DependencyArtifactCorruptError):
+        with pytest.raises(TaskNotFoundError):
             await lifecycle.execute_ready_task(
                 run_id=run.id, task_id=task.id, actor="product-lifecycle"
             )
 
     async def test_claim_token_ownership_enforced(self, tmp_path):
-        """Claim token ownership is enforced — wrong actor cannot complete."""
+        """Claim token ownership enforced — wrong token raises ClaimTokenMismatchError."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
-        # Claim with product-lifecycle (implicit in execute)
-
+        # First call succeeds
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
@@ -317,7 +398,11 @@ class TestSuccessfulLifecycle:
         """ProductAgentService is called exactly once per real attempt."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -326,10 +411,14 @@ class TestSuccessfulLifecycle:
         assert gateway.calls == 1
 
     async def test_both_product_artifacts_verified_before_completion(self, tmp_path):
-        """Both Product Artifacts must exist before completion."""
+        """Both Product Artifacts must exist and verify before completion."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -338,12 +427,18 @@ class TestSuccessfulLifecycle:
         assert result.status == "completed"
         assert result.json_artifact is not None
         assert result.md_artifact is not None
+        assert result.json_domain_artifact is not None
+        assert result.md_domain_artifact is not None
 
     async def test_both_output_artifact_ids_registered(self, tmp_path):
         """Both output Artifact IDs are registered on the Task."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -358,7 +453,11 @@ class TestSuccessfulLifecycle:
         """Success clears claim_token, claimed_by, claimed_at."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -370,17 +469,21 @@ class TestSuccessfulLifecycle:
         assert updated_task.claimed_at is None
 
     async def test_success_preserves_attempt_count(self, tmp_path):
-        """Success preserves attempt_count (does not double-increment)."""
+        """Success preserves attempt_count (one claim = one increment)."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
 
         updated_task = orch.repository.get_task(run.id, task.id)
-        assert updated_task.attempt_count == 1  # One claim = one increment
+        assert updated_task.attempt_count == 1
 
 
 # ── Idempotency replay tests ────────────────────────────────────────────────
@@ -393,47 +496,32 @@ class TestIdempotencyReplay:
         """Re-invoking after COMPLETED makes no Gateway call."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
-        # First call completes
         await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
         assert gateway.calls == 1
 
-        # Second call — should return completed state without Gateway call
         result2 = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
         assert result2.status == "completed"
-        assert gateway.calls == 1  # No additional call
-
-    async def test_identical_replay_creates_no_duplicate_content(self, tmp_path):
-        """Replay after completion creates no duplicate content files."""
-        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
-        run = _make_run(repo, sm, orch, owner=OWNER)
-        task = _make_task(orch, run.id, title="Product Brief")
-
-        await lifecycle.execute_ready_task(
-            run_id=run.id, task_id=task.id, actor="product-lifecycle"
-        )
-
-        # Count domain artifacts (proxy for content files)
-        artifacts_1 = orch.repository.list_artifacts(run.id)
-
-        await lifecycle.execute_ready_task(
-            run_id=run.id, task_id=task.id, actor="product-lifecycle"
-        )
-
-        artifacts_2 = orch.repository.list_artifacts(run.id)
-
-        assert len(artifacts_1) == len(artifacts_2)
+        assert gateway.calls == 1
 
     async def test_identical_replay_creates_no_duplicate_domain_artifact(self, tmp_path):
         """Replay after completion creates no duplicate Domain Artifacts."""
         lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -449,7 +537,6 @@ class TestIdempotencyReplay:
         events_2 = orch.repository.list_events(run.id)
         registered_2 = [e for e in events_2 if e.event_type == "artifact.registered"]
 
-        # Same number of registered events — no duplicates
         assert len(registered_1) == len(registered_2)
 
 
@@ -465,7 +552,11 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -483,7 +574,11 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -500,7 +595,11 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         # First attempt → BLOCKED
         await lifecycle.execute_ready_task(
@@ -520,23 +619,27 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
-        # First attempt → BLOCKED (invalid JSON)
+        # First attempt → BLOCKED
         result1 = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
         assert result1.status == "blocked"
 
-        # Switch gateway to return valid JSON for retry
+        # Switch gateway for retry
         gateway.response = json.dumps(VALID_RESULT_DICT)
 
-        # Prepare retry (BLOCKED → READY)
+        # Prepare retry
         lifecycle.agent_execution.prepare_retry(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
 
-        # Second attempt → COMPLETED (valid JSON)
+        # Second attempt → COMPLETED
         result2 = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
@@ -548,7 +651,11 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         # First attempt
         await lifecycle.execute_ready_task(
@@ -578,9 +685,12 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief", max_attempts=1)
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
-        # First (and only) attempt → FAILED (exhausted)
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
@@ -591,19 +701,21 @@ class TestFailureAndRetry:
         assert updated_task.status == "failed"
 
     async def test_failed_cannot_restart(self, tmp_path):
-        """FAILED task cannot be restarted via execute_ready_task."""
+        """FAILED task cannot be restarted."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief", max_attempts=1)
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
-        # First attempt → FAILED
         await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
 
-        # Second attempt should fail — task is FAILED, not READY
         with pytest.raises(ProductTaskLifecycleError):
             await lifecycle.execute_ready_task(
                 run_id=run.id, task_id=task.id, actor="product-lifecycle"
@@ -615,13 +727,16 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
 
-        # No artifacts should be registered
         all_artifacts = orch.repository.list_artifacts(run.id)
         assert len(all_artifacts) == 0
 
@@ -631,7 +746,11 @@ class TestFailureAndRetry:
             tmp_path, gateway_response=json.dumps(VALID_RESULT_DICT)
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         # Break route evidence recording
         original_record = orch.record_route_decision
@@ -643,10 +762,8 @@ class TestFailureAndRetry:
             result = await lifecycle.execute_ready_task(
                 run_id=run.id, task_id=task.id, actor="product-lifecycle"
             )
-            # Route-evidence failure is handled: task becomes BLOCKED
             assert result.status == "blocked"
 
-            # No artifacts
             all_artifacts = orch.repository.list_artifacts(run.id)
             assert len(all_artifacts) == 0
         finally:
@@ -659,7 +776,11 @@ class TestFailureAndRetry:
             tmp_path, gateway_response="not valid json"
         )
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         # First attempt → BLOCKED
         result1 = await lifecycle.execute_ready_task(
@@ -675,7 +796,7 @@ class TestFailureAndRetry:
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
 
-        # Second attempt with same content
+        # Second attempt → COMPLETED
         result2 = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle", correlation_id="cid-2"
         )
@@ -686,83 +807,337 @@ class TestFailureAndRetry:
         assert result2.md_artifact.checksum_sha256 is not None
 
 
-# ── Recovery tests ───────────────────────────────────────────────────────────
+# ── Retry authorization tests ────────────────────────────────────────────────
 
 
-class TestRecovery:
-    """Tests for process-restart recovery and stale-running reconciliation."""
+class TestRetryAuthorization:
+    """Tests for retry authorization boundaries."""
 
-    async def test_process_restart_recovery(self, tmp_path):
-        """New service instance recovers from persisted state."""
-        # First instance: complete the task
+    async def test_product_agent_cannot_authorize_own_retry(self, tmp_path):
+        """product-agent actor is rejected for retry_blocked_task."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        # First attempt → BLOCKED
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # product-agent cannot authorize its own retry
+        with pytest.raises(RetryAuthorizationError, match="not authorized"):
+            await lifecycle.retry_blocked_task(
+                run_id=run.id, task_id=task.id, actor="product-agent"
+            )
+
+    async def test_arbitrary_actor_rejected(self, tmp_path):
+        """Arbitrary actor is rejected for retry_blocked_task."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        with pytest.raises(RetryAuthorizationError, match="not authorized"):
+            await lifecycle.retry_blocked_task(
+                run_id=run.id, task_id=task.id, actor="random-actor"
+            )
+
+    async def test_executive_actor_authorized_for_retry(self, tmp_path):
+        """Executive actor is authorized for retry_blocked_task."""
+        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        # First attempt → BLOCKED
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Switch gateway for retry
+        gateway.response = json.dumps(VALID_RESULT_DICT)
+
+        # Executive actor can retry
+        result = await lifecycle.retry_blocked_task(
+            run_id=run.id, task_id=task.id, actor="executive"
+        )
+        assert result.status == "completed"
+
+
+# ── Restart recovery tests ──────────────────────────────────────────────────
+
+
+class TestRestartRecovery:
+    """Tests for process-restart recovery with entirely new instances."""
+
+    async def test_completed_replay_with_new_instances(self, tmp_path):
+        """New instances recover COMPLETED state without Gateway call."""
+        # First set of instances: complete the task
         lifecycle1, orch1, repo1, sm1, store1, gateway1 = _make_lifecycle_service(tmp_path)
         run = _make_run(repo1, sm1, orch1, owner=OWNER)
+        pred = _make_predecessor_task(orch1, run.id)
         task = _make_task(orch1, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch1.repository.save_task(task)
+        task = orch1.repository.get_task(run.id, task.id)
 
         await lifecycle1.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"
         )
+        assert gateway1.calls == 1
 
-        # New instance: recover from same repository/store
+        # New set of instances: recover from same filesystem paths
+        repo2 = FileStateRepository(tmp_path / "runs")
+        sm2 = LifecycleStateMachine(repo2)
+        orch2 = OrchestrationService(repo2, sm2)
+        store2 = FileArtifactStore(tmp_path / "artifacts")
+
         lifecycle2 = ProductTaskLifecycleService(
-            agent_execution=AgentExecutionService(repo1),
-            product_agent_service=lifecycle1.product_agent_service,
-            artifact_store=store1,
-            orchestration=orch1,
+            agent_execution=AgentExecutionService(repo2),
+            product_agent_service=ProductAgentService(
+                gateway_client=gateway1,
+                artifact_store=store2,
+                orchestration_service=orch2,
+            ),
+            artifact_store=store2,
+            orchestration=orch2,
         )
 
         reconcile = lifecycle2.reconcile_task(run.id, task.id)
         assert reconcile.status == "completed"
         assert reconcile.resumable is False
 
-    async def test_stale_running_reconciliation_no_claim_evidence(self, tmp_path):
-        """RUNNING with no claim evidence → manual_intervention."""
+    async def test_blocked_retry_with_new_instances(self, tmp_path):
+        """New instances can prepare and retry BLOCKED task."""
+        lifecycle1, orch1, repo1, sm1, store1, gateway1 = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo1, sm1, orch1, owner=OWNER)
+        pred = _make_predecessor_task(orch1, run.id)
+        task = _make_task(orch1, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch1.repository.save_task(task)
+        task = orch1.repository.get_task(run.id, task.id)
+
+        # First attempt → BLOCKED
+        await lifecycle1.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # New instances for retry
+        repo2 = FileStateRepository(tmp_path / "runs")
+        sm2 = LifecycleStateMachine(repo2)
+        orch2 = OrchestrationService(repo2, sm2)
+        store2 = FileArtifactStore(tmp_path / "artifacts")
+
+        lifecycle2 = ProductTaskLifecycleService(
+            agent_execution=AgentExecutionService(repo2),
+            product_agent_service=ProductAgentService(
+                gateway_client=gateway1,
+                artifact_store=store2,
+                orchestration_service=orch2,
+            ),
+            artifact_store=store2,
+            orchestration=orch2,
+        )
+
+        reconcile = lifecycle2.reconcile_task(run.id, task.id)
+        assert reconcile.status == "blocked"
+        assert reconcile.action == "retry_authorization_required"
+
+    async def test_running_with_fresh_valid_claim(self, tmp_path):
+        """RUNNING with fresh valid claim → wait."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
-        # Task is in default state (not RUNNING, so we set it)
-        task.status = TaskStatus.RUNNING
+        task.dependency_ids = [pred.id]
         orch.repository.save_task(task)
-
-        reconcile = lifecycle.reconcile_task(run.id, task.id)
-        assert reconcile.status == "stale"
-        assert reconcile.resumable is True
-        assert reconcile.action == "manual_intervention"
-
-    async def test_stale_running_reconciliation_fresh_claim(self, tmp_path):
-        """RUNNING with fresh claim → wait."""
-        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
-        run = _make_run(repo, sm, orch, owner=OWNER)
-        task = _make_task(orch, run.id, title="Product Brief")
+        # Simulate fresh claim
         task.status = TaskStatus.RUNNING
         task.claim_token = "token-123"
-        task.claimed_by = "product-lifecycle"
+        task.claimed_by = "product-agent"
         task.claimed_at = datetime.now(timezone.utc)
         orch.repository.save_task(task)
 
         reconcile = lifecycle.reconcile_task(run.id, task.id)
         assert reconcile.status == "running"
-        assert reconcile.resumable is True
         assert reconcile.action == "wait"
+        assert reconcile.resumable is True
 
-    async def test_stale_running_reconciliation_stale_claim(self, tmp_path):
-        """RUNNING with stale claim → manual_intervention."""
+    async def test_running_with_invalid_ownership(self, tmp_path):
+        """RUNNING with claimed_by != assigned_agent → manual_intervention_required."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        # Simulate invalid ownership
         task.status = TaskStatus.RUNNING
         task.claim_token = "token-123"
-        task.claimed_by = "product-lifecycle"
-        # Set claim 2 hours ago (stale, threshold is 1 hour)
+        task.claimed_by = "wrong-agent"
+        task.claimed_at = datetime.now(timezone.utc)
+        orch.repository.save_task(task)
+
+        reconcile = lifecycle.reconcile_task(run.id, task.id)
+        assert reconcile.status == "stale"
+        assert reconcile.action == "manual_intervention_required"
+        assert reconcile.resumable is False
+
+    async def test_running_with_completed_artifacts(self, tmp_path):
+        """RUNNING with verified route and outputs → completion_resumable."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+
+        lifecycle.agent_execution.claim_task(
+            run.id,
+            task.id,
+            agent_id="product-agent",
+            claim_token="token-123",
+        )
+        running_task = orch.repository.get_task(run.id, task.id)
+        request = lifecycle._build_context(run, running_task, [])
+        await lifecycle.product_agent_service.execute(
+            request,
+            created_by="product-lifecycle",
+            correlation_id="recovery-test",
+        )
+
+        reconcile = lifecycle.reconcile_task(run.id, task.id)
+        assert reconcile.status == "running"
+        assert reconcile.action == "completion_resumable"
+        assert reconcile.resumable is True
+
+    async def test_arbitrary_output_ids_are_not_completion_resumable(self, tmp_path):
+        """Unknown output IDs cannot masquerade as durable completion evidence."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task.status = TaskStatus.RUNNING
+        task.claim_token = "token-123"
+        task.claimed_by = "product-agent"
+        task.claimed_at = datetime.now(timezone.utc)
+        task.output_artifact_ids = [
+            UUID("00000000-0000-0000-0000-000000000001"),
+            UUID("00000000-0000-0000-0000-000000000002"),
+        ]
+        orch.repository.save_task(task)
+
+        reconcile = lifecycle.reconcile_task(run.id, task.id)
+        assert reconcile.status == "stale"
+        assert reconcile.action == "manual_intervention_required"
+        assert reconcile.resumable is False
+
+
+# ── Stale RUNNING reconciliation tests ──────────────────────────────────────
+
+
+class TestStaleRunningReconciliation:
+    """Tests for strengthened stale RUNNING reconciliation."""
+
+    async def test_no_claim_evidence_manual_intervention(self, tmp_path):
+        """RUNNING with no claim evidence → manual_intervention_required."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task.status = TaskStatus.RUNNING
+        orch.repository.save_task(task)
+
+        reconcile = lifecycle.reconcile_task(run.id, task.id)
+        assert reconcile.status == "stale"
+        assert reconcile.action == "manual_intervention_required"
+        assert reconcile.resumable is False
+
+    async def test_fresh_claim_wait(self, tmp_path):
+        """RUNNING with fresh valid claim → wait."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task.status = TaskStatus.RUNNING
+        task.claim_token = "token-123"
+        task.claimed_by = "product-agent"
+        task.claimed_at = datetime.now(timezone.utc)
+        orch.repository.save_task(task)
+
+        reconcile = lifecycle.reconcile_task(run.id, task.id)
+        assert reconcile.status == "running"
+        assert reconcile.action == "wait"
+        assert reconcile.resumable is True
+
+    async def test_stale_claim_manual_intervention(self, tmp_path):
+        """RUNNING with stale claim → manual_intervention_required."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task.status = TaskStatus.RUNNING
+        task.claim_token = "token-123"
+        task.claimed_by = "product-agent"
         task.claimed_at = datetime.now(timezone.utc) - timedelta(hours=2)
         orch.repository.save_task(task)
 
         reconcile = lifecycle.reconcile_task(run.id, task.id)
         assert reconcile.status == "stale"
+        assert reconcile.action == "manual_intervention_required"
         assert reconcile.resumable is False
-        assert reconcile.action == "manual_intervention"
         assert reconcile.claim_age_seconds is not None
         assert reconcile.claim_age_seconds > 3600
+
+    async def test_exhausted_budget_returns_failed(self, tmp_path):
+        """RUNNING with exhausted attempt budget → failed."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief", max_attempts=1)
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task.status = TaskStatus.RUNNING
+        task.claim_token = "token-123"
+        task.claimed_by = "product-agent"
+        task.claimed_at = datetime.now(timezone.utc)
+        task.attempt_count = 1
+        orch.repository.save_task(task)
+
+        reconcile = lifecycle.reconcile_task(run.id, task.id)
+        assert reconcile.status == "failed"
+        assert reconcile.action == "none"
+        assert reconcile.resumable is False
 
 
 # ── Authority boundary tests ────────────────────────────────────────────────
@@ -775,12 +1150,11 @@ class TestAuthorityBoundaries:
         """Task status changes only through AgentExecutionService."""
         lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(tmp_path)
         run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
         task = _make_task(orch, run.id, title="Product Brief")
-
-        # Direct mutation would bypass authorities — verify service uses
-        # AgentExecutionService for all transitions
-        # This is verified by checking that lifecycle.execute_ready_task
-        # uses claim_task and complete_claimed_task (not direct state changes)
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
 
         result = await lifecycle.execute_ready_task(
             run_id=run.id, task_id=task.id, actor="product-lifecycle"

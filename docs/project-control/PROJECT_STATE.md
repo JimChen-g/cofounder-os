@@ -25,7 +25,9 @@ This document must be updated in the same commit as every accepted stage.
 
 ## Review Pending
 
-_(none)_
+| Stage | Description | Implementation baseline |
+|-------|-------------|-------------------------|
+| D06-D | Product lifecycle integration | 8ad1b05 |
 
 ## Corrective History
 
@@ -61,7 +63,7 @@ _(none)_
 - **Resolve accepted commit with**: `git rev-parse 'g01-accepted^{}'`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D06-D — Product lifecycle integration — ACTIVE
+- **Current product stage**: D06-D — Product lifecycle integration — REVIEW_PENDING
 - **Next product stage**: D07 — Finance Agent — BLOCKED
 - **D06-C recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
