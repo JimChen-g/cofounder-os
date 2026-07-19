@@ -17,6 +17,19 @@ from app.domain.models import (
     TaskStatus,
     utc_now,
 )
+from app.domain.product_models import (
+    ProductAgentRequest,
+    ProductAgentResultV1,
+    ProductAgentValidationError,
+    ProductRisk,
+    ProductTaskContext,
+    RecommendedAction,
+    SuccessMetric,
+    TargetUser,
+    UserPain,
+    Milestone,
+    ProductRequirement,
+)
 
 __all__ = [
     "AgentMessage",
@@ -28,10 +41,22 @@ __all__ = [
     "AuditOutcome",
     "DomainRecord",
     "MessageRole",
+    "Milestone",
+    "ProductAgentRequest",
+    "ProductAgentResultV1",
+    "ProductAgentValidationError",
+    "ProductAgentRequest",
+    "ProductRequirement",
+    "ProductRisk",
+    "ProductTaskContext",
+    "RecommendedAction",
     "RouteDecision",
     "Run",
     "RunStatus",
+    "SuccessMetric",
     "Task",
     "TaskStatus",
+    "TargetUser",
+    "UserPain",
     "utc_now",
 ]

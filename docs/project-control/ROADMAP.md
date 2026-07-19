@@ -7,7 +7,7 @@
 | D06-A | Agent execution contract | ACCEPTED |
 | G01 | Project delivery unification | ACCEPTED |
 | D06-B | Filesystem Artifact Store | ACCEPTED |
-| D06-C | Product Agent | ACTIVE |
+| D06-C | Product Agent | REVIEW_PENDING |
 | D06-D | Product lifecycle integration | BLOCKED |
 | D07 | Finance Agent | PENDING |
 | D07 | Finance Agent | PENDING |

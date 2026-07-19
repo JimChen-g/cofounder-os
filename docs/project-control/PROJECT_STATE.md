@@ -64,9 +64,8 @@ This document must be updated in the same commit as every accepted stage.
 - **Current governance stage**: G01 — accepted
 - **Current product stage**: D06-C — Product Agent — REVIEW_PENDING
 - **Next product stage**: D06-D — Product lifecycle integration — BLOCKED
-- **G01 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/`
-- **Latest G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/<UTC timestamp>/`
-- **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
+- **D06-C recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/`
+- **D06-C recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/<UTC timestamp>/`
 - **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
 - **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-065500Z` (accepted)
 

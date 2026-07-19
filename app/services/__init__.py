@@ -13,6 +13,13 @@ from app.services.execution import (
     TaskNotReadyError,
     TaskTerminallyFailedError,
 )
+from app.services.artifact_write import (
+    ArtifactRegistrationService,
+    ArtifactWriteConflict,
+    ArtifactWriteError,
+    ArtifactWriteIntegrity,
+    ArtifactWritePath,
+)
 from app.services.orchestration import (
     ActiveApprovalExists,
     ApprovalResolutionError,
@@ -24,12 +31,11 @@ from app.services.orchestration import (
     RunCompletionBlocked,
     RunSnapshot,
 )
-from app.services.artifact_write import (
-    ArtifactRegistrationService,
-    ArtifactWriteError,
-    ArtifactWriteConflict,
-    ArtifactWriteIntegrity,
-    ArtifactWritePath,
+from app.services.product_agent import (
+    ProductAgentExecutionError,
+    ProductAgentService,
+    ProductAgentServiceError,
+    ProductAgentValidationFailure,
 )
 
 __all__ = [
@@ -41,8 +47,8 @@ __all__ = [
     "ApprovalWorkflowResult",
     "ArtifactRelationError",
     "ArtifactRegistrationService",
-    "ArtifactWriteError",
     "ArtifactWriteConflict",
+    "ArtifactWriteError",
     "ArtifactWriteIntegrity",
     "ArtifactWritePath",
     "AttemptFailureResult",
@@ -51,6 +57,10 @@ __all__ = [
     "DependencyNotReady",
     "OrchestrationError",
     "OrchestrationService",
+    "ProductAgentExecutionError",
+    "ProductAgentService",
+    "ProductAgentServiceError",
+    "ProductAgentValidationFailure",
     "RunCompletionBlocked",
     "RunSnapshot",
     "RetryPreparationResult",
