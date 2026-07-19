@@ -309,7 +309,7 @@ FULL_SUITE_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/
 
 LOCAL_SHA="$(/usr/bin/git rev-parse HEAD)"
 ORIGIN_SHA="$(/usr/bin/git rev-parse origin/main 2>/dev/null || echo 'unavailable')"
-SPARK_SHA="$PREVIOUS_REMOTE_HEAD"
+SPARK_SHA="$(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -p 22 cofounder@spark.example.invalid "git -C /home/cofounder/cofounder-os rev-parse HEAD 2>/dev/null" || echo 'unavailable')"
 
 /bin/cat > "$STAGE_REPORT" <<EOF
 STAGE_ID: $STAGE_ID
