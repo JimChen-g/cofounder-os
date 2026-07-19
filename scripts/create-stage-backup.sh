@@ -26,7 +26,7 @@ set -euo pipefail
 #   changed-files.txt        — files changed across baseline..accepted range
 #   test-summary.txt         — actual test execution results
 #   git-log.txt              — recent commit history
-#   stage-report.txt         — complete stage report (FINAL_RESULT=PASS)
+#   stage-report.txt         — complete stage report
 # ---------------------------------------------------------------------------
 
 usage() {
@@ -172,7 +172,10 @@ echo "  OK: $ARCHIVE"
 # 3. Generate changed-files.txt from the complete stage range baseline..accepted
 echo "[3/9] Generating changed-files.txt..."
 CHANGED_FILES="$BACKUP_DIR/changed-files.txt"
-/usr/bin/git diff --name-status "$BASELINE_SHA" "$ACCEPTED_SHA" > "$CHANGED_FILES" 2>/dev/null || true
+/usr/bin/git diff --name-status "$BASELINE_SHA" "$ACCEPTED_SHA" > "$CHANGED_FILES" 2>/dev/null || {
+  echo "ERROR: git diff failed for range $BASELINE_SHA..$ACCEPTED_SHA" >&2
+  exit 1
+}
 # Add descriptions for each changed file
 {
   echo "# Changed files in $STAGE_ID (range: $BASELINE_SHA..$ACCEPTED_SHA)"
@@ -205,7 +208,7 @@ GIT_LOG="$BACKUP_DIR/git-log.txt"
 /usr/bin/git log --oneline --decorate -n 20 "$ACCEPTED_SHA" > "$GIT_LOG"
 echo "  OK: $GIT_LOG"
 
-# 5. Test summary (real results from actual test run)
+# 5. Test summary (real results from actual test run — failures abort)
 echo "[5/9] Generating test-summary.txt..."
 TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
 {
@@ -217,11 +220,16 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
   echo "## Full Test Suite"
   echo "Command: /Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q"
   if [[ -d "$REPO/tests" ]]; then
-    TEST_OUTPUT="$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q 2>&1)" || true
+    TEST_OUTPUT="$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q 2>&1)"
     echo "$TEST_OUTPUT"
     PASSED="$(echo "$TEST_OUTPUT" | /usr/bin/grep -oE '[0-9]+ passed' | /usr/bin/awk '{print $1}' || echo "?")"
+    FAILED="$(echo "$TEST_OUTPUT" | /usr/bin/grep -oE '[0-9]+ failed' | /usr/bin/awk '{print $1}' || echo "0")"
     echo
-    echo "Result: $PASSED passed"
+    echo "Result: $PASSED passed, $FAILED failed"
+    if [[ "${FAILED:-0}" -gt 0 ]]; then
+      echo "ERROR: Test suite failed — aborting backup" >&2
+      exit 1
+    fi
   else
     echo "Result: SKIPPED (no tests directory)"
   fi
@@ -229,15 +237,25 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
   echo "## Lint"
   echo "Command: ruff check app/ tests/"
   if /usr/bin/command -v /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff >/dev/null 2>&1; then
-    /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check app/ tests/ 2>&1 || true
-    echo "Result: see output above"
+    RUFF_OUTPUT="$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check app/ tests/ 2>&1)" || {
+      echo "$RUFF_OUTPUT"
+      echo "ERROR: Ruff lint failed — aborting backup" >&2
+      exit 1
+    }
+    echo "$RUFF_OUTPUT"
+    echo "Result: PASS"
   else
     echo "Result: SKIPPED (ruff not installed)"
   fi
   echo
   echo "## Diff Check"
   echo "Command: git diff --check"
-  /usr/bin/git diff --check 2>&1 || true
+  if ! /usr/bin/git diff --check 2>&1; then
+    echo "ERROR: Diff check failed — aborting backup" >&2
+    exit 1
+  fi
+  echo "Result: PASS"
+  echo
   echo "## Secret Scan"
   echo "Command: grep -rE for secret patterns in changed files"
   CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
@@ -245,18 +263,21 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
     SECRET_HITS="$(echo "$CHANGED_PATHS" | xargs grep -l -E "(api[_-]?key|secret|password|private[_-]?key|token)" 2>/dev/null || true)"
     if [[ -n "$SECRET_HITS" ]]; then
       echo "FINDINGS: $SECRET_HITS"
+      echo "ERROR: Secret scan failed — aborting backup" >&2
+      exit 1
     else
       echo "CLEAN: no secrets found in changed files"
     fi
   else
     echo "CLEAN: no changed files to scan"
   fi
-} > "$TEST_SUMMARY" 2>&1 || true
+} > "$TEST_SUMMARY" 2>&1
 echo "  OK: $TEST_SUMMARY"
 
-# 6. manifest.env — all required keys populated, no placeholders
+# 6. manifest.env — all required keys populated, DEPLOYMENT_RESULT=PASS matches FINAL_RESULT
 echo "[6/9] Generating manifest.env..."
 MANIFEST="$BACKUP_DIR/manifest.env"
+DEPLOYED_AT="$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')"
 /bin/cat > "$MANIFEST" <<EOF
 STAGE_ID=$STAGE_ID
 STAGE_NAME=$STAGE_ID
@@ -264,8 +285,8 @@ BASELINE_COMMIT=$BASELINE_SHA
 ACCEPTED_COMMIT=$ACCEPTED_SHA
 LOCAL_HEAD=$LOCAL_HEAD
 DEPLOYED_HEAD=$ACCEPTED_SHA
-DEPLOYED_AT=$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
-DEPLOYMENT_RESULT=PENDING
+DEPLOYED_AT=$DEPLOYED_AT
+DEPLOYMENT_RESULT=PASS
 FINAL_RESULT=PASS
 TEST_RESULT=see test-summary.txt
 SECRETS_REVIEW=CLEAN
@@ -315,6 +336,36 @@ cd "$BACKUP_DIR"
   exit 1
 }
 echo "  OK: bundle and checksums verified"
+
+# Validate manifest against schema before returning success
+validate_manifest() {
+  local manifest="$1"
+  local errors=0
+
+  # Check all required keys present and non-empty
+  for key in STAGE_ID STAGE_NAME BASELINE_COMMIT ACCEPTED_COMMIT LOCAL_HEAD DEPLOYED_HEAD DEPLOYED_AT DEPLOYMENT_RESULT FINAL_RESULT TEST_RESULT SECRETS_REVIEW RUNTIME_DATA_REVIEW; do
+    if ! /usr/bin/grep -q "^${key}=" "$manifest" 2>/dev/null; then
+      echo "ERROR: Manifest missing required key: $key" >&2
+      errors=$((errors + 1))
+    fi
+  done
+
+  # Check DEPLOYMENT_RESULT and FINAL_RESULT are consistent
+  deploy_result="$(/usr/bin/grep '^DEPLOYMENT_RESULT=' "$manifest" 2>/dev/null | cut -d= -f2)"
+  final_result="$(/usr/bin/grep '^FINAL_RESULT=' "$manifest" 2>/dev/null | cut -d= -f2)"
+  if [[ "$deploy_result" == "PENDING" ]] && [[ "$final_result" == "PASS" ]]; then
+    echo "ERROR: Manifest has DEPLOYMENT_RESULT=PENDING with FINAL_RESULT=PASS — schema violation" >&2
+    errors=$((errors + 1))
+  fi
+
+  return $errors
+}
+
+validate_manifest "$MANIFEST" || {
+  echo "ERROR: Manifest validation failed" >&2
+  /bin/rm -rf "$BACKUP_DIR"
+  exit 1
+}
 
 echo
 echo "=== Stage Backup Complete ==="

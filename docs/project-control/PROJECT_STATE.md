@@ -19,7 +19,7 @@ This document must be updated in the same commit as every accepted stage.
 | D04 | Orchestration service | 076f97c |
 | D05 | Executive Orchestrator | 63ded5f |
 | D06-A | Agent execution contract | 4f29e18 |
-| G01 | Project delivery unification | g01-accepted (tag; live HEAD resolved via Git) |
+| G01 | Project delivery unification | g01-accepted (annotated tag) |
 
 ## Corrective History
 
@@ -51,11 +51,13 @@ This document must be updated in the same commit as every accepted stage.
 
 ## Current State
 
-- **Current accepted tag**: g01-accepted (annotated tag; resolve live HEAD via `git rev-parse g01-accepted`)
-- **Current accepted HEAD**: 028f6d55d85a3c5bb182a13549c83eafb9abf94b (verified by tag)
-- **Current governance stage**: G01 — accepted (tag g01-accepted)
+- **Current accepted reference**: annotated tag `g01-accepted`
+- **Resolve accepted commit with**: `git rev-parse 'g01-accepted^{}'`
+- **Resolve current repository HEAD with**: `git rev-parse HEAD`
+- **Current governance stage**: G01 — accepted
 - **Next product stage**: D06-B
-- **Current G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/20260718-175644Z`
+- **G01 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/`
+- **Latest G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/<UTC timestamp>/`
 - **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
 
 ## Mandatory Update Block

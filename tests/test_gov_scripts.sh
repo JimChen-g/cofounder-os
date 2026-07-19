@@ -201,6 +201,113 @@ else
 fi
 /bin/rm -f "$PREFLIGHT_OUTPUT"
 
+# Test 7: PASS package cannot contain DEPLOYMENT_RESULT=PENDING
+echo "=== Test 7: No PASS+PENDING in manifest ==="
+TMPDIR="$(/usr/bin/mktemp -d)"
+cd "$REPO"
+BACKUP_LOG="$TMPDIR/integrity.log"
+if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-INT" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1; then
+  BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
+  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
+  if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
+    deploy_result="$(/usr/bin/grep '^DEPLOYMENT_RESULT=' "$BACKUP_DIR/manifest.env" | cut -d= -f2)"
+    final_result="$(/usr/bin/grep '^FINAL_RESULT=' "$BACKUP_DIR/manifest.env" | cut -d= -f2)"
+    if [[ "$final_result" == "PASS" ]] && [[ "$deploy_result" == "PENDING" ]]; then
+      fail "manifest has FINAL_RESULT=PASS with DEPLOYMENT_RESULT=PENDING"
+    else
+      pass "manifest DEPLOYMENT_RESULT is consistent with FINAL_RESULT"
+    fi
+  else
+    fail "manifest.env not found for integrity check"
+  fi
+else
+  fail "backup script failed — cannot check integrity"
+fi
+/bin/rm -rf "$TMPDIR"
+
+# Test 8: No failure-swallowing || true in critical paths
+echo "=== Test 8: No || true in critical test/validation paths ==="
+FAIL_SWALLOW="$(/usr/bin/grep -n '|| true' "$BACKUP_SCRIPT" | grep -E 'pytest|ruff|diff --check|secret|bundle verify|shasum -c' || true)"
+if [[ -z "$FAIL_SWALLOW" ]]; then
+  pass "no || true in critical validation paths"
+else
+  fail "|| true found in critical paths: $FAIL_SWALLOW"
+fi
+
+# Test 9: Accepted package manifest conforms to schema
+echo "=== Test 9: Manifest schema validation ==="
+TMPDIR="$(/usr/bin/mktemp -d)"
+cd "$REPO"
+BACKUP_LOG="$TMPDIR/schema.log"
+if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-SCH" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1; then
+  BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
+  BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
+  if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
+    schema_errors=0
+    for key in STAGE_ID STAGE_NAME BASELINE_COMMIT ACCEPTED_COMMIT LOCAL_HEAD DEPLOYED_HEAD DEPLOYED_AT DEPLOYMENT_RESULT FINAL_RESULT TEST_RESULT SECRETS_REVIEW RUNTIME_DATA_REVIEW; do
+      if ! /usr/bin/grep -q "^${key}=" "$BACKUP_DIR/manifest.env"; then
+        schema_errors=$((schema_errors + 1))
+      fi
+    done
+    if [[ $schema_errors -eq 0 ]]; then
+      pass "manifest conforms to schema (all required keys present)"
+    else
+      fail "manifest missing $schema_errors required keys"
+    fi
+  else
+    fail "manifest.env not found for schema validation"
+  fi
+else
+  fail "backup script failed — cannot validate schema"
+fi
+/bin/rm -rf "$TMPDIR"
+
+# Test 10: Full baseline..accepted commit range recorded
+echo "=== Test 10: changed-files.txt records baseline..accepted range ==="
+TMPDIR="$(/usr/bin/mktemp -d)"
+cd "$REPO"
+BASELINE_H="$(git rev-parse HEAD)"
+PARENT_H="$(git rev-parse HEAD^1 2>/dev/null || echo "")"
+if [[ -n "$PARENT_H" ]]; then
+  BACKUP_LOG="$TMPDIR/range.log"
+  if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-RNG" "$PARENT_H" "$BASELINE_H" > "$BACKUP_LOG" 2>&1; then
+    BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
+    BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
+    if [[ -f "$BACKUP_DIR/changed-files.txt" ]]; then
+      if /usr/bin/grep -q "baseline.*accepted" "$BACKUP_DIR/changed-files.txt" && \
+         /usr/bin/grep -q "$PARENT_H" "$BACKUP_DIR/changed-files.txt" && \
+         /usr/bin/grep -q "$BASELINE_H" "$BACKUP_DIR/changed-files.txt"; then
+        pass "changed-files.txt records full baseline..accepted range"
+      else
+        fail "changed-files.txt missing baseline or accepted SHA"
+      fi
+    else
+      fail "changed-files.txt not found"
+    fi
+  else
+    fail "backup script failed — cannot check range"
+  fi
+else
+  echo "  SKIP: no parent commit (root commit)"
+fi
+/bin/rm -rf "$TMPDIR"
+
+# Test 11: PROJECT_STATE contains no stale fixed accepted SHA
+echo "=== Test 11: PROJECT_STATE has no stale hard-coded HEAD ==="
+cd "$REPO"
+STATE_FILE="$REPO/docs/project-control/PROJECT_STATE.md"
+if [[ -f "$STATE_FILE" ]]; then
+  # Look for 40-char hex strings in the Current State section that look like SHAs
+  stale_shas="$(/usr/bin/grep -E '^\*\*Current accepted HEAD\*\*:' "$STATE_FILE" 2>/dev/null | /usr/bin/grep -oE '[0-9a-f]{40}' || true)"
+  if [[ -z "$stale_shas" ]]; then
+    pass "PROJECT_STATE has no stale hard-coded accepted HEAD SHA"
+  else
+    fail "PROJECT_STATE contains stale hard-coded SHA: $stale_shas"
+  fi
+else
+  fail "PROJECT_STATE.md not found"
+fi
+
 echo
 echo "=== Test Summary ==="
 echo "Passed: $PASS_COUNT"

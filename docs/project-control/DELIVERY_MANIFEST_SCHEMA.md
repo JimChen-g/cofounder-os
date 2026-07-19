@@ -53,6 +53,10 @@ scripts to record stage metadata.
 - An accepted package (FINAL_RESULT=PASS) must have DEPLOYED_HEAD,
   DEPLOYED_AT, DEPLOYMENT_RESULT, TEST_RESULT, SECRETS_REVIEW, and
   RUNTIME_DATA_REVIEW all populated — not empty.
+- **DEPLOYMENT_RESULT=PENDING and FINAL_RESULT=PASS is a schema violation**.
+  A successful backup must have DEPLOYMENT_RESULT=PASS.
+- The manifest must be validated against all rules before the backup script
+  returns success. Any validation failure must abort the backup.
 
 ### Explicitly Rejected Content
 

@@ -24,26 +24,16 @@ Do not proceed until the conflict is resolved.
 
 Every implementation step must follow this sequence in order:
 
-1. Read the task definition in `tasks/D##_*.md`.
-2. Verify branch, local HEAD, origin/main HEAD, and clean worktree.
-3. Confirm the approved baseline commit hash.
-4. Inspect existing domain, state, service, and test files.
-5. State the exact files to change and the exact tests to add or update.
-6. Confirm that model services, ports, tunnels, systemd, launchd,
-   credentials, and `.env` files will not be modified.
-7. Implement the smallest viable change.
-8. Run targeted tests.
-9. Run full test suite.
-10. Run `git diff --check`.
-11. Run Ruff on changed Python files.
-12. Review staged files for secrets and runtime data.
-13. Commit only if all checks pass.
-14. Deploy with `scripts/deploy-to-spark.sh`.
-15. Run status, health, and smoke validation.
-16. Push to GitHub.
-17. Verify Mac, Spark, and GitHub HEAD equality.
-18. Return the mandatory delivery report.
-19. Stop and wait for independent review.
+1. LOCAL TESTS — run targeted and full test suite locally
+2. MAC COMMIT — commit to the local Mac repository (pre-deployment source of truth)
+3. SPARK DEPLOYMENT — deploy via `scripts/deploy-to-spark.sh`
+4. GITHUB PUSH — push to GitHub origin
+5. THREE-PLANE VERIFICATION — verify local HEAD == Spark HEAD == origin/main HEAD
+6. FINAL LOCAL RECOVERY PACKAGE — create timestamped recovery package via `scripts/create-stage-backup.sh`
+7. INDEPENDENT REVIEW — stop and wait for independent review
+
+The committed Mac repository is the pre-deployment local source of truth.
+The timestamped recovery package is the final accepted recovery asset.
 
 ## Worktree Hygiene
 
