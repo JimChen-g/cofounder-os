@@ -266,6 +266,8 @@ fi
 echo "=== Test 10: changed-files.txt records baseline..accepted range ==="
 TMPDIR="$(/usr/bin/mktemp -d)"
 cd "$REPO"
+# Ensure clean worktree for this test
+git clean -fd >/dev/null 2>&1 || true
 BASELINE_H="$(git rev-parse HEAD)"
 PARENT_H="$(git rev-parse HEAD^1 2>/dev/null || echo "")"
 if [[ -n "$PARENT_H" ]]; then

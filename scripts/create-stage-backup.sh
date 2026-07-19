@@ -261,9 +261,14 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
   echo "Command: grep -rE for secret patterns in changed files"
   CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
   if [[ -n "$CHANGED_PATHS" ]]; then
-    SECRET_HITS="$(echo "$CHANGED_PATHS" | xargs grep -l -E "(api[_-]?key|secret|password|private[_-]?key|token)" 2>/dev/null || true)"
+    SECRET_HITS=""
+    while IFS= read -r filepath; do
+      if [[ -f "$filepath" ]] && /usr/bin/grep -q -E "(api[_-]?key|secret|password|private[_-]?key|token)" "$filepath" 2>/dev/null; then
+        SECRET_HITS="$SECRET_HITS $filepath"
+      fi
+    done <<< "$CHANGED_PATHS"
     if [[ -n "$SECRET_HITS" ]]; then
-      echo "FINDINGS: $SECRET_HITS"
+      echo "FINDINGS:$SECRET_HITS"
       echo "ERROR: Secret scan failed — aborting backup" >&2
       exit 1
     else
