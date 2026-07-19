@@ -25,7 +25,7 @@ This document must be updated in the same commit as every accepted stage.
 
 | Stage | Description | Status | Commit SHA |
 |-------|-------------|--------|------------|
-| D06-B | Filesystem Artifact Store | REVIEW_PENDING | aa4116a |
+| D06-B | Filesystem Artifact Store | REVIEW_PENDING | 4db36ed |
 
 ## Corrective History
 
@@ -67,7 +67,7 @@ This document must be updated in the same commit as every accepted stage.
 - **Latest G01 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/G01/<UTC timestamp>/`
 - **Historical D06-A recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-A/20260718-142836Z`
 - **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
-- **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-052717Z` (corrective, review pending)
+- **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-065500Z` (corrective, review pending)
 
 ## Mandatory Update Block
 
