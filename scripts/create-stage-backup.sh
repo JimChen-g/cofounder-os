@@ -225,6 +225,50 @@ if [[ -d "$REPO/tests" ]]; then
 else
   echo "Result: SKIPPED (no tests directory)" >> "$TEST_SUMMARY"
 fi
+echo "" >> "$TEST_SUMMARY"
+echo "## Lint" >> "$TEST_SUMMARY"
+echo "Command: ruff check on changed files in stage range" >> "$TEST_SUMMARY"
+CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
+if [[ -n "$CHANGED_PATHS" ]]; then
+  RUFF_OUTPUT="$(echo "$CHANGED_PATHS" | xargs /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check 2>&1)" || {
+    echo "$RUFF_OUTPUT" >> "$TEST_SUMMARY"
+    echo "ERROR: Ruff lint failed on changed files — aborting backup" >&2
+    exit 1
+  }
+  echo "$RUFF_OUTPUT" >> "$TEST_SUMMARY"
+  echo "Result: PASS" >> "$TEST_SUMMARY"
+else
+  echo "Result: SKIPPED (no changed files)" >> "$TEST_SUMMARY"
+fi
+echo "" >> "$TEST_SUMMARY"
+echo "## Diff Check" >> "$TEST_SUMMARY"
+echo "Command: git diff --check" >> "$TEST_SUMMARY"
+if ! /usr/bin/git diff --check >> "$TEST_SUMMARY" 2>&1; then
+  echo "ERROR: Diff check failed — aborting backup" >&2
+  exit 1
+fi
+echo "Result: PASS" >> "$TEST_SUMMARY"
+echo "" >> "$TEST_SUMMARY"
+echo "## Secret Scan" >> "$TEST_SUMMARY"
+echo "Command: grep -rE for secret patterns in changed files" >> "$TEST_SUMMARY"
+CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
+if [[ -n "$CHANGED_PATHS" ]]; then
+  SECRET_HITS=""
+  while IFS= read -r filepath; do
+    if [[ -f "$filepath" ]] && /usr/bin/grep -q -E "(api[_-]?key|secret|password|private[_-]?key|token)" "$filepath" 2>/dev/null; then
+      SECRET_HITS="$SECRET_HITS $filepath"
+    fi
+  done <<< "$CHANGED_PATHS"
+  if [[ -n "$SECRET_HITS" ]]; then
+    echo "FINDINGS:$SECRET_HITS" >> "$TEST_SUMMARY"
+    echo "ERROR: Secret scan failed — aborting backup" >&2
+    exit 1
+  else
+    echo "CLEAN: no secrets found in changed files" >> "$TEST_SUMMARY"
+  fi
+else
+  echo "CLEAN: no changed files to scan" >> "$TEST_SUMMARY"
+fi
 echo "  OK: $TEST_SUMMARY"
 echo "  OK: $TEST_SUMMARY"
 
