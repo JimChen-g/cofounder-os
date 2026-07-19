@@ -225,6 +225,21 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
   else
     echo "Result: SKIPPED (no tests directory)"
   fi
+  echo
+  echo "## Lint"
+  echo "Command: ruff check on changed files in stage range"
+  CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
+  if [[ -n "$CHANGED_PATHS" ]]; then
+    RUFF_OUTPUT="$(echo "$CHANGED_PATHS" | xargs /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check 2>&1)" || {
+      echo "$RUFF_OUTPUT"
+      echo "ERROR: Ruff lint failed on changed files — aborting backup" >&2
+      exit 1
+    }
+    echo "$RUFF_OUTPUT"
+    echo "Result: PASS"
+  else
+    echo "Result: SKIPPED (no changed files)"
+  fi
 } > "$TEST_SUMMARY" 2>&1
 echo "  OK: $TEST_SUMMARY"
 echo "  OK: $TEST_SUMMARY"
