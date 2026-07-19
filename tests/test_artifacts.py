@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import threading
 from unittest.mock import patch
 
@@ -18,6 +17,7 @@ from app.artifacts import (
 )
 from app.services import (
     ArtifactRegistrationService,
+    ArtifactWriteConflict,
     OrchestrationService,
 )
 from app.state import FileStateRepository, LifecycleStateMachine
@@ -278,36 +278,54 @@ def test_atomic_metadata_is_atomic(tmp_path):
 
 
 def test_atomic_metadata_no_truncated_on_failure(tmp_path):
-    """Interrupted metadata write: no truncated meta.json, no temp files.
-
-    When the metadata os.replace fails, the content file may already be
-    committed. The store does not leave truncated or temp files behind.
-    The next write attempt detects the partial state and recovers or raises.
-    """
+    """Interrupted meta.json write: content commits, meta fails, retry recovers."""
     store = _make_store(tmp_path)
     _write_text(store, RUN)
 
-    content_dir = _run_dir(tmp_path, RUN) / "run" / "report"
-    meta_path = content_dir / "meta.json"
+    retry_dir = _run_dir(tmp_path, RUN) / "run" / "retry"
+    meta_path = retry_dir / "meta.json"
+
+    # Save the real os.replace BEFORE patching to avoid recursion
+    import os as _os
+    _real_replace = _os.replace
 
     call_count = [0]
 
     def flaky_replace(src, dst):
         call_count[0] += 1
-        if call_count[0] == 1:
-            raise OSError("simulated failure on first replace")
-        os.replace(src, dst)
+        # First replace: content file -> succeeds
+        # Second replace: meta.json -> fails
+        if call_count[0] == 2 and str(dst).endswith("meta.json"):
+            raise OSError("simulated meta.json replace failure")
+        _real_replace(src, dst)
 
+    # First attempt: write content succeeds, meta.json fails
     with patch("app.artifacts.store.os.replace", side_effect=flaky_replace):
         with pytest.raises(OSError):
             _write_text(store, RUN, logical_name="retry", filename="retry.md")
 
-    # No temp files left behind
-    assert not any(p.name.endswith(".tmp") for p in content_dir.iterdir() if p.is_file())
+    # Content file exists (first replace succeeded)
+    assert (retry_dir / "retry.md").exists()
+
+    # No .tmp files left behind
+    assert not any(p.name.endswith(".tmp") for p in retry_dir.iterdir() if p.is_file())
+
     # meta.json is either absent or complete (not truncated)
     if meta_path.exists():
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         assert "checksum_sha256" in meta
+
+    # Second attempt: identical retry should succeed
+    stored = _write_text(store, RUN, logical_name="retry", filename="retry.md")
+
+    # Now meta.json exists and is complete
+    assert meta_path.exists()
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert meta["checksum_sha256"] == hashlib.sha256(CONTENT).hexdigest()
+
+    # verify() passes
+    verified = store.verify(RUN, "retry", "retry.md")
+    assert verified == stored
 
 
 # ── Same-key same-content idempotency ─────────────────────────────────────
@@ -463,7 +481,7 @@ def test_temp_files_cleaned_on_write(tmp_path):
 # ── Domain metadata idempotency ────────────────────────────────────────────
 
 def test_orchestration_registration_idempotency(tmp_path):
-    """Same idempotency_key produces exactly one domain Artifact record."""
+    """Same idempotency_key: exactly one domain Artifact, no duplicate event."""
     repo = FileStateRepository(tmp_path / "runs")
     sm = LifecycleStateMachine(repo)
     orch = OrchestrationService(repo, sm)
@@ -483,6 +501,7 @@ def test_orchestration_registration_idempotency(tmp_path):
         correlation_id="cid1",
     )
 
+    # Idempotent retry: returns existing artifact, event=None
     stored2, domain2, event2 = writer.write_text(
         run_id=run.id,
         logical_name="report",
@@ -497,7 +516,8 @@ def test_orchestration_registration_idempotency(tmp_path):
     # Store returns same content
     assert stored1 == stored2
 
-    # Exactly one domain Artifact with same uri
+    # Exactly one domain Artifact
+    assert domain1.id == domain2.id
     assert domain1.uri == domain2.uri
     assert domain1.checksum_sha256 == domain2.checksum_sha256
 
@@ -505,14 +525,60 @@ def test_orchestration_registration_idempotency(tmp_path):
     updated_run = orch.repository.get_run(run.id)
     assert updated_run.artifact_ids == [domain1.id]
 
-    # Exactly two events registered (one per call, no duplicates from retry)
+    # Exactly one artifact.registered event (retry returns event=None)
     events = orch.repository.list_events(run.id)
     artifact_events = [e for e in events if e.event_type == "artifact.registered"]
-    assert len(artifact_events) == 2
+    assert len(artifact_events) == 1
+    assert event1 is not None
+    assert event2 is None
 
 
-def test_failed_registration_then_retry_reuses_content(tmp_path):
-    """Content write succeeds, registration fails, retry reuses content."""
+def test_domain_idempotency_input_then_output_rejected(tmp_path):
+    """Same idempotency_key with input then output relation is rejected."""
+    repo = FileStateRepository(tmp_path / "runs")
+    sm = LifecycleStateMachine(repo)
+    orch = OrchestrationService(repo, sm)
+    store = _make_store(tmp_path)
+    writer = ArtifactRegistrationService(store, orch)
+
+    run, _ = orch.create_run(objective="test", actor="test")
+    task, _ = orch.create_task(run.id, title="task1", actor="test")
+
+    # First: register as input
+    writer.write_text(
+        run_id=run.id,
+        logical_name="data",
+        filename="data.txt",
+        text="content",
+        created_by="test",
+        relation="input",
+        task_id=task.id,
+        idempotency_key="ik-io",
+        correlation_id="cid1",
+    )
+
+    # Retry with same key but output relation -> must raise conflict
+    with pytest.raises(ArtifactWriteConflict):
+        writer.write_text(
+            run_id=run.id,
+            logical_name="data",
+            filename="data.txt",
+            text="content",
+            created_by="test",
+            relation="output",
+            task_id=task.id,
+            idempotency_key="ik-io",
+            correlation_id="cid2",
+        )
+
+    # Task must have exactly one input artifact ID, no output IDs
+    updated_task = orch.repository.get_task(run.id, task.id)
+    assert len(updated_task.input_artifact_ids) == 1
+    assert len(updated_task.output_artifact_ids) == 0
+
+
+def test_real_registration_failure_then_retry(tmp_path):
+    """Content write succeeds, registration fails, retry creates exactly one domain record."""
     repo = FileStateRepository(tmp_path / "runs")
     sm = LifecycleStateMachine(repo)
     orch = OrchestrationService(repo, sm)
@@ -521,24 +587,26 @@ def test_failed_registration_then_retry_reuses_content(tmp_path):
 
     run, _ = orch.create_run(objective="test", actor="test")
 
-    # First attempt: write content and register
-    stored1, domain1, event1 = writer.write_text(
+    # First attempt: write content directly, then force registration to fail
+    stored = store.write_text(
         run_id=run.id,
         logical_name="retry-test",
         filename="retry.md",
         text="retry content",
         created_by="test",
-        relation="run",
         idempotency_key="retry-key",
-        correlation_id="cid4",
     )
 
-    # Verify exactly one content file
+    # Verify content file exists
     content_dir = _run_dir(tmp_path, str(run.id)) / "run" / "retry-test"
     content_files = list(content_dir.glob("retry.md"))
     assert len(content_files) == 1
 
-    # Retry with same idempotency key
+    # Simulate registration failure by directly writing content without domain registration
+    # (In production, this could be a database failure, network error, etc.)
+    # We verify the store content is intact
+
+    # Retry through the service with the same idempotency key
     stored2, domain2, event2 = writer.write_text(
         run_id=run.id,
         logical_name="retry-test",
@@ -551,19 +619,20 @@ def test_failed_registration_then_retry_reuses_content(tmp_path):
     )
 
     # Store returns same stored artifact
-    assert stored1 == stored2
+    assert stored == stored2
 
     # Exactly one content file
     content_files = list(content_dir.glob("retry.md"))
     assert len(content_files) == 1
 
-    # Domain artifacts have same uri
-    assert domain1.uri == domain2.uri
-    assert domain1.checksum_sha256 == domain2.checksum_sha256
-
     # Run has exactly one artifact ID
     updated_run = orch.repository.get_run(run.id)
-    assert updated_run.artifact_ids == [domain1.id]
+    assert len(updated_run.artifact_ids) == 1
+
+    # Exactly one artifact.registered event
+    events = orch.repository.list_events(run.id)
+    artifact_events = [e for e in events if e.event_type == "artifact.registered"]
+    assert len(artifact_events) == 1
 
 
 def test_input_relation_updates_task(tmp_path):

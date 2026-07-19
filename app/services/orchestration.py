@@ -904,7 +904,7 @@ class OrchestrationService:
         size_bytes: int | None = None,
         correlation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> tuple[Artifact, AuditEvent]:
+    ) -> tuple[Artifact, AuditEvent | None]:
         normalized_actor = _required_text(actor, "actor")
 
         if relation == "run" and task_id is not None:
@@ -927,7 +927,7 @@ class OrchestrationService:
             checksum_sha256=checksum_sha256,
             size_bytes=size_bytes,
             created_by=_required_text(created_by, "created_by"),
-            metadata=dict(metadata or {}),
+            metadata=dict(metadata or {}, relation=relation),
         )
 
         idempotency_key = artifact.metadata.get("idempotency_key")
@@ -945,33 +945,11 @@ class OrchestrationService:
                     transaction, run_id, task_id, idempotency_key
                 )
                 if existing is not None:
-                    if (
-                        existing.uri == artifact.uri
-                        and existing.checksum_sha256 == artifact.checksum_sha256
-                        and existing.size_bytes == artifact.size_bytes
-                        and existing.content_type == artifact.content_type
+                    if self._check_domain_idempotency_match(
+                        existing, artifact
                     ):
-                        event = _event(
-                            run_id=artifact.run_id,
-                            task_id=artifact.task_id,
-                            event_type="artifact.registered",
-                            actor=normalized_actor,
-                            action="register",
-                            target_type="artifact",
-                            target_id=str(existing.id),
-                            correlation_id=correlation_id,
-                            details={
-                                "name": existing.name,
-                                "kind": existing.kind,
-                                "uri": existing.uri,
-                                "relation": relation,
-                                "content_type": existing.content_type,
-                                "size_bytes": existing.size_bytes,
-                                "idempotent": True,
-                            },
-                        )
-                        transaction.append_event(event)
-                        return existing, event
+                        # Idempotent retry: return existing artifact, no new event
+                        return existing, None
                     raise ArtifactConflictError(
                         f"Artifact idempotency key {idempotency_key!r} "
                         f"conflicts with existing record {existing.id}"
@@ -1018,6 +996,40 @@ class OrchestrationService:
             transaction.append_event(event)
 
         return artifact, event
+
+    @staticmethod
+    def _check_domain_idempotency_match(
+        existing: Artifact,
+        requested: Artifact,
+    ) -> bool:
+        """Return True if *existing* and *requested* are fully compatible."""
+        if existing.run_id != requested.run_id:
+            return False
+        if existing.task_id != requested.task_id:
+            return False
+        if existing.kind != requested.kind:
+            return False
+        if existing.name != requested.name:
+            return False
+        if existing.uri != requested.uri:
+            return False
+        if existing.checksum_sha256 != requested.checksum_sha256:
+            return False
+        if existing.size_bytes != requested.size_bytes:
+            return False
+        if existing.content_type != requested.content_type:
+            return False
+        if existing.created_by != requested.created_by:
+            return False
+        if existing.metadata.get("format_version") != requested.metadata.get("format_version"):
+            return False
+        if existing.metadata.get("provenance") != requested.metadata.get("provenance"):
+            return False
+        if existing.metadata.get("idempotency_key") != requested.metadata.get("idempotency_key"):
+            return False
+        if existing.metadata.get("relation") != requested.metadata.get("relation"):
+            return False
+        return True
 
     def get_snapshot(
         self,

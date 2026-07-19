@@ -58,12 +58,13 @@ class ArtifactRegistrationService:
         idempotency_key: Optional[str] = None,
         correlation_id: Optional[str] = None,
         provenance: Optional[Dict[str, Any]] = None,
-    ) -> tuple[Any, Any]:
+    ) -> tuple[Any, Any, Any]:
         """Write text content and register the artifact in orchestration.
 
-        Returns ``(stored_artifact, domain_artifact)`` where ``stored_artifact``
-        is the ``StoredArtifact`` record and ``domain_artifact`` is the
-        orchestration ``Artifact`` domain record.
+        Returns ``(stored_artifact, domain_artifact, event)`` where
+        ``stored_artifact`` is the ``StoredArtifact`` record,
+        ``domain_artifact`` is the orchestration ``Artifact`` domain record,
+        and ``event`` is the ``AuditEvent`` or ``None`` on idempotent retry.
         """
         if relation == "run" and task_id is not None:
             raise ArtifactRelationError("Run artifacts must not include task_id")
@@ -100,27 +101,31 @@ class ArtifactRegistrationService:
                 raise ArtifactWriteIntegrity(str(exc)) from exc
             raise ArtifactWritePath(str(exc)) from exc
 
-        domain_artifact, event = self.orchestration_service.register_artifact(
-            run_id=run_id,
-            kind=kind,
-            name=logical_name,
-            uri=stored.uri,
-            created_by=created_by,
-            actor=created_by,
-            relation=relation,
-            task_id=task_id,
-            content_type=content_type,
-            checksum_sha256=stored.checksum_sha256,
-            size_bytes=stored.size_bytes,
-            correlation_id=correlation_id,
-            metadata={
-                "filename": stored.filename,
-                "logical_name": stored.logical_name,
-                "format_version": stored.format_version,
-                "idempotency_key": stored.idempotency_key,
-                "provenance": stored.provenance,
-            },
-        )
+        try:
+            domain_artifact, event = self.orchestration_service.register_artifact(
+                run_id=run_id,
+                kind=kind,
+                name=logical_name,
+                uri=stored.uri,
+                created_by=created_by,
+                actor=created_by,
+                relation=relation,
+                task_id=task_id,
+                content_type=content_type,
+                checksum_sha256=stored.checksum_sha256,
+                size_bytes=stored.size_bytes,
+                correlation_id=correlation_id,
+                metadata={
+                    "filename": stored.filename,
+                    "logical_name": stored.logical_name,
+                    "format_version": stored.format_version,
+                    "idempotency_key": stored.idempotency_key,
+                    "provenance": stored.provenance,
+                    "relation": relation,
+                },
+            )
+        except ArtifactConflictError as exc:
+            raise ArtifactWriteConflict(str(exc)) from exc
 
         return stored, domain_artifact, event
 
@@ -138,10 +143,11 @@ class ArtifactRegistrationService:
         idempotency_key: Optional[str] = None,
         correlation_id: Optional[str] = None,
         provenance: Optional[Dict[str, Any]] = None,
-    ) -> tuple[Any, Any]:
+    ) -> tuple[Any, Any, Any]:
         """Write JSON content and register the artifact in orchestration.
 
-        Returns ``(stored_artifact, domain_artifact, event)``.
+        Returns ``(stored_artifact, domain_artifact, event)`` where
+        ``event`` is ``None`` on idempotent retry.
         """
         if relation == "run" and task_id is not None:
             raise ArtifactRelationError("Run artifacts must not include task_id")
@@ -170,26 +176,30 @@ class ArtifactRegistrationService:
                 raise ArtifactWriteIntegrity(str(exc)) from exc
             raise ArtifactWritePath(str(exc)) from exc
 
-        domain_artifact, event = self.orchestration_service.register_artifact(
-            run_id=run_id,
-            kind=ArtifactKind.DATA,
-            name=logical_name,
-            uri=stored.uri,
-            created_by=created_by,
-            actor=created_by,
-            relation=relation,
-            task_id=task_id,
-            content_type=content_type,
-            checksum_sha256=stored.checksum_sha256,
-            size_bytes=stored.size_bytes,
-            correlation_id=correlation_id,
-            metadata={
-                "filename": stored.filename,
-                "logical_name": stored.logical_name,
-                "format_version": stored.format_version,
-                "idempotency_key": stored.idempotency_key,
-                "provenance": stored.provenance,
-            },
-        )
+        try:
+            domain_artifact, event = self.orchestration_service.register_artifact(
+                run_id=run_id,
+                kind=ArtifactKind.DATA,
+                name=logical_name,
+                uri=stored.uri,
+                created_by=created_by,
+                actor=created_by,
+                relation=relation,
+                task_id=task_id,
+                content_type=content_type,
+                checksum_sha256=stored.checksum_sha256,
+                size_bytes=stored.size_bytes,
+                correlation_id=correlation_id,
+                metadata={
+                    "filename": stored.filename,
+                    "logical_name": stored.logical_name,
+                    "format_version": stored.format_version,
+                    "idempotency_key": stored.idempotency_key,
+                    "provenance": stored.provenance,
+                    "relation": relation,
+                },
+            )
+        except ArtifactConflictError as exc:
+            raise ArtifactWriteConflict(str(exc)) from exc
 
         return stored, domain_artifact, event
