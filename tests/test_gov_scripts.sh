@@ -266,31 +266,35 @@ fi
 echo "=== Test 10: changed-files.txt records baseline..accepted range ==="
 TMPDIR="$(/usr/bin/mktemp -d)"
 cd "$REPO"
-# Ensure clean worktree for this test
-git clean -fd >/dev/null 2>&1 || true
-BASELINE_H="$(git rev-parse HEAD)"
-PARENT_H="$(git rev-parse HEAD^1 2>/dev/null || echo "")"
-if [[ -n "$PARENT_H" ]]; then
-  BACKUP_LOG="$TMPDIR/range.log"
-  if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-RNG" "$PARENT_H" "$BASELINE_H" > "$BACKUP_LOG" 2>&1; then
-    BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
-    BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
-    if [[ -f "$BACKUP_DIR/changed-files.txt" ]]; then
-      if /usr/bin/grep -q "baseline.*accepted" "$BACKUP_DIR/changed-files.txt" && \
-         /usr/bin/grep -q "$PARENT_H" "$BACKUP_DIR/changed-files.txt" && \
-         /usr/bin/grep -q "$BASELINE_H" "$BACKUP_DIR/changed-files.txt"; then
-        pass "changed-files.txt records full baseline..accepted range"
+# Skip if worktree is not clean (other tests may leave temp files)
+STATUS="$(/usr/bin/git status --porcelain --untracked-files=all 2>/dev/null || true)"
+if [[ -n "$STATUS" ]]; then
+  echo "  SKIP: worktree not clean — cannot run backup script"
+else
+  BASELINE_H="$(git rev-parse HEAD)"
+  PARENT_H="$(git rev-parse HEAD^1 2>/dev/null || echo "")"
+  if [[ -n "$PARENT_H" ]]; then
+    BACKUP_LOG="$TMPDIR/range.log"
+    if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-RNG" "$PARENT_H" "$BASELINE_H" > "$BACKUP_LOG" 2>&1; then
+      BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
+      BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
+      if [[ -f "$BACKUP_DIR/changed-files.txt" ]]; then
+        if /usr/bin/grep -q "baseline.*accepted" "$BACKUP_DIR/changed-files.txt" && \
+           /usr/bin/grep -q "$PARENT_H" "$BACKUP_DIR/changed-files.txt" && \
+           /usr/bin/grep -q "$BASELINE_H" "$BACKUP_DIR/changed-files.txt"; then
+          pass "changed-files.txt records full baseline..accepted range"
+        else
+          fail "changed-files.txt missing baseline or accepted SHA"
+        fi
       else
-        fail "changed-files.txt missing baseline or accepted SHA"
+        fail "changed-files.txt not found"
       fi
     else
-      fail "changed-files.txt not found"
+      fail "backup script failed — cannot check range"
     fi
   else
-    fail "backup script failed — cannot check range"
+    echo "  SKIP: no parent commit (root commit)"
   fi
-else
-  echo "  SKIP: no parent commit (root commit)"
 fi
 /bin/rm -rf "$TMPDIR"
 
