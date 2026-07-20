@@ -100,7 +100,7 @@ accepted.
 - **Next product stage**: D14 — Hackathon submission package — blocked on D13
   acceptance
 - **Current implementation candidate**:
-  `962a97da13b9a6905a5e184e71d7813faf50a03b` on
+  `410a8b49b1a06e92c1ba9a17b03ae32ef139ce32` on
   `codex/d13-evaluation-dashboard`
 - **Next acceptance action**: commit the D13 candidate, then perform
   independent review before merge or deployment
