@@ -290,9 +290,11 @@ if [[ -n "$CHANGED_PATHS" ]]; then
   SECRET_HITS=""
   while IFS= read -r filepath; do
     if [[ -f "$filepath" ]]; then
-      # Exclude comment lines; only flag actual assignments/definitions
+      # Exclude comments and flag credential-shaped literal assignments.
+      # Variable references such as api_key=settings.gateway_api_key and
+      # value-free templates such as api_key=replace-me are safe.
       NON_COMMENT="$(/usr/bin/grep -v -E '^\s*(#|//|/\*|\*)' "$filepath" 2>/dev/null || true)"
-      if echo "$NON_COMMENT" | /usr/bin/grep -q -E "(api[_-]?key|secret|password|private[_-]?key)\s*[=:]" 2>/dev/null; then
+      if echo "$NON_COMMENT" | /usr/bin/grep -q -E "(api[_-]?key|secret|password|private[_-]?key)\s*[=:]\s*['\"]?(sk-|gh[pousr]_|AKIA[0-9A-Z]{16}|[A-Za-z0-9/+]{32,}={0,2})|-----BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY-----" 2>/dev/null; then
         SECRET_HITS="$SECRET_HITS $filepath"
       fi
     fi
