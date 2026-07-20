@@ -261,11 +261,13 @@ class TestProductAgent:
 
     async def test_valid_structured_response(self):
         """Valid structured Product response is accepted."""
-        agent = ProductAgent(FakeGateway([json.dumps(VALID_RESULT_DICT)]))
+        gateway = FakeGateway([json.dumps(VALID_RESULT_DICT)])
+        agent = ProductAgent(gateway)
         result, _ = await agent.execute(_make_request())
         assert result.schema_version == "1.0"
         assert len(result.target_users) == 2
         assert len(result.requirements) == 2
+        assert gateway.calls[0]["max_tokens"] == 8192
 
     async def test_all_required_result_fields(self):
         """All required fields are present in valid response."""

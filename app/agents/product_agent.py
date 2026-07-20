@@ -27,7 +27,7 @@ from app.models import ChatMessage, Role
 PRODUCT_AGENT_ID = "product-agent"
 DEFAULT_VIRTUAL_MODEL = "cofounder-auto"
 TEMPERATURE = 0.1
-MAX_TOKENS = 4096
+MAX_TOKENS = 8192
 REPAIR_MAX_TOKENS = 2048
 
 ALLOWED_VIRTUAL_MODELS = frozenset({
