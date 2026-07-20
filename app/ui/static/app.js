@@ -264,7 +264,9 @@ async function createMission(event) {
     state.events = state.snapshot.events || [];
     state.selectedArtifactId = null;
     await loadRun({ useCurrentSnapshot: true });
-    toast("Mission created and workflow evidence loaded.");
+    if (state.runId === created.run_id && state.snapshot) {
+      toast("Mission created and workflow evidence loaded.");
+    }
   } catch (error) {
     if (requestEpoch === state.requestEpoch) {
       showAlert("Mission could not start", error);
@@ -351,14 +353,16 @@ async function retryRun() {
     }
     state.snapshot = result.snapshot;
     await loadRun({ useCurrentSnapshot: true });
-    toast(
-      result.terminal_failure
-        ? "Recovery stopped safely. Review the failed task and audit evidence."
-        : result.replayed
-        ? "Completed evidence verified; no additional model calls were made."
-        : "Bounded recovery completed.",
-      result.terminal_failure ? "error" : "success",
-    );
+    if (state.runId === requestedRunId && state.snapshot) {
+      toast(
+        result.terminal_failure
+          ? "Recovery stopped safely. Review the failed task and audit evidence."
+          : result.replayed
+          ? "Completed evidence verified; no additional model calls were made."
+          : "Bounded recovery completed.",
+        result.terminal_failure ? "error" : "success",
+      );
+    }
   } catch (error) {
     if (
       requestEpoch === state.requestEpoch &&
@@ -423,11 +427,13 @@ async function resolveApproval(approvalId, decision, card) {
     }
     state.snapshot = response.workflow.snapshot;
     await loadRun({ useCurrentSnapshot: true });
-    toast(
-      decision === "approved"
-        ? "Approval recorded. Workflow resumed through the controller."
-        : "Rejection recorded. The workflow stopped with audit evidence.",
-    );
+    if (state.runId === requestedRunId && state.snapshot) {
+      toast(
+        decision === "approved"
+          ? "Approval recorded. Workflow resumed through the controller."
+          : "Rejection recorded. The workflow stopped with audit evidence.",
+      );
+    }
   } catch (error) {
     if (
       requestEpoch === state.requestEpoch &&
