@@ -36,9 +36,11 @@ D13 Evaluation Dashboard is implemented on
 `codex/d13-evaluation-dashboard` and is pending independent review. It adds
 deterministic, read-only Run scoring and an Evaluation view without changing
 the accepted D06-D12 authorities, service topology, provider boundary, or
-runtime state. Local candidate evidence: 411 tests passed; Ruff, strict mypy,
+runtime state. Initial candidate evidence: 411 tests passed; Ruff, strict mypy,
 JavaScript syntax, sdist, and wheel gates passed; read-only API and desktop plus
-390px browser flows passed with no console errors.
+390px browser flows passed with no console errors. The first independent review
+findings were closed in corrective commit `290fb31`; the updated candidate has
+418 passing tests and is pending a second independent review.
 
 ## Accepted Follow-up
 
@@ -80,6 +82,7 @@ accepted.
 | 85db29d | D06-D corrective: add real behavior tests and close exception paths | Corrective: product_lifecycle, tests |
 | 6c7de61 | D11 independent-review corrections and privacy-safe release | Corrective: runtime token budgets, runtime lock isolation, public release hygiene |
 | b96b557 | D12 Qwen output-budget correction | Corrective: Product brief completion budget and regression evidence |
+| 290fb31 | Close D13 independent-review findings | Corrective: Run isolation, malformed artifact handling, scoring semantics, provider denominator |
 
 ## Current State
 
@@ -100,10 +103,10 @@ accepted.
 - **Next product stage**: D14 — Hackathon submission package — blocked on D13
   acceptance
 - **Current implementation candidate**:
-  `410a8b49b1a06e92c1ba9a17b03ae32ef139ce32` on
+  `290fb319cc5d96aff34ea2535b68f6ecf44de156` on
   `codex/d13-evaluation-dashboard`
-- **Next acceptance action**: commit the D13 candidate, then perform
-  independent review before merge or deployment
+- **Next acceptance action**: perform a second independent review of the
+  corrective candidate before merge or deployment
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`
