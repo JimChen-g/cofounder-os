@@ -32,6 +32,8 @@ from app.domain import (
 from app.models import ChatMessage, Role
 from app.services import OrchestrationService
 
+EXECUTIVE_PLANNING_MAX_TOKENS = 4000
+
 
 class ExecutiveOrchestratorError(RuntimeError):
     """Base error for executive planning and materialization."""
@@ -54,7 +56,7 @@ class GatewayPlanningProtocol(Protocol):
         *,
         model: str = "cofounder-auto",
         temperature: float = 0.1,
-        max_tokens: int = 1800,
+        max_tokens: int = EXECUTIVE_PLANNING_MAX_TOKENS,
     ) -> GatewayCompletion:
         ...
 
@@ -264,7 +266,7 @@ class ExecutiveOrchestrator:
             messages,
             model=self.planning_model,
             temperature=0.1,
-            max_tokens=1800,
+            max_tokens=EXECUTIVE_PLANNING_MAX_TOKENS,
         )
 
         plan = self._parse_plan(completion.content)

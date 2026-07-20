@@ -73,6 +73,7 @@ class FakeGateway:
         self.content = content
         self.messages = None
         self.model = None
+        self.max_tokens = None
 
     async def complete(
         self,
@@ -84,6 +85,7 @@ class FakeGateway:
     ):
         self.messages = messages
         self.model = model
+        self.max_tokens = max_tokens
         return GatewayCompletion(
             content=self.content,
             requested_model=model,
@@ -125,6 +127,7 @@ def test_plan_uses_registered_agents_and_strict_prompt(tmp_path):
         "executive-decision"
     )
     assert gateway.model == "cofounder-auto"
+    assert gateway.max_tokens == 4000
 
     system_prompt = gateway.messages[0].content
     user_payload = json.loads(gateway.messages[1].content)
