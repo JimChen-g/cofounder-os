@@ -20,15 +20,16 @@ never edit JSON or JSONL state directly.
 
 ## Configuration
 
-- `COFOUNDER_GATEWAY_URL`: required Gateway boundary; use
-  `http://127.0.0.1:19000` on Mac or `http://127.0.0.1:9000` on DGX Spark.
+- `COFOUNDER_GATEWAY_URL`: optional Gateway override; use
+  `http://127.0.0.1:19000` on Mac. On DGX Spark, an omitted value safely
+  defaults to `http://127.0.0.1:<GATEWAY_PORT>`.
 - `COFOUNDER_GATEWAY_API_KEY`: optional Gateway credential.
 - `PRODUCT_DATA_DIR`: shared state and artifact root; defaults to `data`.
 - `PRODUCT_MAX_ARTIFACT_BYTES`: maximum text content returned inline;
   defaults to 1 MiB and is bounded to 10 MiB.
 
-The Product API reports unavailable when the Gateway boundary is not
-configured. Its health check does not make a model call.
+The Product API health check validates local composition without making a
+model call.
 
 ## Errors
 

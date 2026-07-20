@@ -14,7 +14,7 @@ from typing import Literal
 from uuid import UUID
 
 from app.artifacts import FileArtifactStore
-from app.clients import GatewayClient
+from app.clients import GatewayClient, GatewayClientConfigurationError
 from app.config import Settings
 from app.domain import ApprovalStatus, Artifact, AuditEvent
 from app.orchestrators import (
@@ -388,7 +388,14 @@ def build_product_api_service(settings: Settings) -> ProductAPIService:
     repository = FileStateRepository(data_root / "runs")
     orchestration = OrchestrationService(repository)
     artifact_store = FileArtifactStore(data_root)
-    gateway = GatewayClient.from_environment()
+    try:
+        gateway = GatewayClient.from_environment()
+    except GatewayClientConfigurationError:
+        gateway = GatewayClient(
+            f"http://127.0.0.1:{settings.gateway_port}",
+            api_key=settings.gateway_api_key,
+            timeout_seconds=settings.request_timeout_seconds,
+        )
     product_agent = ProductAgentService(
         gateway,
         artifact_store,

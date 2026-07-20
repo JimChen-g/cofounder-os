@@ -13,7 +13,8 @@ from starlette.responses import Response
 
 from app.api.product import router
 from app.artifacts import FileArtifactStore
-from app.clients import GatewayCompletion
+from app.clients import GatewayClient, GatewayCompletion
+from app.config import Settings
 from app.orchestrators import ExecutiveOrchestrator
 from app.policy import DeterministicPolicyGate
 from app.services import (
@@ -493,3 +494,41 @@ def test_create_response_uses_uuid_contract(tmp_path: Path) -> None:
         assert UUID(payload["run_id"])
     finally:
         client.close()
+
+
+def test_production_composition_defaults_to_same_host_gateway(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("COFOUNDER_GATEWAY_URL", raising=False)
+    settings = Settings(
+        PRODUCT_DATA_DIR=str(tmp_path),
+        GATEWAY_PORT=9100,
+        REQUEST_TIMEOUT_SECONDS=45,
+    )
+
+    from app.services.product_api import build_product_api_service
+
+    service = build_product_api_service(settings)
+    gateway = service.executive.gateway
+    assert isinstance(gateway, GatewayClient)
+    assert gateway.base_url == "http://127.0.0.1:9100"
+    assert gateway.timeout_seconds == 45
+
+
+def test_production_composition_respects_explicit_gateway_override(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "COFOUNDER_GATEWAY_URL",
+        "http://127.0.0.1:19000",
+    )
+    settings = Settings(PRODUCT_DATA_DIR=str(tmp_path))
+
+    from app.services.product_api import build_product_api_service
+
+    service = build_product_api_service(settings)
+    gateway = service.executive.gateway
+    assert isinstance(gateway, GatewayClient)
+    assert gateway.base_url == "http://127.0.0.1:19000"

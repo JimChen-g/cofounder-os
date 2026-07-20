@@ -35,7 +35,7 @@ This document must be updated in the same commit as every accepted stage.
 | D11 | Product API | `codex/d11-product-api` independent worktree |
 
 The D11 entry records local implementation and a passing full suite
-(`394 passed` on 2026-07-20). Final acceptance still requires an independent
+(`396 passed` on 2026-07-20). Final acceptance still requires an independent
 review, publication to `main`, Spark deployment, three-plane verification, and
 a D11 recovery package.
 
