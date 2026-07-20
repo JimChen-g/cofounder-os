@@ -182,10 +182,10 @@ CHANGED_FILES="$BACKUP_DIR/changed-files.txt"
   echo "# Format: <status> <path> — <description>"
   echo "# baseline: $BASELINE_SHA | accepted: $ACCEPTED_SHA"
   echo
-  while IFS=$'\t' read -r file_status path; do
-    if [[ -n "$path" ]]; then
+  while IFS=$'\t' read -r file_status file_path; do
+    if [[ -n "$file_path" ]]; then
       desc=""
-      case "$path" in
+      case "$file_path" in
         docs/*) desc="documentation" ;;
         app/*) desc="product code" ;;
         tests/*) desc="test" ;;
@@ -193,7 +193,7 @@ CHANGED_FILES="$BACKUP_DIR/changed-files.txt"
         tasks/*) desc="task definition" ;;
         *) desc="other" ;;
       esac
-      echo "$file_status $path — $desc"
+      echo "$file_status $file_path — $desc"
     fi
   done < "$CHANGED_FILES"
 } > "${CHANGED_FILES}.tmp"
@@ -301,11 +301,11 @@ STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
 
 # Capture test results for the report
 TARGETED_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x"
-TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x --tb=short 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
 GOVERNANCE_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x"
-GOVERNANCE_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x --tb=short 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+GOVERNANCE_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
 FULL_SUITE_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x"
-FULL_SUITE_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x --tb=short 2>&1 | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+FULL_SUITE_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
 
 LOCAL_SHA="$(/usr/bin/git rev-parse HEAD)"
 ORIGIN_SHA="$(/usr/bin/git rev-parse origin/main 2>/dev/null || echo 'unavailable')"
