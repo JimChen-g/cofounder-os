@@ -27,20 +27,22 @@ This document must be updated in the same commit as every accepted stage.
 | D09 | Artifact Synthesizer | 4800001 |
 | D10 | Workflow Controller and recovery | 4800001 |
 | D11 | Product API | 6c7de61 |
+| D12 | Founder Mission Control UI | b96b557 |
 | G01 | Project delivery unification | g01-accepted (annotated tag) |
 
 ## Release Candidates
 
-- **D12 Founder Mission Control UI implementation candidate**:
-  `codex/d12-founder-mission-control`
-- Local UI contract tests, the 402-test full suite, Ruff, mypy, JavaScript
-  syntax validation, package build, and package-content validation passed.
-- A real Product API run through the DGX Gateway completed Product, Finance,
-  bounded Finance retry, Executive synthesis, founder approval, nine
-  integrity-checked artifacts, 44 audit events, and a zero-call idempotent
-  replay on 2026-07-20.
-- D12 remains pending independent review, merge to `main`, Spark deployment,
-  GitHub publication, three-plane verification, and final recovery packaging.
+None. D12 passed independent review, public publication, Spark deployment,
+three-plane verification, a real three-agent UI workflow, and recovery
+packaging on 2026-07-20.
+
+## Accepted Follow-up
+
+D12 has no P0 or P1 defects. The first presentation-layer corrective should
+add stale-response guards, distinguish terminal-failure replay messaging,
+retain compact mission controls on narrow screens, and add JavaScript behavior
+coverage. These non-blocking items do not change D06-D11 authorities or API
+contracts.
 
 ## Corrective History
 
@@ -73,26 +75,26 @@ This document must be updated in the same commit as every accepted stage.
 | 4f2f14f | D06-D corrective: improve stage report and test-count extraction | Corrective: backup script |
 | 85db29d | D06-D corrective: add real behavior tests and close exception paths | Corrective: product_lifecycle, tests |
 | 6c7de61 | D11 independent-review corrections and privacy-safe release | Corrective: runtime token budgets, runtime lock isolation, public release hygiene |
+| b96b557 | D12 Qwen output-budget correction | Corrective: Product brief completion budget and regression evidence |
 
 ## Current State
 
-- **Current accepted product reference**: D11 implementation commit `6c7de61`
-- **Resolve accepted product commit with**: `git rev-parse 6c7de61`
+- **Current accepted product reference**: D12 implementation commit `b96b557`
+- **Resolve accepted product commit with**: `git rev-parse b96b557`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D11 — Product API — accepted
+- **Current product stage**: D12 — Founder Mission Control UI — accepted
 - **Current release worktree**: `main`
+- **Independent D12 reference**: `codex/d12-founder-mission-control`
 - **Independent D11 reference**: `codex/d11-product-api`
 - **Independent D07-D10 reference**: `codex/d07-d10`
-- **Current release scope**: D11 — independent review, public publication,
-  Spark deployment, real end-to-end execution, three-plane verification, and
-  recovery packaging passed
-- **Next product stage**: D12 — Founder Mission Control UI — independent review
-  and acceptance
-- **Current implementation candidate**: D12 — Founder Mission Control UI —
-  `codex/d12-founder-mission-control` — pending independent review
-- **Next acceptance action**: independently review D12, then merge, deploy,
-  publish, verify all three planes, and create the final D12 recovery package
+- **Current release scope**: D12 — independent review, public publication,
+  Spark deployment, real UI end-to-end execution, three-plane verification,
+  and recovery packaging passed
+- **Next product stage**: D13 — Evaluation Dashboard — ready to start
+- **Current implementation candidate**: none
+- **Next acceptance action**: define and implement D13 without changing the
+  accepted D06-D12 authorities
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`
@@ -105,6 +107,9 @@ This document must be updated in the same commit as every accepted stage.
 - **D07-D10 recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D07-D10/20260720-050834Z/`
 - **D11 recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D11/`
 - **D11 accepted implementation HEAD**: 6c7de61a2dad0d7e882713235fbc98f75ddeb0a3
+- **D12 recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D12/`
+- **D12 accepted implementation HEAD**: b96b557324b98e10db5874ea806adcfab0de24b1
+- **D12 recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D12/20260720-110401Z/`
 
 ## Mandatory Update Block
 

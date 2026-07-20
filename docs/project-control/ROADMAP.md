@@ -14,7 +14,7 @@
 | D09 | Artifact Synthesizer | ACCEPTED |
 | D10 | Workflow Controller and recovery | ACCEPTED |
 | D11 | Product API | ACCEPTED |
-| D12 | Founder Mission Control UI | IMPLEMENTED — PENDING INDEPENDENT REVIEW |
+| D12 | Founder Mission Control UI | ACCEPTED |
 | D13 | Evaluation Dashboard | PENDING |
 | D14 | Hackathon submission package | PENDING |
 
