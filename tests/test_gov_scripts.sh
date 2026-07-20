@@ -36,15 +36,15 @@ fail() {
 
 # Test 1: Isolated temporary-directory backup (happy path)
 echo "=== Test 1: Isolated backup with COFOUNDER_BACKUP_ROOT ==="
-TMPDIR="$(/usr/bin/mktemp -d)"
+TEST_TMPDIR="$(/usr/bin/mktemp -d /tmp/cofounder-gov.XXXXXX)"
 cd "$REPO"
-BACKUP_LOG="$TMPDIR/backup.log"
-COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-TEST" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1
+BACKUP_LOG="$TEST_TMPDIR/backup.log"
+COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" "$BACKUP_SCRIPT" "G01-TEST" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1
 BACKUP_RC=$?
 if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$BACKUP_LOG"; then
   # Verify it went to the temp directory, not the real stage-backups
   BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
-  if echo "$BACKUP_DIR_LINE" | /usr/bin/grep -Fq "$TMPDIR"; then
+  if echo "$BACKUP_DIR_LINE" | /usr/bin/grep -Fq "$TEST_TMPDIR"; then
     pass "isolated backup creates package in temp directory"
   else
     fail "isolated backup — package not in temp directory: $BACKUP_DIR_LINE"
@@ -83,39 +83,39 @@ if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$B
 else
   fail "isolated backup — script exited rc=$BACKUP_RC"
 fi
-/bin/rm -rf "$TMPDIR"
+/bin/rm -rf "$TEST_TMPDIR"
 
 # Test 2: Dirty-worktree failure
 echo "=== Test 2: Dirty worktree failure ==="
-TMPDIR="$(/usr/bin/mktemp -d)"
+TEST_TMPDIR="$(/usr/bin/mktemp -d /tmp/cofounder-gov.XXXXXX)"
 cd "$REPO"
 touch "$REPO/.dirty-test-file"
 set +e
-COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-TEST" "$(git rev-parse HEAD)" > "$TMPDIR/dirty.log" 2>&1
+COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" "$BACKUP_SCRIPT" "G01-TEST" "$(git rev-parse HEAD)" > "$TEST_TMPDIR/dirty.log" 2>&1
 BACKUP_RC=$?
 set -e
 /bin/rm -f "$REPO/.dirty-test-file"
-if [[ $BACKUP_RC -ne 0 ]] && grep -qi "not clean" "$TMPDIR/dirty.log"; then
+if [[ $BACKUP_RC -ne 0 ]] && grep -qi "not clean" "$TEST_TMPDIR/dirty.log"; then
   pass "dirty worktree rejected"
 else
   fail "dirty worktree — expected rejection, got rc=$BACKUP_RC"
 fi
-/bin/rm -rf "$TMPDIR"
+/bin/rm -rf "$TEST_TMPDIR"
 
 # Test 3: Incorrect-commit failure
 echo "=== Test 3: Incorrect commit failure ==="
-TMPDIR="$(/usr/bin/mktemp -d)"
+TEST_TMPDIR="$(/usr/bin/mktemp -d /tmp/cofounder-gov.XXXXXX)"
 cd "$REPO"
 set +e
-COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-TEST" "0000000000000000000000000000000000000000" > "$TMPDIR/badcommit.log" 2>&1
+COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" "$BACKUP_SCRIPT" "G01-TEST" "0000000000000000000000000000000000000000" > "$TEST_TMPDIR/badcommit.log" 2>&1
 COMMIT_RC=$?
 set -e
-if [[ $COMMIT_RC -ne 0 ]] && grep -qi "not found\|invalid" "$TMPDIR/badcommit.log"; then
+if [[ $COMMIT_RC -ne 0 ]] && grep -qi "not found\|invalid" "$TEST_TMPDIR/badcommit.log"; then
   pass "invalid commit SHA rejected"
 else
   fail "invalid commit — expected rejection, got rc=$COMMIT_RC"
 fi
-/bin/rm -rf "$TMPDIR"
+/bin/rm -rf "$TEST_TMPDIR"
 
 # Test 4: Simulated three-plane mismatch (dependency injection)
 echo "=== Test 4: Simulated three-plane mismatch ==="
@@ -203,10 +203,10 @@ fi
 
 # Test 7: PASS package cannot contain DEPLOYMENT_RESULT=PENDING
 echo "=== Test 7: No PASS+PENDING in manifest ==="
-TMPDIR="$(/usr/bin/mktemp -d)"
+TEST_TMPDIR="$(/usr/bin/mktemp -d /tmp/cofounder-gov.XXXXXX)"
 cd "$REPO"
-BACKUP_LOG="$TMPDIR/integrity.log"
-if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-INT" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1; then
+BACKUP_LOG="$TEST_TMPDIR/integrity.log"
+if COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" "$BACKUP_SCRIPT" "G01-INT" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1; then
   BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
   BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
   if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
@@ -223,7 +223,7 @@ if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-INT" "$(git rev
 else
   fail "backup script failed — cannot check integrity"
 fi
-/bin/rm -rf "$TMPDIR"
+/bin/rm -rf "$TEST_TMPDIR"
 
 # Test 8: No failure-swallowing || true in critical paths
 echo "=== Test 8: No || true in critical test/validation paths ==="
@@ -236,10 +236,10 @@ fi
 
 # Test 9: Accepted package manifest conforms to schema
 echo "=== Test 9: Manifest schema validation ==="
-TMPDIR="$(/usr/bin/mktemp -d)"
+TEST_TMPDIR="$(/usr/bin/mktemp -d /tmp/cofounder-gov.XXXXXX)"
 cd "$REPO"
-BACKUP_LOG="$TMPDIR/schema.log"
-if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-SCH" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1; then
+BACKUP_LOG="$TEST_TMPDIR/schema.log"
+if COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" "$BACKUP_SCRIPT" "G01-SCH" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1; then
   BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
   BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
   if [[ -f "$BACKUP_DIR/manifest.env" ]]; then
@@ -260,11 +260,11 @@ if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-SCH" "$(git rev
 else
   fail "backup script failed — cannot validate schema"
 fi
-/bin/rm -rf "$TMPDIR"
+/bin/rm -rf "$TEST_TMPDIR"
 
 # Test 10: Full baseline..accepted commit range recorded
 echo "=== Test 10: changed-files.txt records baseline..accepted range ==="
-TMPDIR="$(/usr/bin/mktemp -d)"
+TEST_TMPDIR="$(/usr/bin/mktemp -d /tmp/cofounder-gov.XXXXXX)"
 cd "$REPO"
 # Skip if worktree is not clean (other tests may leave temp files)
 STATUS="$(/usr/bin/git status --porcelain --untracked-files=all 2>/dev/null || true)"
@@ -274,8 +274,8 @@ else
   BASELINE_H="$(git rev-parse HEAD)"
   PARENT_H="$(git rev-parse HEAD^1 2>/dev/null || echo "")"
   if [[ -n "$PARENT_H" ]]; then
-    BACKUP_LOG="$TMPDIR/range.log"
-    if COFOUNDER_BACKUP_ROOT="$TMPDIR/backups" "$BACKUP_SCRIPT" "G01-RNG" "$PARENT_H" "$BASELINE_H" > "$BACKUP_LOG" 2>&1; then
+    BACKUP_LOG="$TEST_TMPDIR/range.log"
+    if COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" "$BACKUP_SCRIPT" "G01-RNG" "$PARENT_H" "$BASELINE_H" > "$BACKUP_LOG" 2>&1; then
       BACKUP_DIR_LINE="$(grep "BACKUP_DIR=" "$BACKUP_LOG" | /usr/bin/tail -1)"
       BACKUP_DIR="$(echo "$BACKUP_DIR_LINE" | /usr/bin/sed 's/BACKUP_DIR=//')"
       if [[ -f "$BACKUP_DIR/changed-files.txt" ]]; then
@@ -296,7 +296,7 @@ else
     echo "  SKIP: no parent commit (root commit)"
   fi
 fi
-/bin/rm -rf "$TMPDIR"
+/bin/rm -rf "$TEST_TMPDIR"
 
 # Test 11: PROJECT_STATE contains no stale fixed accepted SHA
 echo "=== Test 11: PROJECT_STATE has no stale hard-coded HEAD ==="
