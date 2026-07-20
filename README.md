@@ -99,6 +99,20 @@ bash scripts/run_gateway.sh
 
 The gateway listens on `http://127.0.0.1:9000` by default.
 
+### Founder Mission Control
+
+D12 is served by the same FastAPI process and consumes the stable D11 Product
+API over same-origin requests:
+
+```text
+http://127.0.0.1:9000/ui
+```
+
+The UI starts founder missions, shows the three-task dependency graph and agent
+evidence, resolves approvals, renders integrity-checked artifacts, and exposes
+bounded retry/recovery plus the append-only audit trace. It has no separate
+frontend runtime or mock backend.
+
 `scripts/run_gateway.sh`:
 - enables `set -euo pipefail`
 - sources `.env` if present

@@ -31,9 +31,16 @@ This document must be updated in the same commit as every accepted stage.
 
 ## Release Candidates
 
-None. D11 passed independent review, publication, Spark deployment,
-three-plane verification, real Product API execution, idempotent replay, and
-recovery packaging on 2026-07-20.
+- **D12 Founder Mission Control UI implementation candidate**:
+  `codex/d12-founder-mission-control`
+- Local UI contract tests, the 402-test full suite, Ruff, mypy, JavaScript
+  syntax validation, package build, and package-content validation passed.
+- A real Product API run through the DGX Gateway completed Product, Finance,
+  bounded Finance retry, Executive synthesis, founder approval, nine
+  integrity-checked artifacts, 44 audit events, and a zero-call idempotent
+  replay on 2026-07-20.
+- D12 remains pending independent review, merge to `main`, Spark deployment,
+  GitHub publication, three-plane verification, and final recovery packaging.
 
 ## Corrective History
 
@@ -80,7 +87,12 @@ recovery packaging on 2026-07-20.
 - **Current release scope**: D11 — independent review, public publication,
   Spark deployment, real end-to-end execution, three-plane verification, and
   recovery packaging passed
-- **Next product stage**: D12 — Founder Mission Control UI — ready to start
+- **Next product stage**: D12 — Founder Mission Control UI — independent review
+  and acceptance
+- **Current implementation candidate**: D12 — Founder Mission Control UI —
+  `codex/d12-founder-mission-control` — pending independent review
+- **Next acceptance action**: independently review D12, then merge, deploy,
+  publish, verify all three planes, and create the final D12 recovery package
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`

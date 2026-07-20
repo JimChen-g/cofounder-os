@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from app.api.product import router as product_router
@@ -19,6 +20,8 @@ from app.config import get_settings
 from app.models import Provider
 from app.providers.openai_compat import OpenAICompatProvider
 from app.providers.registry import get_registry
+from app.ui import router as ui_router
+from app.ui.routes import STATIC_ROOT
 
 # Configure logging
 logging.basicConfig(
@@ -131,8 +134,19 @@ async def global_exception_handler(
 # Include API routes at root — no /api prefix
 app.include_router(api_router)
 app.include_router(product_router)
+app.include_router(ui_router)
+app.mount(
+    "/ui/assets",
+    StaticFiles(directory=STATIC_ROOT),
+    name="mission-control-assets",
+)
 
 
 @app.get("/", tags=["system"])
 async def root() -> dict[str, str]:
-    return {"name": settings.app_name, "version": settings.app_version, "docs": "/docs"}
+    return {
+        "name": settings.app_name,
+        "version": settings.app_version,
+        "docs": "/docs",
+        "mission_control": "/ui",
+    }
