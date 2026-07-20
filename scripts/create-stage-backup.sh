@@ -116,6 +116,16 @@ case "$STAGE_ID" in
       tests/test_workflow_controller.py
     )
     ;;
+  D13)
+    STAGE_NAME="Evaluation Dashboard"
+    NEXT_ACTION="D14 Hackathon submission package"
+    TARGETED_TEST_FILES=(
+      tests/test_evaluation.py
+      tests/test_ui.py
+      tests/test_state_repository.py
+      tests/test_artifacts.py
+    )
+    ;;
 esac
 
 cd "$REPO"

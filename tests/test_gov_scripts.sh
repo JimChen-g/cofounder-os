@@ -370,8 +370,31 @@ if [[ $d11_routing_errors -eq 0 ]]; then
   pass "D11 recovery report uses Product API tests and D12 next action"
 fi
 
-# Test 14: Product runtime locks remain outside source deployment state
-echo "=== Test 14: Product runtime lock isolation ==="
+# Test 14: D13 backup report uses Evaluation tests and D14 next action
+echo "=== Test 14: D13 stage-specific recovery report ==="
+d13_routing_errors=0
+for test_file in \
+  tests/test_evaluation.py \
+  tests/test_ui.py \
+  tests/test_state_repository.py \
+  tests/test_artifacts.py; do
+  if ! /usr/bin/grep -Fq "$test_file" "$BACKUP_SCRIPT"; then
+    fail "D13 recovery routing missing $test_file"
+    d13_routing_errors=$((d13_routing_errors + 1))
+  fi
+done
+if ! /usr/bin/grep -Fq \
+  'NEXT_ACTION="D14 Hackathon submission package"' \
+  "$BACKUP_SCRIPT"; then
+  fail "D13 recovery routing missing D14 next action"
+  d13_routing_errors=$((d13_routing_errors + 1))
+fi
+if [[ $d13_routing_errors -eq 0 ]]; then
+  pass "D13 recovery report uses stage-specific tests and D14 next action"
+fi
+
+# Test 15: Product runtime locks remain outside source deployment state
+echo "=== Test 15: Product runtime lock isolation ==="
 if /usr/bin/grep -Fxq 'data/.locks/' "$REPO/.gitignore" && \
    /usr/bin/grep -Fq "':(exclude)data/.locks/**'" "$DEPLOY_SCRIPT"; then
   pass "artifact locks are ignored and excluded from deployment preflight"
