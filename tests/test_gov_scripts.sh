@@ -164,9 +164,9 @@ fi
 # Test 5: Missing local cofounderctl is a failure (not silent skip)
 echo "=== Test 5: Missing local cofounderctl ==="
 cd "$REPO"
-FAKE_COFOUNDERCTL="$(/usr/bin/mktemp -d)/fake-cofounderctl"
+TEST_HOME="$(/usr/bin/mktemp -d /tmp/cofounder-home.XXXXXX)"
 set +e
-HOME="$(/usr/bin/mktemp -d)" COFOUNDER_TEST_LOCAL_HEAD="$(git rev-parse HEAD)" \
+HOME="$TEST_HOME" COFOUNDER_TEST_LOCAL_HEAD="$(git rev-parse HEAD)" \
   COFOUNDER_TEST_ORIGIN_HEAD="$(git rev-parse HEAD)" \
   COFOUNDER_TEST_SPARK_HEAD="$(git rev-parse HEAD)" \
   "$VERIFY_SCRIPT" > /tmp/verify-nococtl.txt 2>&1
@@ -179,13 +179,13 @@ else
   /bin/cat /tmp/verify-nococtl.txt >&2
 fi
 /bin/rm -f /tmp/verify-nococtl.txt
-/bin/rm -rf "$(dirname "$FAKE_COFOUNDERCTL")"
+/bin/rm -rf "$TEST_HOME"
 
 # Test 6: Worktree state in preflight output
 echo "=== Test 6: Preflight worktree state reporting ==="
 cd "$REPO"
 touch "$REPO/.preflight-dirty-test"
-PREFLIGHT_OUTPUT="$(/usr/bin/mktemp)"
+PREFLIGHT_OUTPUT="$(/usr/bin/mktemp /tmp/cofounder-preflight.XXXXXX)"
 set +e
 "$PREFLIGHT_SCRIPT" > "$PREFLIGHT_OUTPUT" 2>&1
 PREFLIGHT_RC=$?
