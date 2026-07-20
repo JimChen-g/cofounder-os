@@ -85,7 +85,9 @@ echo "REMOTE_DEPLOY_DIR=$REMOTE_DEPLOY_DIR"
 echo "LOG_FILE=$LOG"
 
 REMOTE_STATUS="$(
-  remote_run "git -C '$REMOTE_REPO' status --porcelain --untracked-files=all"
+  remote_run \
+    "git -C '$REMOTE_REPO' status --porcelain --untracked-files=all \
+     -- . ':(exclude)data/.locks/**'"
 )"
 
 if [[ -n "$REMOTE_STATUS" ]]; then

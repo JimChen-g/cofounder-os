@@ -24,6 +24,7 @@ The following paths remain outside the deployment contract:
 - `.env.backup.*`
 - `.venv-vllm` or `.venv-vllm/`
 - `logs/`
+- `data/.locks/`
 - `data/runs/`
 - Model weights
 - Gateway keys
@@ -46,7 +47,7 @@ scripts/deploy-to-spark.sh
 The deployment script:
 
 1. Requires a clean local `main` branch.
-2. Requires a clean remote Git working tree.
+2. Requires a clean remote Git working tree outside protected runtime locks.
 3. Creates and verifies a local Git Bundle.
 4. Transfers the bundle with `rsync` over the dedicated SSH key.
 5. Creates a remote rollback bundle and manifest.

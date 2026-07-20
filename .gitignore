@@ -36,5 +36,6 @@ id_ed25519
 .venv-vllm/
 
 data/runs/
+data/.locks/
 
 .venv-vllm

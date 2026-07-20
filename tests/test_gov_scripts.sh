@@ -20,6 +20,7 @@ REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKUP_SCRIPT="$REPO/scripts/create-stage-backup.sh"
 PREFLIGHT_SCRIPT="$REPO/scripts/project-preflight.sh"
 VERIFY_SCRIPT="$REPO/scripts/verify-three-plane.sh"
+DEPLOY_SCRIPT="$REPO/scripts/deploy-to-spark.sh"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -359,6 +360,15 @@ if ! /usr/bin/grep -Fq \
 fi
 if [[ $d11_routing_errors -eq 0 ]]; then
   pass "D11 recovery report uses Product API tests and D12 next action"
+fi
+
+# Test 14: Product runtime locks remain outside source deployment state
+echo "=== Test 14: Product runtime lock isolation ==="
+if /usr/bin/grep -Fxq 'data/.locks/' "$REPO/.gitignore" && \
+   /usr/bin/grep -Fq "':(exclude)data/.locks/**'" "$DEPLOY_SCRIPT"; then
+  pass "artifact locks are ignored and excluded from deployment preflight"
+else
+  fail "artifact lock isolation is missing from Git or deployment preflight"
 fi
 
 echo
