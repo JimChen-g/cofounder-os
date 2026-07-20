@@ -5,12 +5,15 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.responses import Response
 
+from app.api.product import router as product_router
 from app.api.routes import router as api_router
 from app.config import get_settings
 from app.models import Provider
@@ -26,7 +29,7 @@ logger = logging.getLogger("gateway")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup: register providers. Shutdown: nothing special."""
     settings = get_settings()
     registry = get_registry()
@@ -84,7 +87,10 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def add_request_id_and_logging(request: Request, call_next):
+async def add_request_id_and_logging(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
     """Attach a request ID and log every request."""
     request_id = f"req-{uuid.uuid4().hex[:16]}"
     request.state.request_id = request_id
@@ -106,14 +112,17 @@ async def add_request_id_and_logging(request: Request, call_next):
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
     """Catch-all for unhandled exceptions."""
     logger.exception("Unhandled error on %s", request.url.path)
     return JSONResponse(
         status_code=500,
         content={
             "error": "internal_error",
-            "detail": str(exc),
+            "detail": "The server could not complete the request.",
             "request_id": getattr(request.state, "request_id", None),
         },
     )
@@ -121,8 +130,9 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include API routes at root — no /api prefix
 app.include_router(api_router)
+app.include_router(product_router)
 
 
 @app.get("/", tags=["system"])
-async def root():
+async def root() -> dict[str, str]:
     return {"name": settings.app_name, "version": settings.app_version, "docs": "/docs"}

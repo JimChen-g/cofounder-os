@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.models import Provider
 from app.providers.base import BaseProvider
 from app.providers.registry import ProviderRegistry, set_registry
@@ -15,7 +13,7 @@ class FakeQwen(BaseProvider):
     name = Provider.QWEN
 
     async def complete(self, **kwargs):
-        from app.models import ChatResponse, ChatChoice, ChatMessage, Usage
+        from app.models import ChatMessage, ChatResponse, Usage
 
         return ChatResponse(
             id="fake-qwen",
@@ -41,7 +39,7 @@ class FakeStep(BaseProvider):
     name = Provider.STEP
 
     async def complete(self, **kwargs):
-        from app.models import ChatResponse, ChatChoice, ChatMessage, Usage
+        from app.models import ChatMessage, ChatResponse, Usage
 
         return ChatResponse(
             id="fake-step",

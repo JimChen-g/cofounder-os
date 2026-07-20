@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from typing import Optional
 
@@ -54,6 +53,18 @@ class Settings(BaseSettings):
 
     # ── Audit ──────────────────────────────────────────────────────────────
     audit_dir: str = Field(default="data/audit", validation_alias="AUDIT_DIR")
+
+    # ── Product API ────────────────────────────────────────────────────────
+    product_data_dir: str = Field(
+        default="data",
+        validation_alias="PRODUCT_DATA_DIR",
+    )
+    product_max_artifact_bytes: int = Field(
+        default=1_048_576,
+        ge=1,
+        le=10_485_760,
+        validation_alias="PRODUCT_MAX_ARTIFACT_BYTES",
+    )
 
     # ── Request limits ─────────────────────────────────────────────────────
     max_request_tokens: int = 128_000

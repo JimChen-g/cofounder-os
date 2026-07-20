@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app.models import ChatRequest, ChatResponse, CofounderOSMetadata, Provider
-from app.providers.registry import ProviderRegistry, get_registry
+from app.providers.registry import get_registry
 from app.audit.logger import get_audit_logger
 from app.config import get_settings
 
@@ -94,7 +94,6 @@ async def route_chat(
     """
     registry = get_registry()
     audit = get_audit_logger()
-    settings = get_settings()
 
     # Use provided request_id or generate one
     if request_id is None:

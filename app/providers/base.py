@@ -6,7 +6,14 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from app.models import ChatMessage, ChatResponse, Provider
+from app.models import (
+    ChatChoice,
+    ChatMessage,
+    ChatResponse,
+    Provider,
+    Role,
+    Usage,
+)
 
 if TYPE_CHECKING:
     pass
@@ -62,31 +69,24 @@ class BaseProvider(ABC):
         Content may be None when the upstream returns a tool-call-only or
         reasoning model response.
         """
-        message: dict[str, Any] = {"role": "assistant"}
-        if content is not None:
-            message["content"] = content
-        if tool_calls is not None:
-            message["tool_calls"] = tool_calls
-        if function_call is not None:
-            message["function_call"] = function_call
-        if refusal is not None:
-            message["refusal"] = refusal
-
         return ChatResponse(
             id=f"chatcmpl-{uuid.uuid4().hex[:24]}",
             provider=provider,
             model=model,
             selected_upstream_model=selected_upstream_model,
             choices=[
-                {
-                    "index": 0,
-                    "message": message,
-                    "finish_reason": finish_reason,
-                }
+                ChatChoice(
+                    index=0,
+                    message=ChatMessage(
+                        role=Role.ASSISTANT,
+                        content=content,
+                    ),
+                    finish_reason=finish_reason,
+                )
             ],
-            usage={
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": prompt_tokens + completion_tokens,
-            },
+            usage=Usage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+            ),
         )

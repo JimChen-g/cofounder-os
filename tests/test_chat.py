@@ -7,10 +7,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
-
 from app.config import get_settings
-from app.models import ChatMessage, CofounderOSMetadata, Provider
+from app.models import ChatMessage, Provider
 from app.providers.base import BaseProvider, ProviderError
 from app.providers.registry import ProviderRegistry, set_registry
 
@@ -44,7 +42,7 @@ class FakeQwen(BaseProvider):
     name = Provider.QWEN
 
     async def complete(self, **kwargs):
-        from app.models import ChatResponse, ChatChoice, ChatMessage, Usage
+        from app.models import ChatMessage, ChatResponse, Usage
 
         return ChatResponse(
             id="chatcmpl-qwen",
@@ -70,7 +68,7 @@ class FakeStep(BaseProvider):
     name = Provider.STEP
 
     async def complete(self, **kwargs):
-        from app.models import ChatResponse, ChatChoice, ChatMessage, Usage
+        from app.models import ChatMessage, ChatResponse, Usage
 
         return ChatResponse(
             id="chatcmpl-step",
@@ -96,7 +94,7 @@ class FakeQwenNullContent(BaseProvider):
     name = Provider.QWEN
 
     async def complete(self, **kwargs):
-        from app.models import ChatResponse, ChatChoice, Usage
+        from app.models import ChatResponse, Usage
 
         return ChatResponse(
             id="chatcmpl-qwen-null",
@@ -122,7 +120,7 @@ class FakeStepEmptyContent(BaseProvider):
     name = Provider.STEP
 
     async def complete(self, **kwargs):
-        from app.models import ChatResponse, ChatChoice, Usage
+        from app.models import ChatResponse, Usage
 
         return ChatResponse(
             id="chatcmpl-step-empty",
@@ -148,7 +146,7 @@ class FakeToolCallProvider(BaseProvider):
     name = Provider.QWEN
 
     async def complete(self, **kwargs):
-        from app.models import ChatResponse, ChatChoice, Usage
+        from app.models import ChatResponse, Usage
 
         return ChatResponse(
             id="chatcmpl-tool",

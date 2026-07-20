@@ -20,7 +20,7 @@ class FakeProvider:
         self.call_count += 1
         if self._fail:
             raise ProviderError(f"{self.name.value} failed", provider=self.name)
-        from app.models import ChatResponse, ChatChoice, ChatMessage, Usage
+        from app.models import ChatMessage, ChatResponse, Usage
 
         return ChatResponse(
             id="fake",

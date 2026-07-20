@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from typing import Any, Protocol
+from uuid import UUID
 
 from pydantic import (
     BaseModel,
@@ -28,7 +29,7 @@ from app.domain import (
     Task,
     TaskStatus,
 )
-from app.models import ChatMessage
+from app.models import ChatMessage, Role
 from app.services import OrchestrationService
 
 
@@ -143,7 +144,6 @@ class ExecutivePlan(BaseModel):
     def topological_tasks(self) -> list[PlannedTask]:
         """Return tasks with every dependency before its dependent."""
 
-        by_key = {task.key: task for task in self.tasks}
         emitted: set[str] = set()
         ordered: list[PlannedTask] = []
 
@@ -247,11 +247,11 @@ class ExecutiveOrchestrator:
 
         messages = [
             ChatMessage(
-                role="system",
+                role=Role.SYSTEM,
                 content=SYSTEM_PROMPT,
             ),
             ChatMessage(
-                role="user",
+                role=Role.USER,
                 content=json.dumps(
                     request_payload,
                     ensure_ascii=False,
@@ -280,6 +280,7 @@ class ExecutiveOrchestrator:
         result: ExecutivePlanningResult,
         *,
         owner: str | None = None,
+        founder_context: str | None = None,
         actor: str = EXECUTIVE_AGENT_ID,
         correlation_id: str | None = None,
     ) -> MaterializedExecution:
@@ -299,6 +300,11 @@ class ExecutiveOrchestrator:
                     result.plan.approval_required
                 ),
                 "planning_model": result.completion.requested_model,
+                **(
+                    {"founder_context": founder_context.strip()}
+                    if founder_context and founder_context.strip()
+                    else {}
+                ),
             },
             correlation_id=correlation_id,
         )
@@ -324,6 +330,15 @@ class ExecutiveOrchestrator:
                 tasks_by_key[key].id
                 for key in planned.dependency_keys
             ]
+            task_metadata: dict[str, Any] = {
+                "plan_key": planned.key,
+                "deliverable": planned.deliverable,
+                "required_deliverable": planned.deliverable,
+                "requires_approval": planned.requires_approval,
+            }
+            if planned.assigned_agent == EXECUTIVE_AGENT_ID:
+                task_metadata["task_type"] = "artifact_synthesis"
+
             task, _ = self.service.create_task(
                 run.id,
                 title=planned.title,
@@ -331,11 +346,7 @@ class ExecutiveOrchestrator:
                 description=planned.description,
                 assigned_agent=planned.assigned_agent,
                 dependency_ids=dependency_ids,
-                metadata={
-                    "plan_key": planned.key,
-                    "deliverable": planned.deliverable,
-                    "requires_approval": planned.requires_approval,
-                },
+                metadata=task_metadata,
                 correlation_id=correlation_id,
             )
             tasks_by_key[planned.key] = task
@@ -428,13 +439,14 @@ class ExecutiveOrchestrator:
         return self.materialize(
             result,
             owner=owner,
+            founder_context=context,
             actor=actor,
             correlation_id=correlation_id,
         )
 
     def activate_ready_tasks(
         self,
-        run_id,
+        run_id: UUID | str,
         *,
         actor: str = EXECUTIVE_AGENT_ID,
         reason: str = "Task dependencies are complete.",

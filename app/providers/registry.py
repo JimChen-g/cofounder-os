@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Sequence
+from typing import Sequence, TypedDict
 
-from app.models import Provider
+from app.models import ChatMessage, ChatResponse, Provider
 from app.providers.base import BaseProvider, ProviderError
-from app.providers.openai_compat import OpenAICompatProvider
 
-if TYPE_CHECKING:
-    from app.models import ChatResponse
+
+class ProviderHealthResult(TypedDict):
+    """Normalized provider health entry returned by the registry."""
+
+    provider: str
+    status: str
+    latency_ms: float | None
 
 
 class ProviderRegistry:
@@ -37,7 +41,11 @@ class ProviderRegistry:
     async def complete_with_fallback(
         self,
         preferred: Provider,
-        **kwargs,
+        *,
+        model: str,
+        messages: list[ChatMessage],
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
     ) -> tuple[ChatResponse, Provider]:
         """Try preferred provider first, fall back to others on failure."""
         tried: list[Provider] = []
@@ -46,7 +54,12 @@ class ProviderRegistry:
         provider = self.get(preferred)
         if provider is not None:
             try:
-                response = await provider.complete(**kwargs)
+                response = await provider.complete(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
                 return response, provider.name
             except ProviderError:
                 tried.append(preferred)
@@ -56,7 +69,12 @@ class ProviderRegistry:
             if p.name in tried:
                 continue
             try:
-                response = await p.complete(**kwargs)
+                response = await p.complete(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
                 return response, p.name
             except ProviderError:
                 tried.append(p.name)
@@ -66,9 +84,9 @@ class ProviderRegistry:
             f"All providers failed after trying: {[t.value for t in tried]}"
         )
 
-    async def health_status(self) -> list[dict]:
+    async def health_status(self) -> list[ProviderHealthResult]:
         """Return health info for all registered providers."""
-        results = []
+        results: list[ProviderHealthResult] = []
         for provider in self.all():
             status, latency = await provider.health()
             results.append(

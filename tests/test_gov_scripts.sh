@@ -339,6 +339,28 @@ if [[ $stage_routing_errors -eq 0 ]]; then
   pass "D07-D10 recovery report uses stage-specific tests and D11 next action"
 fi
 
+# Test 13: D11 backup report uses Product API tests and D12 next action
+echo "=== Test 13: D11 stage-specific recovery report ==="
+d11_routing_errors=0
+for test_file in \
+  tests/test_product_api.py \
+  tests/test_executive_orchestrator.py \
+  tests/test_workflow_controller.py; do
+  if ! /usr/bin/grep -Fq "$test_file" "$BACKUP_SCRIPT"; then
+    fail "D11 recovery routing missing $test_file"
+    d11_routing_errors=$((d11_routing_errors + 1))
+  fi
+done
+if ! /usr/bin/grep -Fq \
+  'NEXT_ACTION="D12 Founder Mission Control UI"' \
+  "$BACKUP_SCRIPT"; then
+  fail "D11 recovery routing missing D12 next action"
+  d11_routing_errors=$((d11_routing_errors + 1))
+fi
+if [[ $d11_routing_errors -eq 0 ]]; then
+  pass "D11 recovery report uses Product API tests and D12 next action"
+fi
+
 echo
 echo "=== Test Summary ==="
 echo "Passed: $PASS_COUNT"

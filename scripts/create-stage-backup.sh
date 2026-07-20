@@ -96,6 +96,15 @@ case "$STAGE_ID" in
       tests/test_workflow_controller.py
     )
     ;;
+  D11)
+    STAGE_NAME="Product API"
+    NEXT_ACTION="D12 Founder Mission Control UI"
+    TARGETED_TEST_FILES=(
+      tests/test_product_api.py
+      tests/test_executive_orchestrator.py
+      tests/test_workflow_controller.py
+    )
+    ;;
 esac
 
 cd "$REPO"

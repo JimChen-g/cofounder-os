@@ -22,21 +22,22 @@ This document must be updated in the same commit as every accepted stage.
 | D06-B | Filesystem Artifact Store | 4db36ed |
 | D06-C | Product Agent | 7aa65a3 |
 | D06-D | Product lifecycle integration | 0cda71c |
+| D07 | Finance Agent | 4800001 |
+| D08 | Deterministic Policy Gate | 4800001 |
+| D09 | Artifact Synthesizer | 4800001 |
+| D10 | Workflow Controller and recovery | 4800001 |
 | G01 | Project delivery unification | g01-accepted (annotated tag) |
 
 ## Release Candidate; Acceptance Pending
 
 | Stage | Description | Working reference |
 |-------|-------------|-------------------|
-| D07 | Finance Agent | `main` release worktree; `codex/d07-d10` independent reference |
-| D08 | Deterministic Policy Gate | `main` release worktree; `codex/d07-d10` independent reference |
-| D09 | Artifact Synthesizer | `main` release worktree; `codex/d07-d10` independent reference |
-| D10 | Workflow Controller and recovery | `main` release worktree; `codex/d07-d10` independent reference |
+| D11 | Product API | `codex/d11-product-api` independent worktree |
 
-These entries record local implementation, corrective independent review, and
-a passing local suite (`385 passed` on 2026-07-20). The founder authorized
-release validation on 2026-07-20. Final acceptance still requires deployment,
-three-plane verification, and a D07-D10 recovery package.
+The D11 entry records local implementation and a passing full suite
+(`394 passed` on 2026-07-20). Final acceptance still requires an independent
+review, publication to `main`, Spark deployment, three-plane verification, and
+a D11 recovery package.
 
 ## Corrective History
 
@@ -71,17 +72,18 @@ three-plane verification, and a D07-D10 recovery package.
 
 ## Current State
 
-- **Current accepted product reference**: D06-D commit `0cda71c`
-- **Resolve accepted product commit with**: `git rev-parse 0cda71c`
+- **Current accepted product reference**: D07-D10 commit `4800001`
+- **Resolve accepted product commit with**: `git rev-parse 4800001`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D07-D10 — release candidate
-- **Current release worktree**: `main`
-- **Independent implementation reference**: `codex/d07-d10`
-- **Current release scope**: D07-D10 — corrective independent review and local
-  validation passed; deployment, three-plane verification, and recovery
-  packaging remain
-- **Next product stage**: D11 — Product API — blocked pending D07-D10 acceptance
+- **Current product stage**: D11 — Product API — release candidate
+- **Current release worktree**: `codex/d11-product-api`
+- **Independent D07-D10 reference**: `codex/d07-d10`
+- **Current release scope**: D11 — local implementation and full validation
+  passed; independent review, publication, deployment, three-plane
+  verification, and recovery packaging remain
+- **Next product stage**: D12 — Founder Mission Control UI — blocked pending
+  D11 acceptance
 - **D06-C recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
@@ -90,6 +92,9 @@ three-plane verification, and a D07-D10 recovery package.
 - **D06-D accepted implementation HEAD**: 0cda71c33500fb114be28c973548067987430cc5
 - **D06-D recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-D/20260719-171712Z/`
 - **D07-D10 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D07-D10/`
+- **D07-D10 accepted implementation HEAD**: 4800001ed0b1e979894295c6401ffcfb59a7c98d
+- **D07-D10 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D07-D10/20260720-050834Z/`
+- **D11 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D11/`
 
 ## Mandatory Update Block
 

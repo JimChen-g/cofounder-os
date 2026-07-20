@@ -9,11 +9,11 @@
 | D06-B | Filesystem Artifact Store | ACCEPTED |
 | D06-C | Product Agent | ACCEPTED |
 | D06-D | Product lifecycle integration | ACCEPTED |
-| D07 | Finance Agent | RELEASE_CANDIDATE |
-| D08 | Deterministic Policy Gate | RELEASE_CANDIDATE |
-| D09 | Artifact Synthesizer | RELEASE_CANDIDATE |
-| D10 | Workflow Controller and recovery | RELEASE_CANDIDATE |
-| D11 | Product API | PENDING |
+| D07 | Finance Agent | ACCEPTED |
+| D08 | Deterministic Policy Gate | ACCEPTED |
+| D09 | Artifact Synthesizer | ACCEPTED |
+| D10 | Workflow Controller and recovery | ACCEPTED |
+| D11 | Product API | RELEASE_CANDIDATE |
 | D12 | Founder Mission Control UI | PENDING |
 | D13 | Evaluation Dashboard | PENDING |
 | D14 | Hackathon submission package | PENDING |

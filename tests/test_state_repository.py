@@ -1,7 +1,6 @@
 """Tests for atomic filesystem state persistence."""
 
 import json
-from pathlib import Path
 
 import pytest
 
