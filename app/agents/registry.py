@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -178,7 +179,7 @@ class AgentRegistry:
     def ids(self) -> tuple[str, ...]:
         return tuple(definition.agent_id for definition in self._definitions)
 
-    def prompt_catalog(self) -> list[dict[str, object]]:
+    def prompt_catalog(self) -> List[dict[str, object]]:
         """Return the exact catalog supplied to the planning model."""
 
         return [

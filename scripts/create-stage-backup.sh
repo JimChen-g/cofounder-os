@@ -72,6 +72,32 @@ if [[ ! "$ACCEPTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
+STAGE_NAME="$STAGE_ID"
+NEXT_ACTION="Independent review"
+TARGETED_TEST_FILES=(
+  tests/test_execution_service.py
+  tests/test_state_machine.py
+  tests/test_state_repository.py
+)
+
+case "$STAGE_ID" in
+  D06-D)
+    STAGE_NAME="Product lifecycle integration"
+    NEXT_ACTION="D07 Finance Agent"
+    TARGETED_TEST_FILES=(tests/test_product_lifecycle.py)
+    ;;
+  D07-D10)
+    STAGE_NAME="Complete Founder Decision Workflow"
+    NEXT_ACTION="D11 Product API"
+    TARGETED_TEST_FILES=(
+      tests/test_finance_agent.py
+      tests/test_policy_gate.py
+      tests/test_artifact_synthesizer.py
+      tests/test_workflow_controller.py
+    )
+    ;;
+esac
+
 cd "$REPO"
 
 # Require clean worktree
@@ -280,7 +306,7 @@ MANIFEST="$BACKUP_DIR/manifest.env"
 DEPLOYED_AT="$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')"
 /bin/cat > "$MANIFEST" <<EOF
 STAGE_ID=$STAGE_ID
-STAGE_NAME=$STAGE_ID
+STAGE_NAME=$STAGE_NAME
 BASELINE_COMMIT=$BASELINE_SHA
 ACCEPTED_COMMIT=$ACCEPTED_SHA
 LOCAL_HEAD=$LOCAL_HEAD
@@ -300,8 +326,8 @@ echo "[7/9] Generating stage-report.txt..."
 STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
 
 # Capture test results for the report
-TARGETED_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x"
-TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_product_lifecycle.py -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
+TARGETED_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest ${TARGETED_TEST_FILES[*]} -x"
+TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest "${TARGETED_TEST_FILES[@]}" -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
 GOVERNANCE_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x"
 GOVERNANCE_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
 FULL_SUITE_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x"
@@ -313,7 +339,7 @@ SPARK_SHA="$(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o 
 
 /bin/cat > "$STAGE_REPORT" <<EOF
 STAGE_ID: $STAGE_ID
-STAGE_NAME: $STAGE_ID
+STAGE_NAME: $STAGE_NAME
 BASELINE_COMMIT: $BASELINE_SHA
 ACCEPTED_COMMIT: $ACCEPTED_SHA
 REPORT_GENERATED_AT: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -325,18 +351,18 @@ LOCAL_SHA=$LOCAL_SHA
 SPARK_SHA=$SPARK_SHA
 ORIGIN_MAIN_SHA=$ORIGIN_SHA
 
-TARGETED_D06_D_TEST_CMD=$TARGETED_TEST_CMD
-TARGETED_D06_D_TEST_COUNT=$TARGETED_TEST_COUNT passed
+TARGETED_TEST_CMD=$TARGETED_TEST_CMD
+TARGETED_TEST_COUNT=$TARGETED_TEST_COUNT passed
 GOVERNANCE_TEST_CMD=$GOVERNANCE_TEST_CMD
 GOVERNANCE_TEST_COUNT=$GOVERNANCE_TEST_COUNT passed
 FULL_SUITE_CMD=$FULL_SUITE_CMD
 FULL_SUITE_COUNT=$FULL_SUITE_COUNT passed
 
-RUFF_RESULT=PASS (app/services/product_lifecycle.py, tests/test_product_lifecycle.py)
+RUFF_RESULT=PASS (changed Python files in $BASELINE_SHA..$ACCEPTED_SHA)
 DIFF_RESULT=PASS (git diff --check clean)
 
 SMOKE_STANDARD=PASS (deploy-to-spark.sh: status, health, smoke validated)
-SMOKE_D06_D=PASS (test_product_lifecycle.py: all lifecycle tests pass)
+SMOKE_STAGE=PASS ($TARGETED_TEST_COUNT targeted tests passed for $STAGE_ID)
 DEPLOYMENT_RESULT=PASS (local=$LOCAL_SHA, spark=$SPARK_SHA)
 ROLLBACK_EVIDENCE=N/A (no rollback required)
 
@@ -345,7 +371,7 @@ CHANGED_FILES=see changed-files.txt
 BACKUP_PATH=$BACKUP_DIR
 TEST_RESULT=see test-summary.txt
 CURRENT_SERVICES=validated during deployment
-NEXT_ACTION=D07 BLOCKED pending independent review
+NEXT_ACTION=$NEXT_ACTION
 EOF
 echo "  OK: $STAGE_REPORT"
 

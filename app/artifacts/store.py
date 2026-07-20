@@ -344,11 +344,16 @@ class FileArtifactStore:
                 f"Artifact metadata missing: {meta_path}"
             )
         try:
-            return json.loads(meta_path.read_text(encoding="utf-8"))
+            value: Any = json.loads(meta_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             raise ArtifactIntegrityError(
                 f"Artifact metadata corrupt: {meta_path}"
             ) from exc
+        if not isinstance(value, dict):
+            raise ArtifactIntegrityError(
+                f"Artifact metadata must be a JSON object: {meta_path}"
+            )
+        return value
 
     @staticmethod
     def _clean_temp_files(directory: Path) -> None:
@@ -410,7 +415,7 @@ class FileArtifactStore:
         meta_path: Path,
         requested: "StoredArtifact",
         requested_bytes: bytes,
-    ) -> "StoredArtifact":
+    ) -> "StoredArtifact | None":
         """Handle partial-state recovery inside the run lock.
 
         Returns an existing StoredArtifact for compatible idempotent requests.

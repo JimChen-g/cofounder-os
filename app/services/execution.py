@@ -217,17 +217,17 @@ class AgentExecutionService:
                         f"not '{agent_id}'"
                     )
 
-                claimed_at_value = task.claimed_at
-                if claimed_at_value is not None and not isinstance(
-                    claimed_at_value, str
-                ):
-                    claimed_at_value = claimed_at_value.isoformat()
+                claimed_at_value = (
+                    task.claimed_at.isoformat()
+                    if task.claimed_at is not None
+                    else utc_now().isoformat()
+                )
 
                 return TaskClaim(
                     task_id=str(task_uuid),
                     claim_token=task.claim_token,
                     claimed_by=task.claimed_by or agent_id,
-                    claimed_at=claimed_at_value or utc_now().isoformat(),
+                    claimed_at=claimed_at_value,
                     attempt_number=task.attempt_count,
                 )
 

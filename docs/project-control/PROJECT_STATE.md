@@ -21,13 +21,22 @@ This document must be updated in the same commit as every accepted stage.
 | D06-A | Agent execution contract | 4f29e18 |
 | D06-B | Filesystem Artifact Store | 4db36ed |
 | D06-C | Product Agent | 7aa65a3 |
+| D06-D | Product lifecycle integration | 0cda71c |
 | G01 | Project delivery unification | g01-accepted (annotated tag) |
 
-## Review Pending
+## Release Candidate; Acceptance Pending
 
-| Stage | Description | Implementation baseline |
-|-------|-------------|-------------------------|
-| D06-D | Product lifecycle integration | 8ad1b05 |
+| Stage | Description | Working reference |
+|-------|-------------|-------------------|
+| D07 | Finance Agent | `main` release worktree; `codex/d07-d10` independent reference |
+| D08 | Deterministic Policy Gate | `main` release worktree; `codex/d07-d10` independent reference |
+| D09 | Artifact Synthesizer | `main` release worktree; `codex/d07-d10` independent reference |
+| D10 | Workflow Controller and recovery | `main` release worktree; `codex/d07-d10` independent reference |
+
+These entries record local implementation, corrective independent review, and
+a passing local suite (`385 passed` on 2026-07-20). The founder authorized
+release validation on 2026-07-20. Final acceptance still requires deployment,
+three-plane verification, and a D07-D10 recovery package.
 
 ## Corrective History
 
@@ -56,25 +65,31 @@ This document must be updated in the same commit as every accepted stage.
 | c9efda1 | Print WORKTREE_STATUS=DIRTY when worktree is dirty | Corrective |
 | e1101d9 | Echo clipboard content to stdout in project-preflight.sh | Corrective |
 | aff5e67 | Fix preflight exit code and complete G01 final closeout | Final G01 commit |
-| [pending] | D06-D corrective: close 8 lifecycle blockers per independent review | Corrective: product_lifecycle, tests, backup script |
-| [pending] | D06-D corrective: fix changed-files.txt TAB parsing and stage report | Corrective: backup script |
-| [pending] | D06-D corrective: add real behavior tests and close exception paths | Corrective: product_lifecycle, tests |
+| 8ee6968 | D06-D corrective: close lifecycle blockers per independent review | Corrective: product_lifecycle, tests, backup script |
+| 4f2f14f | D06-D corrective: improve stage report and test-count extraction | Corrective: backup script |
+| 85db29d | D06-D corrective: add real behavior tests and close exception paths | Corrective: product_lifecycle, tests |
 
 ## Current State
 
-- **Current accepted reference**: annotated tag `g01-accepted`
-- **Resolve accepted commit with**: `git rev-parse 'g01-accepted^{}'`
+- **Current accepted product reference**: D06-D commit `0cda71c`
+- **Resolve accepted product commit with**: `git rev-parse 0cda71c`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D06-D — Product lifecycle integration — REVIEW_PENDING
-- **Next product stage**: D07 — Finance Agent — BLOCKED
+- **Current product stage**: D07-D10 — release candidate
+- **Current release worktree**: `main`
+- **Independent implementation reference**: `codex/d07-d10`
+- **Current release scope**: D07-D10 — corrective independent review and local
+  validation passed; deployment, three-plane verification, and recovery
+  packaging remain
+- **Next product stage**: D11 — Product API — blocked pending D07-D10 acceptance
 - **D06-C recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
 - **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-065500Z` (accepted)
 - **D06-D recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-D/`
-- **D06-D final pending implementation HEAD**: a54fb07c55e774f186b3715a46f84159ba6e9119
+- **D06-D accepted implementation HEAD**: 0cda71c33500fb114be28c973548067987430cc5
 - **D06-D recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-D/20260719-171712Z/`
+- **D07-D10 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D07-D10/`
 
 ## Mandatory Update Block
 

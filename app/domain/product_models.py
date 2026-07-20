@@ -160,14 +160,17 @@ class ProductTaskContext(BaseModel):
         if checksums:
             for dep_id in ids:
                 if str(dep_id) in checksums:
-                    summary = next(
+                    matching_summary = next(
                         (s for s in summaries if s.artifact_id == dep_id),
                         None,
                     )
-                    if summary and summary.checksum != checksums[str(dep_id)]:
+                    if (
+                        matching_summary is not None
+                        and matching_summary.checksum != checksums[str(dep_id)]
+                    ):
                         raise ValueError(
                             f"dependency_artifact_summaries checksum for {dep_id} "
-                            f"({summary.checksum}) does not match "
+                            f"({matching_summary.checksum}) does not match "
                             f"dependency_artifact_checksums ({checksums[str(dep_id)]})"
                         )
 

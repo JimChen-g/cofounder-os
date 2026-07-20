@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, FrozenSet
+from typing import Dict, FrozenSet, Mapping, TypeVar
 from uuid import UUID
 
 from app.domain import (
@@ -108,6 +108,8 @@ TASK_TERMINAL = frozenset(
     }
 )
 
+StatusT = TypeVar("StatusT", RunStatus, TaskStatus)
+
 
 def _required_text(value: str, field_name: str) -> str:
     normalized = value.strip()
@@ -117,9 +119,9 @@ def _required_text(value: str, field_name: str) -> str:
 
 
 def _validate_transition(
-    current_status,
-    target_status,
-    transitions,
+    current_status: StatusT,
+    target_status: StatusT,
+    transitions: Mapping[StatusT, FrozenSet[StatusT]],
     target_type: str,
 ) -> None:
     allowed = transitions[current_status]
@@ -186,7 +188,7 @@ class LifecycleStateMachine:
 
         now = utc_now()
         updated = current_run.model_copy(deep=True)
-        updated.status = target.value
+        updated.status = target
         updated.updated_at = now
 
         if target == RunStatus.RUNNING and updated.started_at is None:
@@ -263,7 +265,7 @@ class LifecycleStateMachine:
 
         now = utc_now()
         updated = current_task.model_copy(deep=True)
-        updated.status = target.value
+        updated.status = target
         updated.updated_at = now
 
         if target == TaskStatus.RUNNING and updated.started_at is None:

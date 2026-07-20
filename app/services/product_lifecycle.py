@@ -1183,7 +1183,7 @@ class ProductTaskLifecycleService:
         return "valid"
 
     @staticmethod
-    def _safe_error_message(exc: BaseException) -> str:
+    def _safe_error_message(exc: BaseException | str) -> str:
         """Extract a safe error message without secrets or credentials."""
         msg = str(exc)
         # Remove claim tokens from error messages to prevent leakage

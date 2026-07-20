@@ -10,6 +10,15 @@ from app.agents.product_agent import (
     ProductAgentValidationFailure,
     ProductGatewayProtocol,
 )
+from app.agents.finance_agent import (
+    FINANCE_AGENT_ID,
+    FINANCE_ALLOWED_VIRTUAL_MODELS,
+    FINANCE_DEFAULT_VIRTUAL_MODEL,
+    FinanceAgent,
+    FinanceAgentError,
+    FinanceAgentValidationFailure,
+    FinanceGatewayProtocol,
+)
 from app.agents.registry import (
     DEFAULT_AGENTS,
     EXECUTIVE_AGENT_ID,
@@ -25,6 +34,13 @@ __all__ = [
     "DEFAULT_AGENTS",
     "DEFAULT_VIRTUAL_MODEL",
     "EXECUTIVE_AGENT_ID",
+    "FINANCE_AGENT_ID",
+    "FINANCE_ALLOWED_VIRTUAL_MODELS",
+    "FINANCE_DEFAULT_VIRTUAL_MODEL",
+    "FinanceAgent",
+    "FinanceAgentError",
+    "FinanceAgentValidationFailure",
+    "FinanceGatewayProtocol",
     "AgentDefinition",
     "AgentRegistry",
     "AgentRegistryError",

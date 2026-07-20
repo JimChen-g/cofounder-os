@@ -55,6 +55,20 @@ from app.services.product_lifecycle import (
     TaskNotProductAgentError,
     TaskNotFoundError,
 )
+from app.services.finance_agent import (
+    FinanceAgentExecutionError,
+    FinanceAgentRouteEvidenceError,
+    FinanceAgentService,
+    FinanceAgentServiceError,
+)
+from app.services.workflow_controller import (
+    SYNTHESIS_TASK_TYPE,
+    WORKFLOW_CONTROLLER_ID,
+    UnsupportedWorkflowTask,
+    WorkflowController,
+    WorkflowControllerError,
+    WorkflowRunResult,
+)
 
 __all__ = [
     "ActiveApprovalExists",
@@ -76,6 +90,10 @@ __all__ = [
     "DependencyArtifactCorruptError",
     "DependencyArtifactMissingError",
     "DependencyNotReady",
+    "FinanceAgentExecutionError",
+    "FinanceAgentRouteEvidenceError",
+    "FinanceAgentService",
+    "FinanceAgentServiceError",
     "LifecycleExecutionResult",
     "OrchestrationError",
     "OrchestrationService",
@@ -102,4 +120,10 @@ __all__ = [
     "TaskNotFoundError",
     "TaskNotReadyError",
     "TaskTerminallyFailedError",
+    "SYNTHESIS_TASK_TYPE",
+    "UnsupportedWorkflowTask",
+    "WORKFLOW_CONTROLLER_ID",
+    "WorkflowController",
+    "WorkflowControllerError",
+    "WorkflowRunResult",
 ]

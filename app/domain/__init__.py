@@ -30,6 +30,22 @@ from app.domain.product_models import (
     ProductRequirement,
     DependencyArtifactSummary,
 )
+from app.domain.finance_models import (
+    BudgetScenario,
+    CostItem,
+    DecisionThreshold,
+    FinanceAgentRequest,
+    FinanceAgentResultV1,
+    FinanceTaskContext,
+    FinancialRisk,
+    RevenueAssumption,
+    UnitEconomics,
+)
+from app.domain.synthesis_models import (
+    ArtifactSynthesisRequest,
+    ArtifactSynthesisResult,
+    SynthesizedArtifact,
+)
 
 __all__ = [
     "AgentMessage",
@@ -37,8 +53,13 @@ __all__ = [
     "ApprovalStatus",
     "Artifact",
     "ArtifactKind",
+    "ArtifactSynthesisRequest",
+    "ArtifactSynthesisResult",
     "AuditEvent",
     "AuditOutcome",
+    "BudgetScenario",
+    "CostItem",
+    "DecisionThreshold",
     "DomainRecord",
     "DependencyArtifactSummary",
     "MessageRole",
@@ -48,14 +69,21 @@ __all__ = [
     "ProductRequirement",
     "ProductRisk",
     "ProductTaskContext",
+    "FinanceAgentRequest",
+    "FinanceAgentResultV1",
+    "FinanceTaskContext",
+    "FinancialRisk",
     "RecommendedAction",
     "RouteDecision",
     "Run",
     "RunStatus",
+    "RevenueAssumption",
     "SuccessMetric",
+    "SynthesizedArtifact",
     "Task",
     "TaskStatus",
     "TargetUser",
     "UserPain",
+    "UnitEconomics",
     "utc_now",
 ]

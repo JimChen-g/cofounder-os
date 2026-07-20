@@ -22,12 +22,13 @@ from app.domain import (
     Approval,
     Artifact,
     AuditEvent,
+    DomainRecord,
     RouteDecision,
     Run,
     Task,
 )
 
-ModelT = TypeVar("ModelT", bound=BaseModel)
+ModelT = TypeVar("ModelT", bound=DomainRecord)
 
 
 class StateRepositoryError(RuntimeError):

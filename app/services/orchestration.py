@@ -8,7 +8,7 @@ providers directly and does not expose HTTP routes.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Sequence
+from typing import Any, FrozenSet, Literal, Mapping, Sequence, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -90,6 +90,9 @@ class ApprovalWorkflowResult(BaseModel):
     task: Task | None = None
 
 
+StatusT = TypeVar("StatusT", RunStatus, TaskStatus)
+
+
 def _required_text(value: str, field_name: str) -> str:
     normalized = value.strip()
     if not normalized:
@@ -102,9 +105,9 @@ def _uuid_list(values: Sequence[UUID | str] | None) -> list[UUID]:
 
 
 def _ensure_transition_allowed(
-    current,
-    target,
-    transitions,
+    current: StatusT,
+    target: StatusT,
+    transitions: Mapping[StatusT, FrozenSet[StatusT]],
     target_type: str,
 ) -> None:
     if target not in transitions[current]:
@@ -656,9 +659,9 @@ class OrchestrationService:
 
             if approval.task_id is not None:
                 task = transaction.get_task(approval.task_id)
-                current = TaskStatus(task.status)
+                task_current = TaskStatus(task.status)
                 _ensure_transition_allowed(
-                    current,
+                    task_current,
                     TaskStatus.WAITING_APPROVAL,
                     TASK_TRANSITIONS,
                     "task",
@@ -668,9 +671,9 @@ class OrchestrationService:
                     task,
                 )
             else:
-                current = RunStatus(run.status)
+                run_current = RunStatus(run.status)
                 _ensure_transition_allowed(
-                    current,
+                    run_current,
                     RunStatus.WAITING_APPROVAL,
                     RUN_TRANSITIONS,
                     "run",

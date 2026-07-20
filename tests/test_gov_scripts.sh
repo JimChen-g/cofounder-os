@@ -314,6 +314,31 @@ else
   fail "PROJECT_STATE.md not found"
 fi
 
+# Test 12: D07-D10 backup report uses stage-specific tests and next action
+echo "=== Test 12: D07-D10 stage-specific recovery report ==="
+stage_routing_errors=0
+for test_file in \
+  tests/test_finance_agent.py \
+  tests/test_policy_gate.py \
+  tests/test_artifact_synthesizer.py \
+  tests/test_workflow_controller.py; do
+  if ! /usr/bin/grep -Fq "$test_file" "$BACKUP_SCRIPT"; then
+    fail "D07-D10 recovery routing missing $test_file"
+    stage_routing_errors=$((stage_routing_errors + 1))
+  fi
+done
+if ! /usr/bin/grep -Fq 'NEXT_ACTION="D11 Product API"' "$BACKUP_SCRIPT"; then
+  fail "D07-D10 recovery routing missing D11 next action"
+  stage_routing_errors=$((stage_routing_errors + 1))
+fi
+if /usr/bin/grep -q 'TARGETED_D06_D_TEST' "$BACKUP_SCRIPT"; then
+  fail "stage report still contains D06-D-specific targeted field names"
+  stage_routing_errors=$((stage_routing_errors + 1))
+fi
+if [[ $stage_routing_errors -eq 0 ]]; then
+  pass "D07-D10 recovery report uses stage-specific tests and D11 next action"
+fi
+
 echo
 echo "=== Test Summary ==="
 echo "Passed: $PASS_COUNT"
