@@ -1672,7 +1672,9 @@ class TestRetryAuthorizationPersisted:
         )
 
         # Naive datetime (no tzinfo) — should be safely treated as UTC
-        naive_future = datetime.now() + timedelta(hours=1)
+        naive_future = (
+            datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
+        )
         approval = Approval(
             run_id=run.id,
             task_id=task.id,
