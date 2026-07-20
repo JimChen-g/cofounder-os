@@ -19,6 +19,7 @@ from app.models import ChatMessage, Role
 
 FINANCE_AGENT_ID = "finance-agent"
 FINANCE_DEFAULT_VIRTUAL_MODEL = "cofounder-auto"
+FINANCE_MAX_TOKENS = 8192
 FINANCE_ALLOWED_VIRTUAL_MODELS = frozenset(
     {"cofounder-auto", "cofounder-qwen", "cofounder-step"}
 )
@@ -47,7 +48,7 @@ class FinanceGatewayProtocol(BaseModel):
 
     virtual_model: str = FINANCE_DEFAULT_VIRTUAL_MODEL
     temperature: float = Field(default=0.1, ge=0, le=2)
-    max_tokens: int = Field(default=4096, ge=1, le=128_000)
+    max_tokens: int = Field(default=FINANCE_MAX_TOKENS, ge=1, le=128_000)
     response_format: Literal["json_object"] = "json_object"
 
 

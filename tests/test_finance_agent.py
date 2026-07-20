@@ -112,9 +112,11 @@ class FakeGateway:
     def __init__(self, responses: Sequence[str]) -> None:
         self.responses = list(responses)
         self.calls = 0
+        self.requests: list[dict[str, Any]] = []
 
     async def complete(self, messages, **kwargs) -> GatewayCompletion:
         self.calls += 1
+        self.requests.append(kwargs)
         return GatewayCompletion(
             content=self.responses.pop(0),
             requested_model=kwargs["model"],
@@ -144,6 +146,7 @@ async def test_finance_agent_accepts_all_required_sections():
     }
     assert completion.selected_provider == "qwen"
     assert gateway.calls == 1
+    assert gateway.requests[0]["max_tokens"] == 8192
 
 
 @pytest.mark.asyncio
