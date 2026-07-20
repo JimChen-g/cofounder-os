@@ -84,17 +84,17 @@ a D11 recovery package.
   verification, and recovery packaging remain
 - **Next product stage**: D12 — Founder Mission Control UI — blocked pending
   D11 acceptance
-- **D06-C recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/`
-- **D06-C recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
-- **D06-B recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/`
-- **Latest D06-B recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-B/20260719-065500Z` (accepted)
-- **D06-D recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-D/`
+- **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
+- **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
+- **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`
+- **Latest D06-B recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/20260719-065500Z` (accepted)
+- **D06-D recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-D/`
 - **D06-D accepted implementation HEAD**: 0cda71c33500fb114be28c973548067987430cc5
-- **D06-D recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D06-D/20260719-171712Z/`
-- **D07-D10 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D07-D10/`
+- **D06-D recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-D/20260719-171712Z/`
+- **D07-D10 recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D07-D10/`
 - **D07-D10 accepted implementation HEAD**: 4800001ed0b1e979894295c6401ffcfb59a7c98d
-- **D07-D10 recovery package**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D07-D10/20260720-050834Z/`
-- **D11 recovery package directory**: `/Users/jimcheng/Documents/CoFounderOS/stage-backups/D11/`
+- **D07-D10 recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D07-D10/20260720-050834Z/`
+- **D11 recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D11/`
 
 ## Mandatory Update Block
 

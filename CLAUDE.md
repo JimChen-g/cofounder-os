@@ -16,6 +16,6 @@ Check `docs/project-control/PROJECT_STATE.md` for the current active stage.
 
 ## Source of Truth
 
-All product code lives in `/Users/jimcheng/Projects/cofounder-os`.
+All product code lives in `$HOME/Projects/cofounder-os`.
 
 Do not edit files on DGX Spark. Spark is a deployment target only.

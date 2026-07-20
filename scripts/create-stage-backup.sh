@@ -16,7 +16,7 @@ set -euo pipefail
 #   COFOUNDER_BACKUP_ROOT — override backup root directory
 #
 # Creates a dated recovery package under:
-#   $COFOUNDER_BACKUP_ROOT or /Users/jimcheng/Documents/CoFounderOS/stage-backups/<STAGE-ID>/<UTC timestamp>/
+#   $COFOUNDER_BACKUP_ROOT or $HOME/Documents/CoFounderOS/stage-backups/<STAGE-ID>/<UTC timestamp>/
 #
 # The package contains:
 #   cofounder-os.bundle      — complete Git bundle
@@ -50,11 +50,14 @@ BASELINE_SHA="$2"
 ACCEPTED_SHA="${3:-$(/usr/bin/git rev-parse HEAD)}"
 TIMESTAMP="$(/bin/date -u '+%Y%m%d-%H%M%SZ')"
 
-BACKUP_ROOT="${COFOUNDER_BACKUP_ROOT:-/Users/jimcheng/Documents/CoFounderOS/stage-backups}"
+BACKUP_ROOT="${COFOUNDER_BACKUP_ROOT:-$HOME/Documents/CoFounderOS/stage-backups}"
 BACKUP_DIR="$BACKUP_ROOT/$STAGE_ID/$TIMESTAMP"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+TOOL_REPO="${COFOUNDER_TOOL_REPO:-$HOME/Projects/cofounder-os}"
+PYTEST_BIN="${COFOUNDER_PYTEST_BIN:-$TOOL_REPO/.venv/bin/pytest}"
+RUFF_BIN="${COFOUNDER_RUFF_BIN:-$TOOL_REPO/.venv/bin/ruff}"
 
 # Validate stage ID format
 if [[ ! "$STAGE_ID" =~ ^[A-Z0-9]+(-[A-Z0-9]+)?$ ]]; then
@@ -251,9 +254,9 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
 # Generated at: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
 EOF
 echo "## Full Test Suite" >> "$TEST_SUMMARY"
-echo "Command: /Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q" >> "$TEST_SUMMARY"
+echo "Command: $PYTEST_BIN tests/ -x -q" >> "$TEST_SUMMARY"
 if [[ -d "$REPO/tests" ]]; then
-  /Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x -q >> "$TEST_SUMMARY" 2>&1
+  "$PYTEST_BIN" tests/ -x -q >> "$TEST_SUMMARY" 2>&1
   echo "Result: PASS" >> "$TEST_SUMMARY"
 else
   echo "Result: SKIPPED (no tests directory)" >> "$TEST_SUMMARY"
@@ -264,7 +267,7 @@ echo "Command: ruff check on changed Python files in stage range" >> "$TEST_SUMM
 CHANGED_PATHS="$(/usr/bin/git diff --name-only "$BASELINE_SHA" "$ACCEPTED_SHA" 2>/dev/null || true)"
 PYTHON_CHANGED="$(echo "$CHANGED_PATHS" | /usr/bin/grep -E '\.py$' || true)"
 if [[ -n "$PYTHON_CHANGED" ]]; then
-  RUFF_OUTPUT="$(echo "$PYTHON_CHANGED" | /usr/bin/xargs /Users/jimcheng/Projects/cofounder-os/.venv/bin/ruff check 2>&1)" || {
+  RUFF_OUTPUT="$(echo "$PYTHON_CHANGED" | /usr/bin/xargs "$RUFF_BIN" check 2>&1)" || {
     echo "$RUFF_OUTPUT" >> "$TEST_SUMMARY"
     echo "ERROR: Ruff lint failed on changed Python files — aborting backup" >&2
     exit 1
@@ -337,12 +340,12 @@ echo "[7/9] Generating stage-report.txt..."
 STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
 
 # Capture test results for the report
-TARGETED_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest ${TARGETED_TEST_FILES[*]} -x"
-TARGETED_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest "${TARGETED_TEST_FILES[@]}" -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
-GOVERNANCE_TEST_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x"
-GOVERNANCE_TEST_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
-FULL_SUITE_CMD="/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x"
-FULL_SUITE_COUNT=$(/Users/jimcheng/Projects/cofounder-os/.venv/bin/pytest tests/ -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
+TARGETED_TEST_CMD="$PYTEST_BIN ${TARGETED_TEST_FILES[*]} -x"
+TARGETED_TEST_COUNT=$("$PYTEST_BIN" "${TARGETED_TEST_FILES[@]}" -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
+GOVERNANCE_TEST_CMD="$PYTEST_BIN tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x"
+GOVERNANCE_TEST_COUNT=$("$PYTEST_BIN" tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
+FULL_SUITE_CMD="$PYTEST_BIN tests/ -x"
+FULL_SUITE_COUNT=$("$PYTEST_BIN" tests/ -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
 
 LOCAL_SHA="$(/usr/bin/git rev-parse HEAD)"
 ORIGIN_SHA="$(/usr/bin/git rev-parse origin/main 2>/dev/null || echo 'unavailable')"
