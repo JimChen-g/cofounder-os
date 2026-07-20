@@ -99,8 +99,9 @@ accepted.
   review, publication, deployment, three-plane verification, and recovery
 - **Next product stage**: D14 — Hackathon submission package — blocked on D13
   acceptance
-- **Current implementation candidate**: `codex/d13-evaluation-dashboard`;
-  commit SHA pending final implementation commit
+- **Current implementation candidate**:
+  `962a97da13b9a6905a5e184e71d7813faf50a03b` on
+  `codex/d13-evaluation-dashboard`
 - **Next acceptance action**: commit the D13 candidate, then perform
   independent review before merge or deployment
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
