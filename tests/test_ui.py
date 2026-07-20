@@ -119,3 +119,12 @@ def test_narrow_layout_keeps_mission_controls_and_five_views() -> None:
     assert "grid-template-columns: repeat(5, 1fr)" in stylesheet
     assert "#refresh-run," not in stylesheet
     assert ".topbar .button-secondary" not in stylesheet
+
+
+def test_provider_distribution_uses_evaluated_run_denominator() -> None:
+    script = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+
+    assert "summary.run_count" in script
+    assert "function renderEvaluationProviders(distribution, evaluatedRunCount)" in script
+    assert "${count} / ${evaluatedRunCount} evaluated runs" in script
+    assert "entries.reduce((sum, [, count])" not in script

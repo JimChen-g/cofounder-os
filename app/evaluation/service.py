@@ -135,7 +135,7 @@ class EvaluationService:
                 retry_count=retry_count,
                 first_pass_tasks=sum(
                     TaskStatus(task.status) == TaskStatus.COMPLETED
-                    and task.attempt_count <= 1
+                    and task.attempt_count == 1
                     for task in snapshot.tasks
                 ),
             ),
@@ -410,6 +410,15 @@ class EvaluationService:
             for decision in snapshot.route_decisions
             if decision.task_id is not None
         }
+        if any(
+            decision.task_id is None
+            for decision in snapshot.route_decisions
+        ):
+            routed_task_ids.update(
+                task.id
+                for task in snapshot.tasks
+                if task.assigned_agent == "executive-orchestrator"
+            )
         route_coverage = (
             _percentage(len(task_ids & routed_task_ids), len(task_ids))
             if task_ids

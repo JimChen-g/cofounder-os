@@ -139,6 +139,83 @@ def test_cross_run_record_is_rejected(tmp_path):
             transaction.create_task(wrong_task)
 
 
+def test_cross_run_child_symlink_is_rejected_on_get_and_list(
+    tmp_path: Path,
+) -> None:
+    repository = FileStateRepository(tmp_path / "runs")
+    source = Run(objective="Source run")
+    victim = Run(objective="Victim run")
+    repository.create_run(source)
+    repository.create_run(victim)
+    source_task = Task(run_id=source.id, title="Source task")
+    repository.create_task(source_task)
+
+    source_path = (
+        repository.root
+        / str(source.id)
+        / "tasks"
+        / f"{source_task.id}.json"
+    )
+    victim_path = (
+        repository.root
+        / str(victim.id)
+        / "tasks"
+        / f"{source_task.id}.json"
+    )
+    victim_path.symlink_to(source_path)
+
+    with pytest.raises(RecordScopeError, match="cannot be a symlink"):
+        repository.get_task(victim.id, source_task.id)
+    with pytest.raises(RecordScopeError, match="cannot be a symlink"):
+        repository.list_tasks(victim.id)
+
+
+def test_cross_run_child_payload_is_rejected_after_read(
+    tmp_path: Path,
+) -> None:
+    repository = FileStateRepository(tmp_path / "runs")
+    source = Run(objective="Source run")
+    victim = Run(objective="Victim run")
+    repository.create_run(source)
+    repository.create_run(victim)
+    source_task = Task(run_id=source.id, title="Source task")
+    repository.create_task(source_task)
+
+    victim_path = (
+        repository.root
+        / str(victim.id)
+        / "tasks"
+        / f"{source_task.id}.json"
+    )
+    victim_path.write_text(
+        source_task.model_dump_json(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecordScopeError, match="does not match"):
+        repository.get_task(victim.id, source_task.id)
+    with pytest.raises(RecordScopeError, match="does not match"):
+        repository.list_tasks(victim.id)
+
+
+def test_symlinked_child_collection_is_rejected(tmp_path: Path) -> None:
+    repository = FileStateRepository(tmp_path / "runs")
+    source = Run(objective="Source run")
+    victim = Run(objective="Victim run")
+    repository.create_run(source)
+    repository.create_run(victim)
+
+    victim_tasks = repository.root / str(victim.id) / "tasks"
+    victim_tasks.rmdir()
+    victim_tasks.symlink_to(
+        repository.root / str(source.id) / "tasks",
+        target_is_directory=True,
+    )
+
+    with pytest.raises(RecordScopeError, match="cannot be a symlink"):
+        repository.list_tasks(victim.id)
+
+
 def test_append_only_event_ledger_preserves_order_and_limit(tmp_path):
     repository = FileStateRepository(tmp_path / "runs")
     run = Run(objective="Record state transitions")

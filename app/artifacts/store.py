@@ -616,16 +616,28 @@ class FileArtifactStore:
             raise ArtifactIntegrityError(
                 f"Artifact content missing: {content_path}"
             )
+        if not content_path.is_file():
+            raise ArtifactIntegrityError(
+                "Artifact content is not a regular file"
+            )
 
-        meta = self._read_meta(meta_path)
-        computed = _sha256_file(content_path)
+        try:
+            meta = self._read_meta(meta_path)
+            computed = _sha256_file(content_path)
+            content = content_path.read_bytes()
+        except ArtifactStoreError:
+            raise
+        except OSError as exc:
+            raise ArtifactIntegrityError(
+                "Artifact content could not be read"
+            ) from exc
         if computed != meta.get("checksum_sha256"):
             raise ArtifactIntegrityError(
                 f"Artifact integrity failure for {content_path}: "
                 f"expected {meta.get('checksum_sha256')}, got {computed}"
             )
 
-        return content_path.read_bytes()
+        return content
 
     # ── Approved public API ────────────────────────────────────────────────
 

@@ -1173,7 +1173,10 @@ function renderEvaluation() {
   renderLatestEvaluation(summary.recent_runs[0]);
   renderEvaluationAgents(summary.agent_performance || []);
   renderEvaluationRuns(summary.recent_runs);
-  renderEvaluationProviders(summary.provider_distribution || {});
+  renderEvaluationProviders(
+    summary.provider_distribution || {},
+    summary.run_count,
+  );
 }
 
 function renderLatestEvaluation(run) {
@@ -1299,7 +1302,7 @@ function renderEvaluationRuns(runs) {
   });
 }
 
-function renderEvaluationProviders(distribution) {
+function renderEvaluationProviders(distribution, evaluatedRunCount) {
   selectors.evaluationProviders.replaceChildren();
   const entries = Object.entries(distribution);
   if (!entries.length) {
@@ -1308,13 +1311,16 @@ function renderEvaluationProviders(distribution) {
     );
     return;
   }
-  const total = entries.reduce((sum, [, count]) => sum + count, 0);
   entries.forEach(([provider, count]) => {
     const row = element("div", "provider-row");
     append(
       row,
       element("strong", null, labelize(provider)),
-      element("span", null, `${count} / ${total} runs`),
+      element(
+        "span",
+        null,
+        `${count} / ${evaluatedRunCount} evaluated runs`,
+      ),
     );
     selectors.evaluationProviders.append(row);
   });

@@ -178,6 +178,21 @@ def test_corruption_detection(tmp_path):
         store.read_text(RUN, "report", "report.md")
 
 
+def test_non_regular_artifact_content_raises_integrity_error(tmp_path):
+    store = _make_store(tmp_path)
+    _write_text(store, RUN)
+
+    content_path = _run_dir(tmp_path, RUN) / "run" / "report" / "report.md"
+    content_path.unlink()
+    content_path.mkdir()
+
+    with pytest.raises(
+        ArtifactIntegrityError,
+        match="not a regular file",
+    ):
+        store.read_text(RUN, "report", "report.md")
+
+
 # ── Missing content ────────────────────────────────────────────────────────
 
 def test_missing_content(tmp_path):

@@ -79,6 +79,19 @@ class RunTransaction:
                 f"Record run_id {record_run_id} does not match {self.run_id}"
             )
 
+    @staticmethod
+    def _assert_child_storage_path(directory: Path, path: Path) -> None:
+        """Reject aliases that could escape the selected Run's collection."""
+
+        if directory.is_symlink():
+            raise RecordScopeError(
+                f"Child collection cannot be a symlink: {directory.name}"
+            )
+        if path.is_symlink():
+            raise RecordScopeError(
+                f"Child record cannot be a symlink: {path.name}"
+            )
+
     def create_run(self, run: Run) -> Run:
         if _uuid_text(run.id) != self.run_id:
             raise RecordScopeError(
@@ -118,6 +131,7 @@ class RunTransaction:
         self.get_run()
 
         path = self._child_path(collection, record.id)
+        self._assert_child_storage_path(path.parent, path)
         if path.exists():
             raise RecordAlreadyExists(
                 f"{record.__class__.__name__} already exists: {record.id}"
@@ -134,7 +148,10 @@ class RunTransaction:
     ) -> ModelT:
         self.get_run()
         path = self._child_path(collection, record_id)
-        return self._repository._read_model(path, model_type)
+        self._assert_child_storage_path(path.parent, path)
+        record = self._repository._read_model(path, model_type)
+        self._assert_scope(record)
+        return record
 
     def _save_child(
         self,
@@ -145,6 +162,7 @@ class RunTransaction:
         self.get_run()
 
         path = self._child_path(collection, record.id)
+        self._assert_child_storage_path(path.parent, path)
         if not path.exists():
             raise RecordNotFound(
                 f"{record.__class__.__name__} not found: {record.id}"
@@ -160,13 +178,20 @@ class RunTransaction:
     ) -> List[ModelT]:
         self.get_run()
         directory = self._repository._run_dir(self.run_id) / collection
+        if directory.is_symlink():
+            raise RecordScopeError(
+                f"Child collection cannot be a symlink: {collection}"
+            )
         if not directory.exists():
             return []
 
-        return [
-            self._repository._read_model(path, model_type)
-            for path in sorted(directory.glob("*.json"))
-        ]
+        records: List[ModelT] = []
+        for path in sorted(directory.glob("*.json")):
+            self._assert_child_storage_path(directory, path)
+            record = self._repository._read_model(path, model_type)
+            self._assert_scope(record)
+            records.append(record)
+        return records
 
     def create_task(self, task: Task) -> Task:
         return self._create_child("tasks", task)
@@ -234,13 +259,20 @@ class RunTransaction:
         self.get_run()
 
         path = self._repository._run_dir(self.run_id) / "events.jsonl"
+        if path.is_symlink():
+            raise RecordScopeError("Audit ledger cannot be a symlink")
         self._repository._append_jsonl(path, event)
         return event
 
     def list_events(self, limit: int | None = None) -> List[AuditEvent]:
         self.get_run()
         path = self._repository._run_dir(self.run_id) / "events.jsonl"
-        return self._repository._read_jsonl(path, AuditEvent, limit=limit)
+        if path.is_symlink():
+            raise RecordScopeError("Audit ledger cannot be a symlink")
+        events = self._repository._read_jsonl(path, AuditEvent, limit=limit)
+        for event in events:
+            self._assert_scope(event)
+        return events
 
 
 class FileStateRepository:
