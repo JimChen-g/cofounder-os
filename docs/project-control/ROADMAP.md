@@ -13,7 +13,7 @@
 | D08 | Deterministic Policy Gate | ACCEPTED |
 | D09 | Artifact Synthesizer | ACCEPTED |
 | D10 | Workflow Controller and recovery | ACCEPTED |
-| D11 | Product API | RELEASE_CANDIDATE |
+| D11 | Product API | ACCEPTED |
 | D12 | Founder Mission Control UI | PENDING |
 | D13 | Evaluation Dashboard | PENDING |
 | D14 | Hackathon submission package | PENDING |

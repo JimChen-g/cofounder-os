@@ -14,6 +14,7 @@ set -euo pipefail
 #
 # Environment:
 #   COFOUNDER_BACKUP_ROOT — override backup root directory
+#   COFOUNDER_REVIEW_STATUS — PENDING or PASS (defaults to PENDING)
 #
 # Creates a dated recovery package under:
 #   $COFOUNDER_BACKUP_ROOT or $HOME/Documents/CoFounderOS/stage-backups/<STAGE-ID>/<UTC timestamp>/
@@ -58,6 +59,9 @@ REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 TOOL_REPO="${COFOUNDER_TOOL_REPO:-$HOME/Projects/cofounder-os}"
 PYTEST_BIN="${COFOUNDER_PYTEST_BIN:-$TOOL_REPO/.venv/bin/pytest}"
 RUFF_BIN="${COFOUNDER_RUFF_BIN:-$TOOL_REPO/.venv/bin/ruff}"
+REVIEW_STATUS="${COFOUNDER_REVIEW_STATUS:-PENDING}"
+PYTEST_BIN_DISPLAY="${PYTEST_BIN/#$HOME/\$HOME}"
+BACKUP_DIR_DISPLAY="${BACKUP_DIR/#$HOME/\$HOME}"
 
 # Validate stage ID format
 if [[ ! "$STAGE_ID" =~ ^[A-Z0-9]+(-[A-Z0-9]+)?$ ]]; then
@@ -72,6 +76,10 @@ if [[ ! "$BASELINE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 if [[ ! "$ACCEPTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   echo "ERROR: Invalid accepted SHA format: $ACCEPTED_SHA" >&2
+  exit 1
+fi
+if [[ "$REVIEW_STATUS" != "PENDING" && "$REVIEW_STATUS" != "PASS" ]]; then
+  echo "ERROR: Invalid review status: $REVIEW_STATUS" >&2
   exit 1
 fi
 
@@ -254,7 +262,7 @@ TEST_SUMMARY="$BACKUP_DIR/test-summary.txt"
 # Generated at: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
 EOF
 echo "## Full Test Suite" >> "$TEST_SUMMARY"
-echo "Command: $PYTEST_BIN tests/ -x -q" >> "$TEST_SUMMARY"
+echo "Command: $PYTEST_BIN_DISPLAY tests/ -x -q" >> "$TEST_SUMMARY"
 if [[ -d "$REPO/tests" ]]; then
   "$PYTEST_BIN" tests/ -x -q >> "$TEST_SUMMARY" 2>&1
   echo "Result: PASS" >> "$TEST_SUMMARY"
@@ -312,6 +320,7 @@ if [[ -n "$CHANGED_PATHS" ]]; then
 else
   echo "CLEAN: no changed files to scan" >> "$TEST_SUMMARY"
 fi
+/usr/bin/sed -i '' "s|$HOME|\\\$HOME|g" "$TEST_SUMMARY"
 echo "  OK: $TEST_SUMMARY"
 
 # 6. manifest.env — all required keys populated, DEPLOYMENT_RESULT=PASS matches FINAL_RESULT
@@ -340,11 +349,11 @@ echo "[7/9] Generating stage-report.txt..."
 STAGE_REPORT="$BACKUP_DIR/stage-report.txt"
 
 # Capture test results for the report
-TARGETED_TEST_CMD="$PYTEST_BIN ${TARGETED_TEST_FILES[*]} -x"
+TARGETED_TEST_CMD="$PYTEST_BIN_DISPLAY ${TARGETED_TEST_FILES[*]} -x"
 TARGETED_TEST_COUNT=$("$PYTEST_BIN" "${TARGETED_TEST_FILES[@]}" -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
-GOVERNANCE_TEST_CMD="$PYTEST_BIN tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x"
+GOVERNANCE_TEST_CMD="$PYTEST_BIN_DISPLAY tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x"
 GOVERNANCE_TEST_COUNT=$("$PYTEST_BIN" tests/test_execution_service.py tests/test_state_machine.py tests/test_state_repository.py -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
-FULL_SUITE_CMD="$PYTEST_BIN tests/ -x"
+FULL_SUITE_CMD="$PYTEST_BIN_DISPLAY tests/ -x"
 FULL_SUITE_COUNT=$("$PYTEST_BIN" tests/ -x --tb=short 2>&1 | /usr/bin/grep -oE "[0-9]+ passed" | /usr/bin/grep -oE "[0-9]+" | /usr/bin/head -1)
 
 LOCAL_SHA="$(/usr/bin/git rev-parse HEAD)"
@@ -360,7 +369,7 @@ REPORT_GENERATED_AT: $(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')
 REPORT_GENERATED_BY: create-stage-backup.sh
 REPORT_VERSION: 1.0
 
-REVIEW_STATUS=PENDING
+REVIEW_STATUS=$REVIEW_STATUS
 LOCAL_SHA=$LOCAL_SHA
 SPARK_SHA=$SPARK_SHA
 ORIGIN_MAIN_SHA=$ORIGIN_SHA
@@ -382,7 +391,7 @@ ROLLBACK_EVIDENCE=N/A (no rollback required)
 
 FINAL_RESULT=PASS
 CHANGED_FILES=see changed-files.txt
-BACKUP_PATH=$BACKUP_DIR
+BACKUP_PATH=$BACKUP_DIR_DISPLAY
 TEST_RESULT=see test-summary.txt
 CURRENT_SERVICES=validated during deployment
 NEXT_ACTION=$NEXT_ACTION

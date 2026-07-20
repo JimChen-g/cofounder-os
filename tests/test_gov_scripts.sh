@@ -40,7 +40,9 @@ echo "=== Test 1: Isolated backup with COFOUNDER_BACKUP_ROOT ==="
 TEST_TMPDIR="$(/usr/bin/mktemp -d /tmp/cofounder-gov.XXXXXX)"
 cd "$REPO"
 BACKUP_LOG="$TEST_TMPDIR/backup.log"
-COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" "$BACKUP_SCRIPT" "G01-TEST" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1
+COFOUNDER_BACKUP_ROOT="$TEST_TMPDIR/backups" \
+  COFOUNDER_REVIEW_STATUS=PASS \
+  "$BACKUP_SCRIPT" "G01-TEST" "$(git rev-parse HEAD)" > "$BACKUP_LOG" 2>&1
 BACKUP_RC=$?
 if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$BACKUP_LOG"; then
   # Verify it went to the temp directory, not the real stage-backups
@@ -80,6 +82,12 @@ if [[ $BACKUP_RC -eq 0 ]] && [[ -f "$BACKUP_LOG" ]] && grep -q "BACKUP_DIR=" "$B
     else
       fail "changed-files.txt missing range annotation"
     fi
+  fi
+  if /usr/bin/grep -q '^REVIEW_STATUS=PASS$' \
+    "$BACKUP_DIR/stage-report.txt"; then
+    pass "stage report records the supplied independent review result"
+  else
+    fail "stage report does not record REVIEW_STATUS=PASS"
   fi
 else
   fail "isolated backup — script exited rc=$BACKUP_RC"

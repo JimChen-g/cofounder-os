@@ -26,18 +26,14 @@ This document must be updated in the same commit as every accepted stage.
 | D08 | Deterministic Policy Gate | 4800001 |
 | D09 | Artifact Synthesizer | 4800001 |
 | D10 | Workflow Controller and recovery | 4800001 |
+| D11 | Product API | 6c7de61 |
 | G01 | Project delivery unification | g01-accepted (annotated tag) |
 
-## Release Candidate; Acceptance Pending
+## Release Candidates
 
-| Stage | Description | Working reference |
-|-------|-------------|-------------------|
-| D11 | Product API | `codex/d11-product-api` independent worktree |
-
-The D11 entry records local implementation and a passing full suite
-(`396 passed` on 2026-07-20). Final acceptance still requires an independent
-review, publication to `main`, Spark deployment, three-plane verification, and
-a D11 recovery package.
+None. D11 passed independent review, publication, Spark deployment,
+three-plane verification, real Product API execution, idempotent replay, and
+recovery packaging on 2026-07-20.
 
 ## Corrective History
 
@@ -69,21 +65,22 @@ a D11 recovery package.
 | 8ee6968 | D06-D corrective: close lifecycle blockers per independent review | Corrective: product_lifecycle, tests, backup script |
 | 4f2f14f | D06-D corrective: improve stage report and test-count extraction | Corrective: backup script |
 | 85db29d | D06-D corrective: add real behavior tests and close exception paths | Corrective: product_lifecycle, tests |
+| 6c7de61 | D11 independent-review corrections and privacy-safe release | Corrective: runtime token budgets, runtime lock isolation, public release hygiene |
 
 ## Current State
 
-- **Current accepted product reference**: D07-D10 commit `4800001`
-- **Resolve accepted product commit with**: `git rev-parse 4800001`
+- **Current accepted product reference**: D11 implementation commit `6c7de61`
+- **Resolve accepted product commit with**: `git rev-parse 6c7de61`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D11 — Product API — release candidate
-- **Current release worktree**: `codex/d11-product-api`
+- **Current product stage**: D11 — Product API — accepted
+- **Current release worktree**: `main`
+- **Independent D11 reference**: `codex/d11-product-api`
 - **Independent D07-D10 reference**: `codex/d07-d10`
-- **Current release scope**: D11 — local implementation and full validation
-  passed; independent review, publication, deployment, three-plane
-  verification, and recovery packaging remain
-- **Next product stage**: D12 — Founder Mission Control UI — blocked pending
-  D11 acceptance
+- **Current release scope**: D11 — independent review, public publication,
+  Spark deployment, real end-to-end execution, three-plane verification, and
+  recovery packaging passed
+- **Next product stage**: D12 — Founder Mission Control UI — ready to start
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`
@@ -95,6 +92,7 @@ a D11 recovery package.
 - **D07-D10 accepted implementation HEAD**: 4800001ed0b1e979894295c6401ffcfb59a7c98d
 - **D07-D10 recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D07-D10/20260720-050834Z/`
 - **D11 recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D11/`
+- **D11 accepted implementation HEAD**: 6c7de61a2dad0d7e882713235fbc98f75ddeb0a3
 
 ## Mandatory Update Block
 
