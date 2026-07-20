@@ -209,23 +209,47 @@ class ProductTaskLifecycleService:
             json_domain = None
             md_domain = None
 
-            for art_id in task.output_artifact_ids:
-                try:
-                    art = self.orchestration.repository.get_artifact(
-                        run_uuid, art_id
+            try:
+                # Require exactly one Domain Artifact for each Product output.
+                output_artifacts = [
+                    self.orchestration.repository.get_artifact(run_uuid, art_id)
+                    for art_id in task.output_artifact_ids
+                ]
+                by_name: dict[str, list[Any]] = {}
+                for art in output_artifacts:
+                    by_name.setdefault(art.name, []).append(art)
+
+                json_artifacts = by_name.get("product-brief", [])
+                md_artifacts = by_name.get("product-brief-md", [])
+                if len(json_artifacts) != 1 or len(md_artifacts) != 1:
+                    raise ProductArtifactVerificationError(
+                        "Invalid output artifacts: "
+                        f"product-brief count={len(json_artifacts)}, "
+                        f"product-brief-md count={len(md_artifacts)}"
                     )
-                    if art.name == "product-brief":
-                        json_domain = art
-                        json_artifact = self._resolve_stored_artifact(
-                            run_uuid, task_uuid, art
-                        )
-                    elif art.name == "product-brief-md":
-                        md_domain = art
-                        md_artifact = self._resolve_stored_artifact(
-                            run_uuid, task_uuid, art
-                        )
-                except Exception:
-                    pass
+
+                json_domain = json_artifacts[0]
+                md_domain = md_artifacts[0]
+                json_artifact = self._resolve_stored_artifact(
+                    run_uuid, task_uuid, json_domain
+                )
+                md_artifact = self._resolve_stored_artifact(
+                    run_uuid, task_uuid, md_domain
+                )
+                self._verify_output_content(json_artifact, json_domain)
+                self._verify_output_content(md_artifact, md_domain)
+            except Exception as exc:
+                # The persisted Task remains COMPLETED, but callers must not
+                # treat its outputs as usable until an operator reconciles
+                # the missing, duplicate, or corrupt artifact evidence.
+                return LifecycleExecutionResult(
+                    status="completed",
+                    task=task,
+                    retry_available=False,
+                    terminal_failure=False,
+                    reconciliation_required=True,
+                    last_error=self._safe_error_message(exc),
+                )
 
             return LifecycleExecutionResult(
                 status="completed",
@@ -614,7 +638,8 @@ class ProductTaskLifecycleService:
 
         Requires either:
         - A persisted Approval for this task with status APPROVED, with
-          purpose (reason), expiry, approver (decided_by), and correlation evidence
+          purpose (reason), expiry (future UTC), approver (decided_by), and
+          correlation evidence
         - An injected retry policy decision matching actor and task
 
         Actor names alone are never sufficient authorization.
@@ -636,6 +661,20 @@ class ProductTaskLifecycleService:
                     if approval.expires_at is None:
                         raise RetryAuthorizationError(
                             f"Approval {approval.id} lacks required expiry (expires_at)"
+                        )
+                    # Normalize expires_at to UTC and reject expired approvals
+                    expires_at = approval.expires_at
+                    if expires_at.tzinfo is None:
+                        # Safely handle naive datetime by assuming UTC
+                        expires_at = expires_at.replace(tzinfo=timezone.utc)
+                    else:
+                        # Normalize to UTC
+                        expires_at = expires_at.astimezone(timezone.utc)
+                    now_utc = datetime.now(timezone.utc)
+                    if expires_at <= now_utc:
+                        raise RetryAuthorizationError(
+                            f"Approval {approval.id} has expired at "
+                            f"{approval.expires_at.isoformat()}"
                         )
                     # Verify the actor is the approver or the requester
                     if approval.decided_by != actor and approval.requested_by != actor:

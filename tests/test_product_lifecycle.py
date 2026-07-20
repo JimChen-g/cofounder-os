@@ -1328,6 +1328,82 @@ class TestCompletedReplay:
 
         assert len(registered_1) == len(registered_2)
 
+    async def test_completed_replay_with_missing_artifacts_returns_error(self, tmp_path):
+        """Missing COMPLETED outputs require reconciliation without a Gateway call."""
+        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        # Complete the task normally
+        result1 = await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+        assert result1.status == "completed"
+
+        # Simulate missing stored artifacts by clearing output_artifact_ids
+        # but keeping task status as COMPLETED
+        completed_task = orch.repository.get_task(run.id, task.id)
+        original_output_ids = completed_task.output_artifact_ids
+        completed_task.output_artifact_ids = []
+        orch.repository.save_task(completed_task)
+
+        # Replay should detect missing artifacts
+        result2 = await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+        assert result2.status == "completed"
+        assert result2.terminal_failure is False
+        assert result2.reconciliation_required is True
+        assert "Invalid output artifacts" in (result2.last_error or "")
+
+        # Restore for other tests
+        completed_task = orch.repository.get_task(run.id, task.id)
+        completed_task.output_artifact_ids = original_output_ids
+        orch.repository.save_task(completed_task)
+
+    async def test_completed_replay_with_corrupt_artifacts_returns_error(self, tmp_path):
+        """Corrupt COMPLETED outputs require reconciliation without a Gateway call."""
+        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(tmp_path)
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        # Complete the task normally
+        result1 = await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+        assert result1.status == "completed"
+
+        # Corrupt the accepted content file so the Artifact Store's real
+        # checksum verification fails during completed-task replay.
+        content_path = (
+            store.root
+            / "runs"
+            / str(run.id)
+            / "artifacts"
+            / "tasks"
+            / str(task.id)
+            / "product-brief"
+            / "product-brief.json"
+        )
+        content_path.write_bytes(b'{"corrupted":true}\n')
+
+        # Replay should detect checksum mismatch
+        result2 = await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+        assert result2.status == "completed"
+        assert result2.terminal_failure is False
+        assert result2.reconciliation_required is True
+        assert "integrity" in (result2.last_error or "").lower()
+
 
 # ── Blocker 3: retry authorization ───────────────────────────────────────────
 
@@ -1471,6 +1547,149 @@ class TestRetryAuthorizationPersisted:
             await lifecycle.retry_blocked_task(
                 run_id=run.id, task_id=task.id, actor="executive"
             )
+
+    async def test_approval_with_future_expiry_authorizes(self, tmp_path):
+        """Approval with future UTC expiry authorizes retry."""
+        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Future expiry — should authorize
+        approval = Approval(
+            run_id=run.id,
+            task_id=task.id,
+            status=ApprovalStatus.APPROVED.value,
+            requested_by="product-lifecycle",
+            reason="Retry needed",
+            decided_by="executive",
+            decision_reason="Approved retry",
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        orch.repository.create_approval(approval)
+        gateway.response = json.dumps(VALID_RESULT_DICT)
+
+        result = await lifecycle.retry_blocked_task(
+            run_id=run.id, task_id=task.id, actor="executive"
+        )
+        assert result.status == "completed"
+
+    async def test_approval_with_expired_expiry_rejected(self, tmp_path):
+        """Approval with expired expiry is rejected."""
+        lifecycle, orch, repo, sm, store, _ = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Expired expiry — should reject
+        approval = Approval(
+            run_id=run.id,
+            task_id=task.id,
+            status=ApprovalStatus.APPROVED.value,
+            requested_by="product-lifecycle",
+            reason="Retry needed",
+            decided_by="executive",
+            decision_reason="Approved retry",
+            expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        )
+        orch.repository.create_approval(approval)
+
+        with pytest.raises(RetryAuthorizationError, match="expired"):
+            await lifecycle.retry_blocked_task(
+                run_id=run.id, task_id=task.id, actor="executive"
+            )
+
+    async def test_approval_with_timezone_aware_expiry_authorizes(self, tmp_path):
+        """Approval with timezone-aware expiry is normalized to UTC and authorizes."""
+        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Timezone-aware expiry (US/Eastern) in the future — should authorize after UTC normalization
+        from zoneinfo import ZoneInfo
+        eastern = ZoneInfo("US/Eastern")
+        future_eastern = datetime.now(eastern) + timedelta(hours=1)
+        approval = Approval(
+            run_id=run.id,
+            task_id=task.id,
+            status=ApprovalStatus.APPROVED.value,
+            requested_by="product-lifecycle",
+            reason="Retry needed",
+            decided_by="executive",
+            decision_reason="Approved retry",
+            expires_at=future_eastern,
+        )
+        orch.repository.create_approval(approval)
+        gateway.response = json.dumps(VALID_RESULT_DICT)
+
+        result = await lifecycle.retry_blocked_task(
+            run_id=run.id, task_id=task.id, actor="executive"
+        )
+        assert result.status == "completed"
+
+    async def test_approval_with_naive_expiry_safely_handled(self, tmp_path):
+        """Approval with naive datetime expiry is safely handled as UTC."""
+        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(
+            tmp_path, gateway_response="not valid json"
+        )
+        run = _make_run(repo, sm, orch, owner=OWNER)
+        pred = _make_predecessor_task(orch, run.id)
+        task = _make_task(orch, run.id, title="Product Brief")
+        task.dependency_ids = [pred.id]
+        orch.repository.save_task(task)
+        task = orch.repository.get_task(run.id, task.id)
+
+        await lifecycle.execute_ready_task(
+            run_id=run.id, task_id=task.id, actor="product-lifecycle"
+        )
+
+        # Naive datetime (no tzinfo) — should be safely treated as UTC
+        naive_future = datetime.now() + timedelta(hours=1)
+        approval = Approval(
+            run_id=run.id,
+            task_id=task.id,
+            status=ApprovalStatus.APPROVED.value,
+            requested_by="product-lifecycle",
+            reason="Retry needed",
+            decided_by="executive",
+            decision_reason="Approved retry",
+            expires_at=naive_future,
+        )
+        orch.repository.create_approval(approval)
+        gateway.response = json.dumps(VALID_RESULT_DICT)
+
+        result = await lifecycle.retry_blocked_task(
+            run_id=run.id, task_id=task.id, actor="executive"
+        )
+        assert result.status == "completed"
 
 
 # ── Blocker 4: post-claim failure paths ─────────────────────────────────────
@@ -2084,44 +2303,96 @@ class TestGovernanceRecoveryEvidence:
 
     async def test_completion_interrupted_then_completed_after_restart(self, tmp_path):
         """Completion interrupted after persisted outputs, then completed after restart."""
-        retry_policy = {}
-        lifecycle, orch, repo, sm, store, gateway = _make_lifecycle_service(
-            tmp_path, retry_policy_decisions=retry_policy
+        # First set of instances: complete the task
+        lifecycle1, orch1, repo1, sm1, store1, gateway1 = _make_lifecycle_service(
+            tmp_path, gateway_response=json.dumps(VALID_RESULT_DICT),
+            retry_policy_decisions={}
         )
-        run = _make_run(repo, sm, orch, owner=OWNER)
-        pred = _make_predecessor_task(orch, run.id)
-        input_art = _make_input_artifact(orch, run.id, pred.id, store=store)
-        task = _make_task(orch, run.id, title="Product Brief")
+        run = _make_run(repo1, sm1, orch1, owner=OWNER)
+        pred = _make_predecessor_task(orch1, run.id)
+        input_art = _make_input_artifact(orch1, run.id, pred.id, store=store1)
+        task = _make_task(orch1, run.id, title="Product Brief")
         task.dependency_ids = [pred.id]
         task.input_artifact_ids = [input_art.id]
-        orch.repository.save_task(task)
-        task = orch.repository.get_task(run.id, task.id)
+        orch1.repository.save_task(task)
+        task = orch1.repository.get_task(run.id, task.id)
 
         # Simulate completion persistence failure
-        original_complete = lifecycle.agent_execution.complete_claimed_task
+        original_complete = lifecycle1.agent_execution.complete_claimed_task
         def broken_complete(*args, **kwargs):
             raise RuntimeError("Simulated persistence failure")
-        lifecycle.agent_execution.complete_claimed_task = broken_complete  # type: ignore[method-assign]
+        lifecycle1.agent_execution.complete_claimed_task = broken_complete  # type: ignore[method-assign]
 
         try:
-            result = await lifecycle.execute_ready_task(
+            result = await lifecycle1.execute_ready_task(
                 run_id=run.id, task_id=task.id, actor="product-lifecycle"
             )
             assert result.reconciliation_required is True
             assert result.status == "running"
         finally:
-            lifecycle.agent_execution.complete_claimed_task = original_complete  # type: ignore[method-assign]
+            lifecycle1.agent_execution.complete_claimed_task = original_complete  # type: ignore[method-assign]
 
-        # After restart, complete via complete_after_reconciliation
-        retry_policy[(str(run.id), str(task.id))] = {
-            "actor": "executive", "decision": "approved",
-            "purpose": "Retry after failure", "approver": "executive",
-            "correlation_id": "corr-2"
+        # After restart: construct entirely new repository, store, orchestration,
+        # execution, Product service, and lifecycle instances before reconciliation
+        repo2 = FileStateRepository(tmp_path / "runs")
+        sm2 = LifecycleStateMachine(repo2)
+        orch2 = OrchestrationService(repo2, sm2)
+        store2 = FileArtifactStore(tmp_path / "artifacts")
+
+        class FakeGateway2:
+            def __init__(self):
+                self.calls = 0
+            async def complete(self, messages, **kwargs):
+                self.calls += 1
+                return GatewayCompletion(
+                    content="{}",
+                    requested_model=DEFAULT_VIRTUAL_MODEL,
+                    selected_provider="qwen",
+                    selected_model=DEFAULT_VIRTUAL_MODEL,
+                    routing_reason="Default routing",
+                    fallback_used=False,
+                    request_id=f"req-{self.calls}",
+                    usage={"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300},
+                    raw_metadata={},
+                )
+
+        gateway2 = FakeGateway2()
+        product_service2 = ProductAgentService(
+            gateway_client=gateway2,
+            artifact_store=store2,
+            orchestration_service=orch2,
+        )
+
+        retry_policy = {
+            (str(run.id), str(task.id)): {
+                "actor": "executive", "decision": "approved",
+                "purpose": "Reconciliation completion", "approver": "executive",
+                "correlation_id": "corr-recovery"
+            }
         }
-        completed = await lifecycle.complete_after_reconciliation(
+
+        lifecycle2 = ProductTaskLifecycleService(
+            agent_execution=AgentExecutionService(repo2),
+            product_agent_service=product_service2,
+            artifact_store=store2,
+            orchestration=orch2,
+            retry_policy_decisions=retry_policy,
+        )
+
+        # Assert no Gateway call during reconciliation
+        reconcile = lifecycle2.reconcile_task(run.id, task.id)
+        assert reconcile.status == "running"
+        assert reconcile.action == "completion_resumable"
+        assert gateway2.calls == 0  # No Gateway call during reconciliation
+
+        # Complete after reconciliation
+        completed = await lifecycle2.complete_after_reconciliation(
             run_id=run.id, task_id=task.id, actor="executive"
         )
         assert completed.status == "completed"
+        assert completed.json_domain_artifact is not None
+        assert completed.md_domain_artifact is not None
+        assert gateway2.calls == 0  # Still no Gateway call
 
 
 # ── Existing tests remain green ──────────────────────────────────────────────
