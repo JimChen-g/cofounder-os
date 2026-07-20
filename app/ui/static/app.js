@@ -5,8 +5,11 @@ const state = {
   snapshot: null,
   artifacts: [],
   events: [],
+  evaluation: null,
   selectedArtifactId: null,
   activeView: "mission",
+  requestEpoch: 0,
+  evaluationEpoch: 0,
 };
 
 const viewTitles = {
@@ -14,6 +17,7 @@ const viewTitles = {
   approvals: "Approvals",
   artifacts: "Artifacts",
   audit: "Audit trail",
+  evaluation: "Evaluation",
 };
 
 const agentDefinitions = {
@@ -51,11 +55,16 @@ const selectors = {
   composer: document.querySelector("#mission-composer"),
   downloadSelected: document.querySelector("#download-selected"),
   emptyOverview: document.querySelector("#empty-overview"),
+  evaluationAgents: document.querySelector("#evaluation-agents"),
+  evaluationLatest: document.querySelector("#evaluation-latest"),
+  evaluationProviders: document.querySelector("#evaluation-providers"),
+  evaluationRuns: document.querySelector("#evaluation-runs"),
   formHint: document.querySelector("#form-hint"),
   launchButton: document.querySelector("#launch-mission"),
   missionForm: document.querySelector("#mission-form"),
   newMission: document.querySelector("#new-mission"),
   refreshRun: document.querySelector("#refresh-run"),
+  refreshEvaluation: document.querySelector("#refresh-evaluation"),
   retryRun: document.querySelector("#retry-run"),
   runWorkspace: document.querySelector("#run-workspace"),
   systemState: document.querySelector("#system-state"),
@@ -89,6 +98,7 @@ function statusClass(status) {
 function labelize(value) {
   return String(value || "unknown")
     .replaceAll("_", " ")
+    .replaceAll("-", " ")
     .replaceAll(".", " · ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -195,6 +205,9 @@ function switchView(view) {
   });
   selectors.viewTitle.textContent = viewTitles[target];
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (target === "evaluation") {
+    loadEvaluation();
+  }
 }
 
 async function checkHealth() {
@@ -214,6 +227,7 @@ async function checkHealth() {
 
 async function createMission(event) {
   event.preventDefault();
+  const requestEpoch = ++state.requestEpoch;
   hideAlert();
   const data = new FormData(selectors.missionForm);
   const payload = {
@@ -241,6 +255,9 @@ async function createMission(event) {
       method: "POST",
       body: JSON.stringify(payload),
     });
+    if (requestEpoch !== state.requestEpoch) {
+      return;
+    }
     state.runId = created.run_id;
     state.snapshot = created.workflow.snapshot;
     state.artifacts = [];
@@ -249,7 +266,9 @@ async function createMission(event) {
     await loadRun({ useCurrentSnapshot: true });
     toast("Mission created and workflow evidence loaded.");
   } catch (error) {
-    showAlert("Mission could not start", error);
+    if (requestEpoch === state.requestEpoch) {
+      showAlert("Mission could not start", error);
+    }
   } finally {
     window.clearTimeout(slowMessageTimer);
     selectors.formHint.textContent =
@@ -262,18 +281,26 @@ async function loadRun({ useCurrentSnapshot = false } = {}) {
   if (!state.runId) {
     return;
   }
+  const requestedRunId = state.runId;
+  const requestEpoch = ++state.requestEpoch;
   hideAlert();
   selectors.refreshRun.disabled = true;
   try {
     const requests = [
       useCurrentSnapshot
         ? Promise.resolve(state.snapshot)
-        : apiRequest(`/api/runs/${state.runId}`),
-      apiRequest(`/api/runs/${state.runId}/artifacts`),
-      apiRequest(`/api/runs/${state.runId}/events?limit=200`),
+        : apiRequest(`/api/runs/${requestedRunId}`),
+      apiRequest(`/api/runs/${requestedRunId}/artifacts`),
+      apiRequest(`/api/runs/${requestedRunId}/events?limit=200`),
     ];
     const [snapshot, artifactResponse, eventResponse] =
       await Promise.all(requests);
+    if (
+      requestEpoch !== state.requestEpoch ||
+      requestedRunId !== state.runId
+    ) {
+      return;
+    }
     state.snapshot = snapshot;
     state.artifacts = artifactResponse.artifacts || [];
     state.events = eventResponse.events || [];
@@ -287,9 +314,19 @@ async function loadRun({ useCurrentSnapshot = false } = {}) {
     }
     renderAll();
   } catch (error) {
-    showAlert("Run evidence could not be refreshed", error);
+    if (
+      requestEpoch === state.requestEpoch &&
+      requestedRunId === state.runId
+    ) {
+      showAlert("Run evidence could not be refreshed", error);
+    }
   } finally {
-    selectors.refreshRun.disabled = false;
+    if (
+      requestEpoch === state.requestEpoch &&
+      requestedRunId === state.runId
+    ) {
+      selectors.refreshRun.disabled = false;
+    }
   }
 }
 
@@ -297,22 +334,38 @@ async function retryRun() {
   if (!state.runId) {
     return;
   }
+  const requestedRunId = state.runId;
+  const requestEpoch = ++state.requestEpoch;
   hideAlert();
   setButtonLoading(selectors.retryRun, true);
   try {
-    const result = await apiRequest(`/api/runs/${state.runId}/retry`, {
+    const result = await apiRequest(`/api/runs/${requestedRunId}/retry`, {
       method: "POST",
       body: JSON.stringify({ max_cycles: 100 }),
     });
+    if (
+      requestEpoch !== state.requestEpoch ||
+      requestedRunId !== state.runId
+    ) {
+      return;
+    }
     state.snapshot = result.snapshot;
     await loadRun({ useCurrentSnapshot: true });
     toast(
-      result.replayed
+      result.terminal_failure
+        ? "Recovery stopped safely. Review the failed task and audit evidence."
+        : result.replayed
         ? "Completed evidence verified; no additional model calls were made."
         : "Bounded recovery completed.",
+      result.terminal_failure ? "error" : "success",
     );
   } catch (error) {
-    showAlert("Recovery could not continue", error);
+    if (
+      requestEpoch === state.requestEpoch &&
+      requestedRunId === state.runId
+    ) {
+      showAlert("Recovery could not continue", error);
+    }
   } finally {
     setButtonLoading(selectors.retryRun, false);
   }
@@ -328,6 +381,8 @@ async function resolveApproval(approvalId, decision, card) {
     );
     return;
   }
+  const requestedRunId = state.runId;
+  const requestEpoch = ++state.requestEpoch;
 
   const buttons = card.querySelectorAll("button");
   buttons.forEach((button) => {
@@ -349,7 +404,7 @@ async function resolveApproval(approvalId, decision, card) {
   hideAlert();
   try {
     const response = await apiRequest(
-      `/api/runs/${state.runId}/approvals/${approvalId}`,
+      `/api/runs/${requestedRunId}/approvals/${approvalId}`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -360,6 +415,12 @@ async function resolveApproval(approvalId, decision, card) {
         }),
       },
     );
+    if (
+      requestEpoch !== state.requestEpoch ||
+      requestedRunId !== state.runId
+    ) {
+      return;
+    }
     state.snapshot = response.workflow.snapshot;
     await loadRun({ useCurrentSnapshot: true });
     toast(
@@ -368,12 +429,17 @@ async function resolveApproval(approvalId, decision, card) {
         : "Rejection recorded. The workflow stopped with audit evidence.",
     );
   } catch (error) {
-    showAlert("Approval could not be resolved", error);
-    progress.remove();
-    card.removeAttribute("aria-busy");
-    buttons.forEach((button) => {
-      button.disabled = false;
-    });
+    if (
+      requestEpoch === state.requestEpoch &&
+      requestedRunId === state.runId
+    ) {
+      showAlert("Approval could not be resolved", error);
+      progress.remove();
+      card.removeAttribute("aria-busy");
+      buttons.forEach((button) => {
+        button.disabled = false;
+      });
+    }
   } finally {
     window.clearTimeout(slowMessageTimer);
   }
@@ -1017,6 +1083,252 @@ function renderAudit() {
   });
 }
 
+function formatPercent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toFixed(1)}%` : "—";
+}
+
+async function loadEvaluation() {
+  const evaluationEpoch = ++state.evaluationEpoch;
+  hideAlert();
+  setButtonLoading(selectors.refreshEvaluation, true);
+  try {
+    const summary = await apiRequest("/api/evaluation/summary?limit=50");
+    if (evaluationEpoch !== state.evaluationEpoch) {
+      return;
+    }
+    state.evaluation = summary;
+    renderEvaluation();
+  } catch (error) {
+    if (evaluationEpoch === state.evaluationEpoch) {
+      showAlert("Evaluation evidence could not be loaded", error);
+      renderEvaluationEmpty();
+    }
+  } finally {
+    if (evaluationEpoch === state.evaluationEpoch) {
+      setButtonLoading(selectors.refreshEvaluation, false);
+    }
+  }
+}
+
+function renderEvaluationEmpty() {
+  document.querySelector("#evaluation-run-count").textContent = "0";
+  document.querySelector("#evaluation-run-detail").textContent =
+    "no persisted runs";
+  document.querySelector("#evaluation-completion").textContent = "—";
+  document.querySelector("#evaluation-average").textContent = "—";
+  document.querySelector("#evaluation-integrity").textContent = "—";
+  document.querySelector("#evaluation-grade").textContent = "—";
+  document.querySelector("#evaluation-grade").className =
+    "evaluation-grade grade-attention";
+  document.querySelector("#evaluation-retries").textContent = "0 retries";
+  document.querySelector("#evaluation-updated").textContent =
+    "Awaiting persisted evidence";
+  selectors.evaluationLatest.replaceChildren(
+    emptyCard(
+      "◫",
+      "No evaluated runs",
+      "Launch a founder mission to create deterministic execution evidence.",
+    ),
+  );
+  selectors.evaluationAgents.replaceChildren(
+    element("p", "evaluation-empty-copy", "No agent performance evidence yet."),
+  );
+  selectors.evaluationRuns.replaceChildren(
+    element("p", "evaluation-empty-copy", "No Run history is available."),
+  );
+  selectors.evaluationProviders.replaceChildren(
+    element("p", "evaluation-empty-copy", "No provider routes are recorded."),
+  );
+}
+
+function renderEvaluation() {
+  const summary = state.evaluation;
+  if (!summary || !summary.recent_runs?.length) {
+    renderEvaluationEmpty();
+    return;
+  }
+
+  document.querySelector("#evaluation-run-count").textContent =
+    String(summary.run_count);
+  document.querySelector("#evaluation-run-detail").textContent =
+    `${summary.task_success_rate.toFixed(1)}% task success`;
+  document.querySelector("#evaluation-completion").textContent =
+    formatPercent(summary.completion_rate);
+  document.querySelector("#evaluation-average").textContent =
+    Number(summary.average_score).toFixed(1);
+  document.querySelector("#evaluation-integrity").textContent =
+    formatPercent(summary.artifact_integrity_rate);
+  document.querySelector("#evaluation-retries").textContent =
+    `${summary.total_retries} ${summary.total_retries === 1 ? "retry" : "retries"}`;
+  document.querySelector("#evaluation-updated").textContent =
+    `Updated ${formatTime(summary.generated_at, true)}`;
+
+  renderLatestEvaluation(summary.recent_runs[0]);
+  renderEvaluationAgents(summary.agent_performance || []);
+  renderEvaluationRuns(summary.recent_runs);
+  renderEvaluationProviders(summary.provider_distribution || {});
+}
+
+function renderLatestEvaluation(run) {
+  selectors.evaluationLatest.replaceChildren();
+  const grade = String(run.grade || "attention").replace(/[^a-z]/g, "");
+  const gradeBadge = document.querySelector("#evaluation-grade");
+  gradeBadge.textContent = labelize(grade);
+  gradeBadge.className = `evaluation-grade grade-${grade}`;
+
+  const hero = element("div", "evaluation-score-hero");
+  const score = element(
+    "strong",
+    `evaluation-score grade-ring-${grade}`,
+    run.overall_score,
+  );
+  score.setAttribute("aria-label", `${run.overall_score} out of 100`);
+  const copy = element("div");
+  append(
+    copy,
+    element("h3", null, run.objective),
+    element(
+      "p",
+      null,
+      `${labelize(run.status)} · Run ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)}`,
+    ),
+  );
+  append(hero, score, copy);
+
+  const dimensions = element("div", "evaluation-dimensions");
+  run.dimensions.forEach((dimension) => {
+    const item = element("article", "evaluation-dimension");
+    const heading = element("div", "evaluation-dimension-head");
+    append(
+      heading,
+      element("strong", null, dimension.label),
+      element("span", null, `${dimension.score.toFixed(1)} / 100`),
+    );
+    const track = element("div", "evaluation-track");
+    const fill = element(
+      "span",
+      `evaluation-fill dimension-${dimension.status}`,
+    );
+    fill.style.width = `${Math.max(0, Math.min(100, dimension.score))}%`;
+    track.append(fill);
+    append(
+      item,
+      heading,
+      track,
+      element("p", null, dimension.evidence.join(" ")),
+    );
+    dimensions.append(item);
+  });
+  append(selectors.evaluationLatest, hero, dimensions);
+}
+
+function renderEvaluationAgents(agents) {
+  selectors.evaluationAgents.replaceChildren();
+  if (!agents.length) {
+    selectors.evaluationAgents.append(
+      element("p", "evaluation-empty-copy", "No governed tasks are available."),
+    );
+    return;
+  }
+  agents.forEach((agent) => {
+    const row = element("article", "evaluation-bar-row");
+    const heading = element("div", "evaluation-bar-head");
+    append(
+      heading,
+      element("strong", null, labelize(agent.agent_id)),
+      element("span", null, `${agent.success_rate.toFixed(1)}% success`),
+    );
+    const track = element("div", "evaluation-track");
+    const fill = element("span", "evaluation-fill dimension-pass");
+    fill.style.width = `${Math.max(0, Math.min(100, agent.success_rate))}%`;
+    track.append(fill);
+    append(
+      row,
+      heading,
+      track,
+      element(
+        "p",
+        null,
+        `${agent.completed}/${agent.tasks} complete · ${agent.retries} retries · ${agent.average_attempts.toFixed(2)} avg attempts`,
+      ),
+    );
+    selectors.evaluationAgents.append(row);
+  });
+}
+
+function renderEvaluationRuns(runs) {
+  selectors.evaluationRuns.replaceChildren();
+  runs.forEach((run) => {
+    const row = element("article", "evaluation-run-row");
+    const copy = element("div", "evaluation-run-copy");
+    append(
+      copy,
+      element("strong", null, run.objective),
+      element(
+        "p",
+        null,
+        `Run ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)} · ${run.completed_tasks}/${run.task_count} tasks`,
+      ),
+    );
+    const evidence = element("div", "evaluation-run-evidence");
+    append(
+      evidence,
+      element(
+        "span",
+        `task-status ${statusClass(run.status)}`,
+        labelize(run.status),
+      ),
+      element("strong", "evaluation-run-score", run.overall_score),
+    );
+    const inspect = element(
+      "button",
+      "button button-small",
+      "Inspect Run",
+    );
+    inspect.type = "button";
+    inspect.addEventListener("click", () => openEvaluatedRun(run.run_id));
+    append(row, copy, evidence, inspect);
+    selectors.evaluationRuns.append(row);
+  });
+}
+
+function renderEvaluationProviders(distribution) {
+  selectors.evaluationProviders.replaceChildren();
+  const entries = Object.entries(distribution);
+  if (!entries.length) {
+    selectors.evaluationProviders.append(
+      element("p", "evaluation-empty-copy", "No provider routes are recorded."),
+    );
+    return;
+  }
+  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  entries.forEach(([provider, count]) => {
+    const row = element("div", "provider-row");
+    append(
+      row,
+      element("strong", null, labelize(provider)),
+      element("span", null, `${count} / ${total} runs`),
+    );
+    selectors.evaluationProviders.append(row);
+  });
+}
+
+function openEvaluatedRun(runId) {
+  state.requestEpoch += 1;
+  state.runId = runId;
+  state.snapshot = null;
+  state.artifacts = [];
+  state.events = [];
+  state.selectedArtifactId = null;
+  selectors.composer.classList.add("is-hidden");
+  selectors.emptyOverview.classList.add("is-hidden");
+  selectors.runWorkspace.classList.add("is-hidden");
+  switchView("mission");
+  toast(`Loading Run ${shortId(runId)} evidence.`);
+  loadRun();
+}
+
 function emptyCard(icon, title, message) {
   const empty = element("div", "empty-card");
   append(
@@ -1054,6 +1366,7 @@ function renderEmptyDataViews() {
 }
 
 function startNewMission() {
+  state.requestEpoch += 1;
   state.runId = null;
   state.snapshot = null;
   state.artifacts = [];
@@ -1077,6 +1390,7 @@ document.querySelectorAll("[data-view-target]").forEach((button) => {
 });
 selectors.missionForm.addEventListener("submit", createMission);
 selectors.refreshRun.addEventListener("click", () => loadRun());
+selectors.refreshEvaluation.addEventListener("click", loadEvaluation);
 selectors.retryRun.addEventListener("click", retryRun);
 selectors.newMission.addEventListener("click", startNewMission);
 selectors.viewResult.addEventListener("click", () => switchView("artifacts"));

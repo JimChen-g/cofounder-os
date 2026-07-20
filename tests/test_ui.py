@@ -1,4 +1,4 @@
-"""D12 Founder Mission Control route and API-boundary tests."""
+"""D13 Founder Mission Control route and API-boundary tests."""
 
 from __future__ import annotations
 
@@ -21,6 +21,9 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
         assert 'id="approval-list"' in response.text
         assert 'id="artifact-viewer"' in response.text
         assert 'id="audit-list"' in response.text
+        assert 'id="evaluation-view"' in response.text
+        assert 'id="evaluation-latest"' in response.text
+        assert 'id="evaluation-runs"' in response.text
 
         stylesheet = client.get("/ui/assets/app.css")
         script = client.get("/ui/assets/app.js")
@@ -61,6 +64,7 @@ def test_ui_uses_only_the_accepted_product_api_boundary() -> None:
 
     for path in (
         "/api/health",
+        "/api/evaluation/summary",
         "/api/runs",
         "/artifacts",
         "/events",
@@ -82,7 +86,8 @@ def test_ui_files_do_not_embed_external_assets_or_inline_code() -> None:
     assert "http://" not in html
     assert "<style" not in html
     assert "<script>" not in html
-    assert '<script src="/ui/assets/app.js?v=d12" defer></script>' in html
+    assert '<script src="/ui/assets/app.js?v=d13" defer></script>' in html
+    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d13">' in html
 
 
 def test_ui_static_root_contains_only_reviewable_source_assets() -> None:
@@ -95,3 +100,22 @@ def test_ui_static_root_contains_only_reviewable_source_assets() -> None:
         Path("app.css"),
         Path("app.js"),
     }
+
+
+def test_ui_guards_stale_run_responses_and_terminal_failure_copy() -> None:
+    script = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+
+    assert "requestEpoch: 0" in script
+    assert "requestedRunId !== state.runId" in script
+    assert "requestEpoch !== state.requestEpoch" in script
+    terminal_check = script.index("result.terminal_failure")
+    replay_check = script.index("result.replayed", terminal_check)
+    assert terminal_check < replay_check
+
+
+def test_narrow_layout_keeps_mission_controls_and_five_views() -> None:
+    stylesheet = (STATIC_ROOT / "app.css").read_text(encoding="utf-8")
+
+    assert "grid-template-columns: repeat(5, 1fr)" in stylesheet
+    assert "#refresh-run," not in stylesheet
+    assert ".topbar .button-secondary" not in stylesheet

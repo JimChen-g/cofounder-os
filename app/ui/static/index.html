@@ -8,8 +8,8 @@
       content="Founder Mission Control for CoFounder OS workflows, approvals, artifacts, and audit evidence."
     >
     <title>Founder Mission Control · CoFounder OS</title>
-    <link rel="stylesheet" href="/ui/assets/app.css?v=d12">
-    <script src="/ui/assets/app.js?v=d12" defer></script>
+    <link rel="stylesheet" href="/ui/assets/app.css?v=d13">
+    <script src="/ui/assets/app.js?v=d13" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -40,6 +40,10 @@
           <button class="nav-item" type="button" data-view-target="audit">
             <span class="nav-icon" aria-hidden="true">≋</span>
             Audit trail
+          </button>
+          <button class="nav-item" type="button" data-view-target="evaluation">
+            <span class="nav-icon" aria-hidden="true">◫</span>
+            Evaluation
           </button>
         </nav>
 
@@ -312,6 +316,92 @@
             <span class="subtle-label" id="audit-count">0 events</span>
           </div>
           <div class="audit-list panel" id="audit-list"></div>
+        </section>
+
+        <section class="view" id="evaluation-view" data-view="evaluation">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">DETERMINISTIC EVIDENCE</p>
+              <h2>Evaluation dashboard</h2>
+              <p>
+                Repeatable quality scores from persisted workflow, artifact,
+                governance, routing, and audit records.
+              </p>
+            </div>
+            <button class="button button-secondary" id="refresh-evaluation" type="button">
+              Refresh evaluation
+            </button>
+          </div>
+
+          <div class="metric-grid evaluation-metrics" aria-label="Evaluation summary">
+            <article class="metric">
+              <span>Evaluated runs</span>
+              <strong id="evaluation-run-count">—</strong>
+              <small id="evaluation-run-detail">loading evidence</small>
+            </article>
+            <article class="metric">
+              <span>Completion</span>
+              <strong id="evaluation-completion">—</strong>
+              <small>terminal success rate</small>
+            </article>
+            <article class="metric">
+              <span>Average score</span>
+              <strong id="evaluation-average">—</strong>
+              <small>weighted out of 100</small>
+            </article>
+            <article class="metric">
+              <span>Artifact integrity</span>
+              <strong id="evaluation-integrity">—</strong>
+              <small>checksum evidence</small>
+            </article>
+          </div>
+
+          <div class="evaluation-layout">
+            <section class="panel evaluation-score-panel" aria-labelledby="evaluation-latest-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">LATEST RUN</p>
+                  <h2 id="evaluation-latest-title">Quality score</h2>
+                </div>
+                <span class="evaluation-grade grade-attention" id="evaluation-grade">—</span>
+              </div>
+              <div id="evaluation-latest"></div>
+            </section>
+
+            <section class="panel evaluation-agents-panel" aria-labelledby="evaluation-agents-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">RELIABILITY</p>
+                  <h2 id="evaluation-agents-title">Agent performance</h2>
+                </div>
+                <span class="panel-meta" id="evaluation-retries">0 retries</span>
+              </div>
+              <div class="evaluation-bars" id="evaluation-agents"></div>
+            </section>
+          </div>
+
+          <div class="evaluation-secondary">
+            <section class="panel evaluation-runs-panel" aria-labelledby="evaluation-runs-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">RECENT EVIDENCE</p>
+                  <h2 id="evaluation-runs-title">Run history</h2>
+                </div>
+                <span class="panel-meta" id="evaluation-updated">Awaiting evaluation</span>
+              </div>
+              <div class="evaluation-run-list" id="evaluation-runs"></div>
+            </section>
+
+            <aside class="panel evaluation-providers-panel" aria-labelledby="evaluation-providers-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">ROUTING</p>
+                  <h2 id="evaluation-providers-title">Provider mix</h2>
+                </div>
+              </div>
+              <div id="evaluation-providers"></div>
+            </aside>
+          </div>
         </section>
       </main>
     </div>

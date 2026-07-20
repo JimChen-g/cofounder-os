@@ -99,9 +99,9 @@ bash scripts/run_gateway.sh
 
 The gateway listens on `http://127.0.0.1:9000` by default.
 
-### Founder Mission Control
+### Founder Mission Control and Evaluation
 
-D12 is served by the same FastAPI process and consumes the stable D11 Product
+D12–D13 are served by the same FastAPI process and consume the stable Product
 API over same-origin requests:
 
 ```text
@@ -112,6 +112,19 @@ The UI starts founder missions, shows the three-task dependency graph and agent
 evidence, resolves approvals, renders integrity-checked artifacts, and exposes
 bounded retry/recovery plus the append-only audit trace. It has no separate
 frontend runtime or mock backend.
+
+The **Evaluation** workspace adds deterministic cross-Run metrics, five
+explainable quality dimensions, Agent reliability, Provider distribution, and
+direct Run inspection. It reads the existing state and Artifact Store only:
+
+```text
+GET /api/evaluation/summary?limit=50
+GET /api/evaluation/runs/{run_id}
+```
+
+Evaluation makes no model call and cannot mutate workflow state. See
+[`docs/evaluation-dashboard.md`](docs/evaluation-dashboard.md) for the score
+contract and verification procedure.
 
 `scripts/run_gateway.sh`:
 - enables `set -euo pipefail`

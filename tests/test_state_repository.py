@@ -1,6 +1,8 @@
 """Tests for atomic filesystem state persistence."""
 
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -182,3 +184,43 @@ def test_child_record_requires_existing_run(tmp_path):
 
     with pytest.raises(RecordNotFound):
         repository.create_task(task)
+
+
+def test_list_runs_is_newest_first_and_bounded(tmp_path: Path) -> None:
+    repository = FileStateRepository(tmp_path / "runs")
+    older = Run(
+        objective="Older",
+        updated_at=datetime(2026, 7, 19, tzinfo=timezone.utc),
+    )
+    newer = Run(
+        objective="Newer",
+        updated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )
+    repository.create_run(older)
+    repository.create_run(newer)
+
+    assert repository.list_runs() == [newer, older]
+    assert repository.list_runs(limit=1) == [newer]
+    assert repository.list_runs(limit=0) == []
+
+    with pytest.raises(ValueError, match="non-negative"):
+        repository.list_runs(limit=-1)
+
+
+def test_list_runs_ignores_noncanonical_and_symlinked_directories(
+    tmp_path: Path,
+) -> None:
+    repository = FileStateRepository(tmp_path / "runs")
+    run = Run(objective="Canonical")
+    repository.create_run(run)
+
+    ignored = repository.root / "not-a-run"
+    ignored.mkdir()
+    (ignored / "run.json").write_text(
+        run.model_dump_json(),
+        encoding="utf-8",
+    )
+    alias = repository.root / "run-alias"
+    alias.symlink_to(repository.root / str(run.id), target_is_directory=True)
+
+    assert repository.list_runs() == [run]

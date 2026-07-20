@@ -32,17 +32,21 @@ This document must be updated in the same commit as every accepted stage.
 
 ## Release Candidates
 
-None. D12 passed independent review, public publication, Spark deployment,
-three-plane verification, a real three-agent UI workflow, and recovery
-packaging on 2026-07-20.
+D13 Evaluation Dashboard is implemented on
+`codex/d13-evaluation-dashboard` and is pending independent review. It adds
+deterministic, read-only Run scoring and an Evaluation view without changing
+the accepted D06-D12 authorities, service topology, provider boundary, or
+runtime state. Local candidate evidence: 411 tests passed; Ruff, strict mypy,
+JavaScript syntax, sdist, and wheel gates passed; read-only API and desktop plus
+390px browser flows passed with no console errors.
 
 ## Accepted Follow-up
 
-D12 has no P0 or P1 defects. The first presentation-layer corrective should
-add stale-response guards, distinguish terminal-failure replay messaging,
-retain compact mission controls on narrow screens, and add JavaScript behavior
-coverage. These non-blocking items do not change D06-D11 authorities or API
-contracts.
+D12 has no P0 or P1 defects. The D13 release candidate implements the accepted
+presentation corrective: stale-response guards, terminal-failure recovery
+messaging, compact narrow-screen mission controls, and static behavior contract
+coverage. Independent D13 review must confirm these corrections before they are
+accepted.
 
 ## Corrective History
 
@@ -83,18 +87,22 @@ contracts.
 - **Resolve accepted product commit with**: `git rev-parse b96b557`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D12 — Founder Mission Control UI — accepted
-- **Current release worktree**: `main`
+- **Current product stage**: D13 — Evaluation Dashboard — implemented, pending
+  independent review
+- **Current release worktree**: `codex/d13-evaluation-dashboard`
+- **Independent D13 reference**: pending
 - **Independent D12 reference**: `codex/d12-founder-mission-control`
 - **Independent D11 reference**: `codex/d11-product-api`
 - **Independent D07-D10 reference**: `codex/d07-d10`
-- **Current release scope**: D12 — independent review, public publication,
-  Spark deployment, real UI end-to-end execution, three-plane verification,
-  and recovery packaging passed
-- **Next product stage**: D13 — Evaluation Dashboard — ready to start
-- **Current implementation candidate**: none
-- **Next acceptance action**: define and implement D13 without changing the
-  accepted D06-D12 authorities
+- **Current release scope**: D13 — deterministic evaluation service and API,
+  Evaluation UI, D12 presentation corrective, local quality gates, independent
+  review, publication, deployment, three-plane verification, and recovery
+- **Next product stage**: D14 — Hackathon submission package — blocked on D13
+  acceptance
+- **Current implementation candidate**: `codex/d13-evaluation-dashboard`;
+  commit SHA pending final implementation commit
+- **Next acceptance action**: commit the D13 candidate, then perform
+  independent review before merge or deployment
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`

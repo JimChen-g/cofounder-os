@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
+from app.api.evaluation import router as evaluation_router
 from app.api.product import router as product_router
 from app.api.routes import router as api_router
 from app.config import get_settings
@@ -134,6 +135,7 @@ async def global_exception_handler(
 # Include API routes at root — no /api prefix
 app.include_router(api_router)
 app.include_router(product_router)
+app.include_router(evaluation_router)
 app.include_router(ui_router)
 app.mount(
     "/ui/assets",

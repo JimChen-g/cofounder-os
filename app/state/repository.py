@@ -382,6 +382,46 @@ class FileStateRepository:
         with self.transaction(run_id) as transaction:
             return transaction.get_run()
 
+    def list_runs(self, limit: int | None = None) -> List[Run]:
+        """Return persisted Runs ordered by most recent update.
+
+        The repository remains the authority for Run records. Cross-run
+        discovery accepts only canonical UUID directories and never follows
+        symlinks, so presentation-layer summaries cannot escape the state root.
+        """
+
+        if limit is not None and limit < 0:
+            raise ValueError("limit must be non-negative")
+        if limit == 0:
+            return []
+
+        runs: List[Run] = []
+        for path in self.root.iterdir():
+            if not path.is_dir() or path.is_symlink():
+                continue
+            try:
+                run_id = UUID(path.name)
+            except ValueError:
+                continue
+            if path.name != str(run_id):
+                continue
+
+            run_path = path / "run.json"
+            if not run_path.is_file() or run_path.is_symlink():
+                continue
+            try:
+                runs.append(self.get_run(run_id))
+            except RecordNotFound:
+                # A concurrent cleanup between discovery and locked read is
+                # equivalent to the Run not being part of this snapshot.
+                continue
+
+        runs.sort(
+            key=lambda run: (run.updated_at, str(run.id)),
+            reverse=True,
+        )
+        return runs if limit is None else runs[:limit]
+
     def save_run(self, run: Run) -> Run:
         with self.transaction(run.id) as transaction:
             return transaction.save_run(run)
