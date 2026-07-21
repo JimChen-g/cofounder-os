@@ -2,24 +2,39 @@
 
 Deadline: 2026-07-22 18:00 Asia/Shanghai
 
-## Execution status — 2026-07-21
+## Execution status — accepted 2026-07-22
 
-- P0-P4 implemented on branch `codex/d15-live-agents-adaptive-router`.
-- Checkpoints: `0dedd62` (feature) and `c4073cc` (live-output hardening).
+- P0-P5 completed on branch `codex/d15-live-agents-adaptive-router`.
+- Accepted checkpoint: `7f9276d`. Earlier checkpoints preserve the feature,
+  live-output hardening, verified-call accounting, and structured-output budget
+  fixes in Git history.
 - Local verification: 455 tests pass; Ruff, Mypy (66 source files), frontend
   JavaScript syntax, and `git diff --check` pass.
+- DGX isolated verification: 17 focused D15 tests pass from a detached clone in
+  `/tmp`; the existing `/home/cofounder/cofounder-os` and port 9000 were not
+  modified.
 - Browser acceptance at `127.0.0.1:9100/ui`: the stable fixture produces five
   sources, ten evidence facts, sixteen artifacts, and one pending approval.
   Engineering route-outage simulation recalculates to the generic declared
   fallback, restores normally, and produces no browser warning/error.
-- First isolated DGX acceptance on checkpoint `0dedd62`: the adaptive Router
-  selected healthy local Qwen for both new Agents. Risk Review completed a real
-  Gateway-backed call after one bounded repair. Engineering made two real calls,
-  then safely fell back because its repaired output was still invalid JSON.
-- Checkpoint `c4073cc` replaces pseudo-schema prompts with valid RFC 8259 examples,
-  accepts fenced JSON safely, preserves failed-call evidence, and counts every
-  verified live attempt. A second isolated DGX run remains required before both
-  live Agents can be marked accepted.
+- The measured Router marked `cofounder-qwen` healthy and Step unavailable. It
+  selected Qwen for both live tasks with score 147.996 versus 117.969 for each
+  specialist local fallback, while retaining restricted evidence on the local
+  DGX product plane.
+- Consecutive real run 1 (`7bdad3c7-70fe-4dde-b3bd-8aa4e8a4a0bf`): Engineering
+  completed once with request `req-d1ebb8309801437e` (6,560 tokens, 60,001.91
+  ms); Risk completed after one bounded repair with final request
+  `req-93d6193dc9364294` (5,780 tokens, 40,816.57 ms). Neither used fallback.
+- Consecutive real run 2 (`47c6798b-3995-4ca7-bf24-da6365a224fe`): Engineering
+  completed once with request `req-e2cd687ebd7d4a96` (7,153 tokens, 67,992.22
+  ms); Risk completed after one bounded repair with final request
+  `req-8998183b477d4dad` (5,510 tokens, 38,634.11 ms). Neither used fallback.
+- Both runs stopped at one Founder approval with sixteen artifacts and one
+  persisted `policy.denied` event. All six delivery artifacts were
+  `verified_with_revision`, cited all ten evidence facts, and retained their
+  Product, Finance, Engineering, Risk, Synthesizer, and Verifier provenance.
+- A fresh GET of run 2 restored `waiting_approval`, ten routes, sixteen
+  artifacts, one approval, 114 audit events, and three verified model calls.
 
 ## Scope
 

@@ -67,7 +67,9 @@ The golden path remains recoverable without a live model service. When DGX Qwen
 or Step passes the server-side health check, Engineering Planning and Risk
 Review perform real Gateway calls and persist provider, upstream model, request
 ID, token usage, latency, and repair evidence. A failed live call executes the
-declared local fallback and is never counted as live.
+declared local fallback. It is counted as a verified attempt only when provider,
+upstream model, request ID, usage, and latency evidence exist; it is never
+presented as a successful live Agent result.
 
 For the primary DGX path, configure the existing Gateway provider before
 startup (values are deployment secrets and are not committed):
