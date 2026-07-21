@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0",
+  "case_id": "traffic-liability-demo-001",
+  "title": "信号灯路口左转车与直行车碰撞",
+  "synthetic": true,
+  "disclaimer": "本案例完全合成并已去标识化，仅用于产品演示，不构成交警执法、司法裁判或保险理赔结论。",
+  "model": {
+    "family": "Qwen open-source derived traffic-liability model",
+    "variant": "traffic-liability-demo-fixture-v0",
+    "inference_mode": "deterministic_demo_fixture",
+    "adapter_status": "pending_clean_dataset_and_formal_adapter",
+    "confidence": 0.86
+  },
+  "scenario": {
+    "summary": "工作日 18:42，天气晴、路面干燥。车辆 A 沿城市主干道由南向北直行，限速 50 km/h；车辆 B 由北向西左转并穿越车辆 A 的行驶路径，两车在路口中心区域发生碰撞。",
+    "location_type": "城市信号灯控制十字路口",
+    "conditions": {
+      "weather": "晴",
+      "road_surface": "干燥",
+      "visibility": "良好",
+      "speed_limit_kmh": 50
+    },
+    "vehicles": [
+      {
+        "id": "A",
+        "movement": "由南向北直行",
+        "estimated_speed_kmh": 68,
+        "signal_state": "绿灯",
+        "impact_area": "前部偏右"
+      },
+      {
+        "id": "B",
+        "movement": "由北向西左转",
+        "estimated_speed_kmh": 22,
+        "signal_state": "同向绿灯，无独立左转箭头",
+        "impact_area": "右侧中部"
+      }
+    ],
+    "timeline": [
+      {
+        "time": "18:42:10.000",
+        "event": "车辆 A 进入路口前约 45 米，EDR 推定车速 68 km/h。"
+      },
+      {
+        "time": "18:42:11.400",
+        "event": "车辆 B 开始左转并进入对向直行车道。"
+      },
+      {
+        "time": "18:42:12.100",
+        "event": "车辆 A 制动，行车记录仪可见车辆 B 横向进入行驶路径。"
+      },
+      {
+        "time": "18:42:12.800",
+        "event": "车辆 A 前部偏右与车辆 B 右侧中部碰撞。"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "id": "E1",
+      "type": "行车记录仪片段",
+      "finding": "车辆 B 在车辆 A 接近路口时开始左转，侵入车辆 A 的直行路径。",
+      "status": "available"
+    },
+    {
+      "id": "E2",
+      "type": "信号相位摘要",
+      "finding": "南北方向为绿灯，未提供独立左转保护相位。",
+      "status": "available"
+    },
+    {
+      "id": "E3",
+      "type": "车辆 A EDR 摘要",
+      "finding": "碰撞前推定车速 68 km/h，超过现场 50 km/h 限速。",
+      "status": "available"
+    },
+    {
+      "id": "E4",
+      "type": "碰撞位置示意",
+      "finding": "车辆 A 前部偏右与车辆 B 右侧中部接触，符合左转横穿路径。",
+      "status": "available"
+    }
+  ],
+  "prediction": {
+    "allocations": [
+      {
+        "vehicle_id": "B",
+        "liability_level": "主要责任",
+        "share_percent": 80,
+        "rationale": "左转穿越直行路径且未充分让行，是碰撞发生的主要因果因素。"
+      },
+      {
+        "vehicle_id": "A",
+        "liability_level": "次要责任",
+        "share_percent": 20,
+        "rationale": "明显超速压缩了避让时间并增加碰撞严重程度。"
+      }
+    ]
+  },
+  "reasoning": [
+    "证据时间线与碰撞部位共同支持车辆 B 左转横穿车辆 A 直行路径的情景。",
+    "在无独立保护左转相位的演示设定下，左转车辆对对向直行车辆负有更高的注意与让行义务。",
+    "车辆 A 的推定车速高于限速，缩短有效反应窗口，因此保留次要责任。",
+    "80% / 20% 是合成 Demo 的辅助预测，必须结合完整原始证据和适用规则人工复核。"
+  ],
+  "missing_evidence": [
+    "信号控制器的完整原始导出与设备时钟校准记录",
+    "EDR 采集设备校准信息、原始数据和证据保全链",
+    "路口全景监控及目击证人陈述交叉核验",
+    "车辆制动与轮胎状态查验记录"
+  ],
+  "human_review": {
+    "required": true,
+    "reviewer": "founder",
+    "decision_scope": "确认 Demo 证据链、免责声明和结论展示方式"
+  },
+  "loss_exposure": {
+    "currency": "CNY",
+    "items": [
+      {
+        "name": "车辆 A 维修估算",
+        "estimated_cny": 36000,
+        "basis": "合成钣金、灯组和传感器损失"
+      },
+      {
+        "name": "车辆 B 维修估算",
+        "estimated_cny": 24000,
+        "basis": "合成右侧车门与结构件损失"
+      },
+      {
+        "name": "道路设施损失估算",
+        "estimated_cny": 6000,
+        "basis": "合成护栏与清障费用"
+      }
+    ],
+    "total_estimated_cny": 66000,
+    "bodily_injury_status": "当前演示材料未确认人员伤情，正式流程必须补充核验"
+  }
+}

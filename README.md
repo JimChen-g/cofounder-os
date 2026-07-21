@@ -126,6 +126,12 @@ Evaluation makes no model call and cannot mutate workflow state. See
 [`docs/evaluation-dashboard.md`](docs/evaluation-dashboard.md) for the score
 contract and verification procedure.
 
+For a video-ready, fully synthetic traffic-accident liability case, see
+[`docs/traffic-liability-demo.md`](docs/traffic-liability-demo.md). The fixture
+uses the same governed Run and Artifact contracts, clearly marks the Qwen-derived
+result as deterministic demo data, and keeps final presentation behind Founder
+approval while the real dataset and adapter are still being prepared.
+
 `scripts/run_gateway.sh`:
 - enables `set -euo pipefail`
 - sources `.env` if present
