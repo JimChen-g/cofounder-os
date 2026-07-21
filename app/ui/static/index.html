@@ -8,8 +8,8 @@
       content="Founder Mission Control for CoFounder OS workflows, approvals, artifacts, and audit evidence."
     >
     <title>Founder Mission Control · CoFounder OS</title>
-    <link rel="stylesheet" href="/ui/assets/app.css?v=d13">
-    <script src="/ui/assets/app.js?v=d13" defer></script>
+    <link rel="stylesheet" href="/ui/assets/app.css?v=d14">
+    <script src="/ui/assets/app.js?v=d14" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -132,9 +132,33 @@
                   >
                 </div>
               </div>
+              <div class="evidence-uploader">
+                <div class="uploader-heading">
+                  <div>
+                    <label for="evidence-files">Insurance POC evidence <span>PDF + PNG</span></label>
+                    <p>Files are normalized locally before any model route is selected.</p>
+                  </div>
+                  <button class="button button-quiet" id="load-poc-fixture" type="button">
+                    Load stable demo
+                  </button>
+                </div>
+                <input
+                  id="evidence-files"
+                  name="evidence-files"
+                  type="file"
+                  accept="application/pdf,image/png"
+                  multiple
+                >
+                <div class="attachment-list" id="attachment-list">
+                  <span>No evidence files selected.</span>
+                </div>
+                <button class="button button-secondary preview-evidence" id="preview-evidence" type="button" disabled>
+                  Build Evidence Package
+                </button>
+              </div>
               <div class="form-actions">
                 <span class="form-hint" id="form-hint">
-                  One bounded workflow · up to three agent calls
+                  Generic missions remain available · Insurance POC is the primary demo
                 </span>
                 <button class="button button-primary" id="launch-mission" type="submit">
                   <span>Launch mission</span>
@@ -142,6 +166,20 @@
                 </button>
               </div>
             </form>
+          </section>
+
+          <section class="evidence-board is-hidden" id="evidence-board" aria-labelledby="evidence-board-title">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow accent">MULTIMODAL EVIDENCE</p>
+                <h2 id="evidence-board-title">Evidence Board</h2>
+                <p id="evidence-board-summary">Source-linked facts ready for governed routing.</p>
+              </div>
+              <span class="subtle-label" id="evidence-package-id">Package —</span>
+            </div>
+            <div class="evidence-source-strip" id="evidence-source-strip"></div>
+            <div class="evidence-board-grid" id="evidence-board-grid"></div>
+            <div class="evidence-warning" id="evidence-warning"></div>
           </section>
 
           <section class="empty-overview" id="empty-overview" aria-labelledby="overview-title">

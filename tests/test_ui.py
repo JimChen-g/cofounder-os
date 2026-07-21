@@ -24,6 +24,9 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
         assert 'id="evaluation-view"' in response.text
         assert 'id="evaluation-latest"' in response.text
         assert 'id="evaluation-runs"' in response.text
+        assert 'id="evidence-files"' in response.text
+        assert 'id="evidence-board"' in response.text
+        assert 'id="load-poc-fixture"' in response.text
 
         stylesheet = client.get("/ui/assets/app.css")
         script = client.get("/ui/assets/app.js")
@@ -65,6 +68,8 @@ def test_ui_uses_only_the_accepted_product_api_boundary() -> None:
     for path in (
         "/api/health",
         "/api/evaluation/summary",
+        "/api/insurance-poc/evidence",
+        "/api/insurance-poc/fixture",
         "/api/runs",
         "/artifacts",
         "/events",
@@ -86,16 +91,22 @@ def test_ui_files_do_not_embed_external_assets_or_inline_code() -> None:
     assert "http://" not in html
     assert "<style" not in html
     assert "<script>" not in html
-    assert '<script src="/ui/assets/app.js?v=d13" defer></script>' in html
-    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d13">' in html
+    assert '<script src="/ui/assets/app.js?v=d14" defer></script>' in html
+    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d14">' in html
+
+
+def test_insurance_poc_ui_labels_fixture_adapter_without_live_model_claim() -> None:
+    script = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+    html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+
+    assert "Build Evidence Package" in html
+    assert "Files are normalized locally before any model route" in html
+    assert "source.adapter_mode" in script
+    assert "EVIDENCE_PACKAGE_JSON" in script
 
 
 def test_ui_static_root_contains_only_reviewable_source_assets() -> None:
-    assert {
-        path.relative_to(STATIC_ROOT)
-        for path in STATIC_ROOT.iterdir()
-        if path.is_file()
-    } == {
+    assert {path.relative_to(STATIC_ROOT) for path in STATIC_ROOT.iterdir() if path.is_file()} == {
         Path("index.html"),
         Path("app.css"),
         Path("app.js"),

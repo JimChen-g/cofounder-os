@@ -6,6 +6,8 @@ const state = {
   artifacts: [],
   events: [],
   evaluation: null,
+  pendingAttachments: [],
+  evidencePackage: null,
   selectedArtifactId: null,
   activeView: "mission",
   requestEpoch: 0,
@@ -59,10 +61,19 @@ const selectors = {
   evaluationLatest: document.querySelector("#evaluation-latest"),
   evaluationProviders: document.querySelector("#evaluation-providers"),
   evaluationRuns: document.querySelector("#evaluation-runs"),
+  evidenceBoard: document.querySelector("#evidence-board"),
+  evidenceBoardGrid: document.querySelector("#evidence-board-grid"),
+  evidenceBoardSummary: document.querySelector("#evidence-board-summary"),
+  evidenceFiles: document.querySelector("#evidence-files"),
+  evidencePackageId: document.querySelector("#evidence-package-id"),
+  evidenceSourceStrip: document.querySelector("#evidence-source-strip"),
+  evidenceWarning: document.querySelector("#evidence-warning"),
   formHint: document.querySelector("#form-hint"),
   launchButton: document.querySelector("#launch-mission"),
+  loadPocFixture: document.querySelector("#load-poc-fixture"),
   missionForm: document.querySelector("#mission-form"),
   newMission: document.querySelector("#new-mission"),
+  previewEvidence: document.querySelector("#preview-evidence"),
   refreshRun: document.querySelector("#refresh-run"),
   refreshEvaluation: document.querySelector("#refresh-evaluation"),
   retryRun: document.querySelector("#retry-run"),
@@ -71,6 +82,7 @@ const selectors = {
   systemStateLabel: document.querySelector("#system-state-label"),
   systemStateDetail: document.querySelector("#system-state-detail"),
   toastRegion: document.querySelector("#toast-region"),
+  attachmentList: document.querySelector("#attachment-list"),
   viewResult: document.querySelector("#view-result"),
   viewTitle: document.querySelector("#view-title"),
 };
@@ -137,6 +149,213 @@ function safeFilename(value) {
   }
   const cleaned = String(value).replace(/[^a-zA-Z0-9._-]/g, "-");
   return cleaned.slice(0, 160) || fallback;
+}
+
+function bytesToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunks = [];
+  for (let offset = 0; offset < bytes.length; offset += 32768) {
+    chunks.push(
+      String.fromCharCode(...bytes.subarray(offset, offset + 32768)),
+    );
+  }
+  return btoa(chunks.join(""));
+}
+
+async function fileToAttachment(file) {
+  if (!["application/pdf", "image/png"].includes(file.type)) {
+    throw new Error(`${file.name} must be a PDF or PNG file.`);
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error(`${file.name} exceeds the 8 MiB demo boundary.`);
+  }
+  return {
+    filename: file.name,
+    content_type: file.type,
+    base64_content: bytesToBase64(await file.arrayBuffer()),
+    privacy_level: "restricted",
+  };
+}
+
+function attachmentSize(attachment) {
+  return Math.floor((attachment.base64_content.length * 3) / 4);
+}
+
+function renderAttachmentList() {
+  selectors.attachmentList.replaceChildren();
+  if (!state.pendingAttachments.length) {
+    selectors.attachmentList.append(
+      element("span", null, "No evidence files selected."),
+    );
+    selectors.previewEvidence.disabled = true;
+    return;
+  }
+  state.pendingAttachments.forEach((attachment) => {
+    const item = element("span", "attachment-chip");
+    append(
+      item,
+      element(
+        "strong",
+        null,
+        attachment.content_type === "application/pdf" ? "PDF" : "PNG",
+      ),
+      document.createTextNode(attachment.filename),
+      element(
+        "small",
+        null,
+        `${Math.max(1, Math.round(attachmentSize(attachment) / 1024))} KB`,
+      ),
+    );
+    selectors.attachmentList.append(item);
+  });
+  selectors.previewEvidence.disabled = state.pendingAttachments.length < 3;
+}
+
+async function handleEvidenceFiles(event) {
+  hideAlert();
+  try {
+    const files = [...(event.target.files || [])];
+    state.pendingAttachments = await Promise.all(files.map(fileToAttachment));
+    state.evidencePackage = null;
+    selectors.evidenceBoard.classList.add("is-hidden");
+    renderAttachmentList();
+  } catch (error) {
+    state.pendingAttachments = [];
+    renderAttachmentList();
+    showAlert("Evidence files could not be read", error);
+  }
+}
+
+function renderEvidenceBoard() {
+  const packageValue = state.evidencePackage;
+  selectors.evidenceBoardGrid.replaceChildren();
+  selectors.evidenceSourceStrip.replaceChildren();
+  selectors.evidenceWarning.replaceChildren();
+  if (!packageValue) {
+    selectors.evidenceBoard.classList.add("is-hidden");
+    return;
+  }
+
+  selectors.evidenceBoard.classList.remove("is-hidden");
+  selectors.evidencePackageId.textContent =
+    `Package ${shortId(packageValue.package_id)} · ${packageValue.evidence.length} facts`;
+  selectors.evidenceBoardSummary.textContent =
+    `${packageValue.sources.length} normalized sources · ${packageValue.synthetic ? "synthetic demo" : "submitted evidence"} · non-authoritative`;
+
+  packageValue.sources.forEach((source) => {
+    const chip = element("article", "evidence-source");
+    append(
+      chip,
+      element("strong", null, source.source_file),
+      element(
+        "span",
+        null,
+        `${labelize(source.modality)} · ${labelize(source.privacy_level)}`,
+      ),
+      element(
+        "small",
+        null,
+        `${labelize(source.processing_status)} · ${labelize(source.adapter_mode)}`,
+      ),
+    );
+    selectors.evidenceSourceStrip.append(chip);
+  });
+
+  const byCategory = new Map();
+  packageValue.evidence.forEach((item) => {
+    const category = item.category;
+    const existing = byCategory.get(category) || [];
+    existing.push(item);
+    byCategory.set(category, existing);
+  });
+  byCategory.forEach((items, category) => {
+    const column = element("section", "evidence-category-card");
+    append(
+      column,
+      element("h3", null, labelize(category)),
+      element("span", "subtle-label", `${items.length} source-linked facts`),
+    );
+    items.forEach((item) => {
+      const fact = element("article", "evidence-fact");
+      append(
+        fact,
+        element("strong", null, item.evidence_id),
+        element("p", null, item.content),
+        element(
+          "span",
+          null,
+          `${item.source_file} · ${labelize(item.modality)} · ${Math.round(item.confidence * 100)}% · ${labelize(item.privacy_level)}`,
+        ),
+        element(
+          "small",
+          null,
+          `Used by ${item.used_by_agents.map(labelize).join(", ")}`,
+        ),
+      );
+      column.append(fact);
+    });
+    selectors.evidenceBoardGrid.append(column);
+  });
+  packageValue.warnings.forEach((warning) => {
+    selectors.evidenceWarning.append(element("p", null, warning));
+  });
+}
+
+async function buildEvidencePackage({ quiet = false } = {}) {
+  const mission = document.querySelector("#objective").value.trim();
+  if (!mission) {
+    throw new Error("Enter the Founder Mission before building evidence.");
+  }
+  if (state.pendingAttachments.length < 3) {
+    throw new Error("Select one PDF and at least two PNG images.");
+  }
+  setButtonLoading(selectors.previewEvidence, true);
+  try {
+    const response = await apiRequest("/api/insurance-poc/evidence", {
+      method: "POST",
+      body: JSON.stringify({
+        mission,
+        attachments: state.pendingAttachments,
+      }),
+    });
+    state.evidencePackage = response.evidence_package;
+    renderEvidenceBoard();
+    if (!quiet) {
+      toast("Evidence Package built with source, privacy, and Agent-use links.");
+      selectors.evidenceBoard.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    return state.evidencePackage;
+  } finally {
+    setButtonLoading(selectors.previewEvidence, false);
+  }
+}
+
+async function previewEvidence() {
+  hideAlert();
+  try {
+    await buildEvidencePackage();
+  } catch (error) {
+    showAlert("Evidence extraction needs attention", error);
+  }
+}
+
+async function loadPocFixture() {
+  hideAlert();
+  setButtonLoading(selectors.loadPocFixture, true);
+  try {
+    const fixture = await apiRequest("/api/insurance-poc/fixture");
+    document.querySelector("#objective").value = fixture.mission;
+    document.querySelector("#owner").value = "Founder";
+    state.pendingAttachments = fixture.attachments;
+    state.evidencePackage = null;
+    selectors.evidenceFiles.value = "";
+    renderAttachmentList();
+    await buildEvidencePackage();
+  } catch (error) {
+    showAlert("Stable demo evidence could not be loaded", error);
+  } finally {
+    setButtonLoading(selectors.loadPocFixture, false);
+  }
 }
 
 async function apiRequest(path, options = {}) {
@@ -234,8 +453,22 @@ async function createMission(event) {
     objective: String(data.get("objective") || "").trim(),
     max_cycles: 100,
   };
-  const context = String(data.get("context") || "").trim();
+  let context = String(data.get("context") || "").trim();
   const owner = String(data.get("owner") || "").trim();
+  if (state.pendingAttachments.length) {
+    try {
+      if (!state.evidencePackage) {
+        await buildEvidencePackage({ quiet: true });
+      }
+      const evidenceContext = JSON.stringify(state.evidencePackage);
+      context = context
+        ? `${context}\n\nEVIDENCE_PACKAGE_JSON=${evidenceContext}`
+        : `EVIDENCE_PACKAGE_JSON=${evidenceContext}`;
+    } catch (error) {
+      showAlert("Mission evidence is not ready", error);
+      return;
+    }
+  }
   if (context) {
     payload.context = context;
   }
@@ -274,7 +507,7 @@ async function createMission(event) {
   } finally {
     window.clearTimeout(slowMessageTimer);
     selectors.formHint.textContent =
-      "One bounded workflow · up to three agent calls";
+      "Generic missions remain available · Insurance POC is the primary demo";
     setButtonLoading(selectors.launchButton, false);
   }
 }
@@ -1384,11 +1617,15 @@ function startNewMission() {
   state.artifacts = [];
   state.events = [];
   state.selectedArtifactId = null;
+  state.pendingAttachments = [];
+  state.evidencePackage = null;
   selectors.composer.classList.remove("is-hidden");
   selectors.emptyOverview.classList.remove("is-hidden");
   selectors.runWorkspace.classList.add("is-hidden");
   selectors.refreshRun.classList.add("is-hidden");
   selectors.missionForm.reset();
+  renderAttachmentList();
+  renderEvidenceBoard();
   selectors.approvalCount.classList.add("is-hidden");
   selectors.artifactCount.classList.add("is-hidden");
   hideAlert();
@@ -1401,6 +1638,9 @@ document.querySelectorAll("[data-view-target]").forEach((button) => {
   button.addEventListener("click", () => switchView(button.dataset.viewTarget));
 });
 selectors.missionForm.addEventListener("submit", createMission);
+selectors.evidenceFiles.addEventListener("change", handleEvidenceFiles);
+selectors.previewEvidence.addEventListener("click", previewEvidence);
+selectors.loadPocFixture.addEventListener("click", loadPocFixture);
 selectors.refreshRun.addEventListener("click", () => loadRun());
 selectors.refreshEvaluation.addEventListener("click", loadEvaluation);
 selectors.retryRun.addEventListener("click", retryRun);
@@ -1412,4 +1652,5 @@ document
   .addEventListener("click", hideAlert);
 
 renderEmptyDataViews();
+renderAttachmentList();
 checkHealth();

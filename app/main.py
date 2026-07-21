@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from app.api.evaluation import router as evaluation_router
+from app.api.insurance_poc import router as insurance_poc_router
 from app.api.product import router as product_router
 from app.api.routes import router as api_router
 from app.config import get_settings
@@ -60,9 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry.register(step)
         logger.info("Registered provider: %s", step.name)
 
-    logger.info(
-        "Gateway v%s ready", settings.app_version
-    )
+    logger.info("Gateway v%s ready", settings.app_version)
 
     yield
 
@@ -136,6 +135,7 @@ async def global_exception_handler(
 app.include_router(api_router)
 app.include_router(product_router)
 app.include_router(evaluation_router)
+app.include_router(insurance_poc_router)
 app.include_router(ui_router)
 app.mount(
     "/ui/assets",
