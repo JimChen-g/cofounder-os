@@ -415,6 +415,7 @@ class RiskReviewAgent(_LiveSpecialistAgent):
                 "finance_review": finance,
             },
             allowed_evidence_ids={item.evidence_id for item in evidence.evidence},
+            max_tokens=8192,
         )
         if not isinstance(result, RiskReviewResult):
             raise TypeError("Risk Agent returned the wrong result contract")

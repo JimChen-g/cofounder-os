@@ -248,6 +248,7 @@ async def test_golden_workflow_executes_two_live_agents_and_keeps_gate_determini
 
     def handler(http_request: httpx.Request) -> httpx.Response:
         payload = json.loads(http_request.content)
+        assert payload["max_tokens"] == 8192
         system = payload["messages"][0]["content"]
         if "Engineering Planning Agent" in system:
             return _gateway_response(_engineering_result(evidence_id), "req-engineering")
