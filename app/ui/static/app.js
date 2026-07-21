@@ -426,6 +426,13 @@ function renderRoutingBoard() {
       append(
         fallbackEvidence,
         element("strong", null, "Live route failed safely"),
+        execution.call_count
+          ? element(
+              "p",
+              null,
+              `${execution.call_count} verified live attempt${execution.call_count === 1 ? "" : "s"} · ${execution.selected_upstream_model || execution.selected_provider || "configured provider"}`,
+            )
+          : null,
         element("p", null, execution.fallback_reason),
       );
     }

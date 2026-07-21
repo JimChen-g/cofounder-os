@@ -9,7 +9,10 @@ import pytest
 from app.artifacts import FileArtifactStore
 from app.clients import GatewayClient
 from app.insurance_poc import GoldenWorkflowRequest, InsurancePOCEvidenceService
-from app.insurance_poc.live_agents import EngineeringPlanningAgent
+from app.insurance_poc.live_agents import (
+    EngineeringPlanningAgent,
+    LiveAgentValidationFailure,
+)
 from app.insurance_poc.runtime import InsurancePOCTaskRuntime
 from app.insurance_poc.workflow import InsurancePOCGoldenWorkflow
 from app.services.artifact_write import ArtifactRegistrationService
@@ -35,6 +38,33 @@ def _gateway_response(content: dict[str, object], request_id: str) -> httpx.Resp
             "choices": [
                 {
                     "message": {"role": "assistant", "content": json.dumps(content)},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 80,
+                "total_tokens": 200,
+            },
+            "cofounder_os": {
+                "selected_provider": "qwen",
+                "selected_upstream_model": "qwen-live-test",
+                "routing_reason": "adaptive_constraint_score",
+                "latency_ms": 42.5,
+            },
+        },
+    )
+
+
+def _gateway_text_response(content: str, request_id: str) -> httpx.Response:
+    return httpx.Response(
+        200,
+        headers={"X-Request-ID": request_id},
+        json={
+            "id": request_id,
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": content},
                     "finish_reason": "stop",
                 }
             ],
@@ -153,6 +183,43 @@ async def test_engineering_agent_repairs_once_and_records_live_evidence() -> Non
     assert call.call_count == 2
     assert call.repair_performed is True
     assert call.request_id == "req-repaired"
+    assert call.selected_upstream_model == "qwen-live-test"
+
+
+@pytest.mark.asyncio
+async def test_engineering_agent_preserves_call_evidence_after_failed_repair() -> None:
+    evidence_service = InsurancePOCEvidenceService(FIXTURE_DIR)
+    fixture = evidence_service.fixture()
+    package = evidence_service.extract(
+        GoldenWorkflowRequest(mission=fixture.mission, attachments=fixture.attachments)
+    )
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _gateway_text_response("{not valid JSON", f"req-invalid-{calls}")
+
+    gateway = GatewayClient(
+        "http://gateway.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(LiveAgentValidationFailure) as captured:
+        await EngineeringPlanningAgent(gateway).execute(
+            virtual_model="cofounder-qwen",
+            evidence=package,
+            product={"scope_items": []},
+            finance={"accepted_scope": []},
+            project_status={"available": ["runtime"], "missing_or_limited": []},
+        )
+
+    assert calls == 2
+    call = captured.value.call_evidence
+    assert call is not None
+    assert call.call_count == 2
+    assert call.repair_performed is True
+    assert call.request_id == "req-invalid-2"
     assert call.selected_upstream_model == "qwen-live-test"
 
 

@@ -38,9 +38,11 @@ EXECUTION_DISCLOSURE = (
     "test success, or external delivery is claimed."
 )
 LIVE_EXECUTION_DISCLOSURE = (
-    "Engineering Planning and Risk Review executed through the configured Gateway-backed "
-    "LLM route where health checks passed. All other tasks remained deterministic; Policy "
-    "Gate, Founder approval, and release authority were never delegated to an LLM."
+    "Eligible Engineering Planning and Risk Review tasks attempted the configured "
+    "Gateway-backed LLM route where health checks passed. Successful calls retain "
+    "verifiable provider metadata; failed calls use the declared deterministic fallback. "
+    "All other tasks remained deterministic, and Policy Gate, Founder approval, and "
+    "release authority were never delegated to an LLM."
 )
 
 
@@ -316,7 +318,6 @@ class InsurancePOCGoldenWorkflow:
         live_model_calls = sum(
             int(route.metadata.get("call_count", 0))
             for route in snapshot.route_decisions
-            if route.metadata.get("execution_backend") == "gateway_llm_agent"
         )
         disclosure = (
             LIVE_EXECUTION_DISCLOSURE if live_model_calls else EXECUTION_DISCLOSURE

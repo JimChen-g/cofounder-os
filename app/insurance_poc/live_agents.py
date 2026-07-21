@@ -24,10 +24,16 @@ SAFE_DECISION_MODE = "model_recommendation_plus_human_review"
 class LiveAgentValidationFailure(RuntimeError):
     """The model failed its strict output contract after bounded repair."""
 
-    def __init__(self, agent_id: str, errors: list[str]) -> None:
+    def __init__(
+        self,
+        agent_id: str,
+        errors: list[str],
+        call_evidence: "LiveAgentCallEvidence | None" = None,
+    ) -> None:
         super().__init__(f"{agent_id} output failed validation: {'; '.join(errors)}")
         self.agent_id = agent_id
         self.errors = errors
+        self.call_evidence = call_evidence
 
 
 class LiveAgentCallEvidence(StrictModel):
@@ -149,6 +155,73 @@ class RiskReviewResult(StrictModel):
     source_evidence: list[str] = Field(min_length=1, max_length=50)
 
 
+def _engineering_schema_example() -> str:
+    return json.dumps(
+        {
+            "schema_version": "insurance-engineering-llm-1.0",
+            "plan_summary": "bounded summary",
+            "workstreams": [
+                {
+                    "name": "workstream one",
+                    "deliverable": "bounded deliverable",
+                    "days": [1, 2],
+                    "dependencies": [],
+                    "acceptance_check": "measurable check",
+                },
+                {
+                    "name": "workstream two",
+                    "deliverable": "bounded deliverable",
+                    "days": [3, 4],
+                    "dependencies": ["workstream one"],
+                    "acceptance_check": "measurable check",
+                },
+            ],
+            "two_week_sequence": ["Days 1-2", "Days 3-6", "Days 7-10"],
+            "reused_capabilities": ["verified capability"],
+            "limitations": ["planning only"],
+            "validation_checks": ["check one", "check two"],
+            "source_evidence": ["E-SUPPLIED-ID"],
+            "execution_status": "plan_only",
+            "code_diff": None,
+            "test_result": None,
+        },
+        separators=(",", ":"),
+    )
+
+
+def _risk_schema_example() -> str:
+    return json.dumps(
+        {
+            "schema_version": "insurance-risk-llm-1.0",
+            "review_summary": "bounded summary",
+            "findings": [
+                {
+                    "risk_id": "R-AUTHORITY-001",
+                    "category": "authority",
+                    "severity": "high",
+                    "finding": "bounded finding",
+                    "control": "bounded control",
+                    "source_evidence": ["E-SUPPLIED-ID"],
+                },
+                {
+                    "risk_id": "R-PRIVACY-001",
+                    "category": "privacy",
+                    "severity": "high",
+                    "finding": "bounded finding",
+                    "control": "bounded control",
+                    "source_evidence": ["E-SUPPLIED-ID"],
+                },
+            ],
+            "recommended_decision_mode": SAFE_DECISION_MODE,
+            "private_upload_allowed": False,
+            "required_human_approval": True,
+            "required_controls": ["Policy Gate", "Founder approval"],
+            "source_evidence": ["E-SUPPLIED-ID"],
+        },
+        separators=(",", ":"),
+    )
+
+
 class _LiveSpecialistAgent:
     agent_id: str
     result_type: type[EngineeringPlanningResult] | type[RiskReviewResult]
@@ -185,6 +258,7 @@ class _LiveSpecialistAgent:
             temperature=0.1,
             max_tokens=4096,
         )
+        call = LiveAgentCallEvidence.from_completion(completion)
         result, errors = self._validate(completion.content, allowed_evidence_ids)
         repair_performed = False
         if result is None:
@@ -196,8 +270,10 @@ class _LiveSpecialistAgent:
                     ChatMessage(
                         role=Role.USER,
                         content=(
-                            "Repair the response. Return only JSON matching the declared "
-                            "schema. Validation errors:\n- " + "\n- ".join(errors)
+                            "Repair the response. Return one strict RFC 8259 JSON object only. "
+                            "Use double quotes for every key and string; do not use Markdown, "
+                            "comments, trailing commas, or unescaped quotes inside strings. "
+                            "Validation errors:\n- " + "\n- ".join(errors)
                         ),
                     ),
                 ],
@@ -205,11 +281,14 @@ class _LiveSpecialistAgent:
                 temperature=0,
                 max_tokens=4096,
             )
+            call = LiveAgentCallEvidence.from_completion(repaired).model_copy(
+                update={"call_count": 2, "repair_performed": True}
+            )
             result, errors = self._validate(repaired.content, allowed_evidence_ids)
             completion = repaired
         if result is None:
-            raise LiveAgentValidationFailure(self.agent_id, errors)
-        call = LiveAgentCallEvidence.from_completion(completion).model_copy(
+            raise LiveAgentValidationFailure(self.agent_id, errors, call)
+        call = call.model_copy(
             update={
                 "call_count": 2 if repair_performed else 1,
                 "repair_performed": repair_performed,
@@ -222,8 +301,20 @@ class _LiveSpecialistAgent:
         content: str,
         allowed_evidence_ids: set[str],
     ) -> tuple[EngineeringPlanningResult | RiskReviewResult | None, list[str]]:
+        candidate = content.strip()
+        if candidate.startswith("```"):
+            lines = candidate.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            candidate = "\n".join(lines).strip()
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start >= 0 and end > start:
+            candidate = candidate[start : end + 1]
         try:
-            raw = json.loads(content)
+            raw = json.loads(candidate)
         except (json.JSONDecodeError, ValueError) as exc:
             return None, [f"Invalid JSON: {exc}"]
         if not isinstance(raw, dict):
@@ -263,12 +354,9 @@ class EngineeringPlanningAgent(_LiveSpecialistAgent):
             system_prompt=(
                 "You are the CoFounder OS Engineering Planning Agent. Produce a bounded "
                 "ten-business-day implementation plan. Never claim code changes, tests, "
-                "deployment, or external writes. Cite only supplied Evidence IDs. Required "
-                "schema: {schema_version:'insurance-engineering-llm-1.0', plan_summary:str, "
-                "workstreams:[{name,deliverable,days:[1..10],dependencies:[str],"
-                "acceptance_check}], two_week_sequence:[str], reused_capabilities:[str], "
-                "limitations:[str], validation_checks:[str], source_evidence:[str], "
-                "execution_status:'plan_only', code_diff:null, test_result:null}."
+                "deployment, or external writes. Cite only supplied Evidence IDs. Return "
+                "strict RFC 8259 JSON with double-quoted keys and strings, using this exact "
+                f"shape: {_engineering_schema_example()}"
             ),
             context={
                 "mission": evidence.mission,
@@ -307,13 +395,8 @@ class RiskReviewAgent(_LiveSpecialistAgent):
                 "You are the CoFounder OS Risk Review Agent. Review authority, privacy, "
                 "evidence quality, and delivery risk. Your advice is non-authoritative and "
                 "cannot replace the deterministic Policy Gate or Founder approval. Cite only "
-                "supplied Evidence IDs. Required schema: {schema_version:'insurance-risk-llm-1.0', "
-                "review_summary:str, findings:[{risk_id:'R-...',category:'authority|privacy|"
-                "evidence_quality|delivery',severity:'low|medium|high|critical',finding:str,"
-                "control:str,source_evidence:[str]}], recommended_decision_mode:'"
-                "autonomous_liability_decision|model_recommendation_plus_human_review', "
-                "private_upload_allowed:bool, required_human_approval:bool, "
-                "required_controls:[str], source_evidence:[str]}."
+                "supplied Evidence IDs. Return strict RFC 8259 JSON with double-quoted keys "
+                f"and strings, using this exact shape: {_risk_schema_example()}"
             ),
             context={
                 "mission": evidence.mission,

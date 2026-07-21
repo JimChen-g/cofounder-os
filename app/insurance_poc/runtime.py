@@ -163,6 +163,13 @@ class InsurancePOCTaskRuntime:
                 raise
             self._handler(key)(current, snapshot, correlation_id)
             fallback_used = True
+            failed_call = (
+                exc.call_evidence
+                if isinstance(exc, LiveAgentValidationFailure)
+                else None
+            )
+            if failed_call is not None:
+                execution_metadata.update(failed_call.model_dump(mode="json"))
             execution_metadata.update(
                 {
                     "live_call_succeeded": False,
