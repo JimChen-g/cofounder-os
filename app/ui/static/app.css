@@ -775,6 +775,31 @@ p {
   padding: 24px;
 }
 
+.routing-policy {
+  align-items: start;
+  background: #f8fbff;
+  border: 1px solid #cfdcf0;
+  border-radius: 11px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(240px, 1.4fr) minmax(220px, 1fr);
+  margin-bottom: 14px;
+  padding: 12px 14px;
+}
+
+.routing-policy strong {
+  color: #184e94;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.routing-policy p {
+  color: #526171;
+  font-size: 9px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
 .routing-grid {
   display: grid;
   gap: 12px;
@@ -946,6 +971,12 @@ p {
   font-size: 9px;
   line-height: 1.45;
   margin: 0;
+}
+
+@media (max-width: 760px) {
+  .routing-policy {
+    grid-template-columns: 1fr;
+  }
 }
 
 .empty-overview {

@@ -265,8 +265,10 @@ class ExplainableInsuranceRouter:
             decisions=decisions,
             live_model_calls=0,
             simulation_disclosure=(
-                "These are persisted routing decisions, not model-call claims. Local Agent "
-                "adapters are selected when live-provider health is not explicitly confirmed."
+                "These are persisted deterministic policy decisions, not model-call claims. "
+                "Qwen and Step remain excluded until live-provider health is explicitly "
+                "confirmed; eligible candidates use the fixed preference order declared for "
+                "each task."
             ),
         )
 

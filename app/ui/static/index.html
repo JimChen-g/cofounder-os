@@ -190,8 +190,15 @@
                 <p id="routing-board-summary">Deterministic choices before execution.</p>
               </div>
               <button class="button button-secondary" id="simulate-route-fallback" type="button">
-                Simulate Step unavailable
+                Simulate Product Agent outage
               </button>
+            </div>
+            <div class="routing-policy" id="routing-policy">
+              <div>
+                <strong>Deterministic policy router</strong>
+                <p>Hard filters run before ranking: availability and health → capability → modality → privacy and cloud eligibility → context → latency → cost.</p>
+              </div>
+              <p>Eligible candidates then use a fixed per-task preference order. This offline demo is not a learned router and does not claim a live model call.</p>
             </div>
             <div class="routing-grid" id="routing-grid"></div>
             <div class="routing-disclosure" id="routing-disclosure"></div>

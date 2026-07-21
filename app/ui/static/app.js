@@ -300,7 +300,13 @@ function renderRoutingBoard() {
     (decision) => decision.fallback_used,
   ).length;
   selectors.routingBoardSummary.textContent =
-    `${plan.decisions.length} task routes · ${fallbackCount} fallback${fallbackCount === 1 ? "" : "s"} · ${plan.live_model_calls} live calls during decision`;
+    `${plan.decisions.length} task routes · ${fallbackCount} fallback${fallbackCount === 1 ? "" : "s"} · ${plan.live_model_calls} live model calls (offline demo)`;
+  const simulatedOutage = state.unavailableModels.includes(
+    "product-agent-local",
+  );
+  selectors.simulateRouteFallback.textContent = simulatedOutage
+    ? "Restore normal routing"
+    : "Simulate Product Agent outage";
 
   plan.decisions.forEach((decision) => {
     const card = element(
@@ -381,6 +387,21 @@ function renderRoutingBoard() {
   const hasExecution = plan.decisions.some(
     (decision) => decision.execution_status === "executed",
   );
+  const changedRoutes = plan.decisions.filter(
+    (decision) => decision.requested_model !== decision.selected_model,
+  );
+  if (changedRoutes.length) {
+    selectors.routingDisclosure.append(
+      element("strong", null, "Route recalculated from submitted constraints"),
+      ...changedRoutes.map((decision) =>
+        element(
+          "p",
+          null,
+          `${decision.task_title}: ${decision.requested_model} → ${decision.selected_model}. ${decision.excluded_models?.[decision.requested_model] || "The preferred candidate was not eligible."}`,
+        ),
+      ),
+    );
+  }
   selectors.routingDisclosure.append(
     element(
       "strong",
@@ -412,13 +433,22 @@ async function simulateRouteFallback() {
   hideAlert();
   setButtonLoading(selectors.simulateRouteFallback, true);
   try {
-    const plan = await loadRoutingDecisions(["product-agent-local"]);
-    const fallbackCount = plan.decisions.filter(
-      (decision) => decision.fallback_used,
-    ).length;
-    toast(
-      `${fallbackCount} local route moved to its declared fallback; this condition will be submitted with the Run and no model call was claimed.`,
+    const restoreNormal = state.unavailableModels.includes(
+      "product-agent-local",
     );
+    const plan = await loadRoutingDecisions(
+      restoreNormal ? [] : ["product-agent-local"],
+    );
+    if (restoreNormal) {
+      toast("Normal routing restored; Product Agent is eligible again.");
+    } else {
+      const product = plan.decisions.find(
+        (decision) => decision.task_key === "product-analysis",
+      );
+      toast(
+        `Route recalculated: ${product?.requested_model || "product-agent-local"} → ${product?.selected_model || "declared fallback"}. This is an executable local Adapter fallback; no live model call was claimed.`,
+      );
+    }
   } catch (error) {
     showAlert("Fallback simulation could not run", error);
   } finally {

@@ -167,6 +167,11 @@ workflow records; local Agent latency and the harness runtime are measured.
 - No real-time video, audio, speech transcription, or model fine-tuning exists.
 - Routes are persisted decisions; this offline golden workflow performs no
   live Qwen or Step call.
+- The Router applies dynamic hard filters (availability/health, capability,
+  modality, privacy/cloud eligibility, context, latency, and cost), followed by
+  a fixed per-task preference order. It is deterministic policy routing, not a
+  learned Router. With the frozen restricted fixture and no confirmed live
+  provider health, local Adapters are expected to win consistently.
 - A preview may identify a human/live-provider fallback, but the offline Run
   refuses to auto-execute that route and asks the operator to restore a local
   executable route or provide the missing assignment.
