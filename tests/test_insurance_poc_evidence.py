@@ -97,6 +97,36 @@ def test_unknown_image_fails_explicitly_and_recoverably(
     assert "formal image Adapter" in raised.value.detail
 
 
+def test_duplicate_attachment_names_and_content_fail_recoverably(
+    evidence_service: InsurancePOCEvidenceService,
+) -> None:
+    request = _request(evidence_service)
+    renamed_duplicate = request.attachments[1].model_copy(
+        update={"filename": "renamed-duplicate.png"}
+    )
+    request.attachments = [
+        request.attachments[0],
+        request.attachments[1],
+        renamed_duplicate,
+    ]
+    with pytest.raises(EvidenceExtractionError) as raised:
+        evidence_service.extract(request)
+    assert raised.value.code == "duplicate_attachment_content"
+
+    request = _request(evidence_service)
+    duplicate_name = request.attachments[2].model_copy(
+        update={"filename": request.attachments[1].filename.upper()}
+    )
+    request.attachments = [
+        request.attachments[0],
+        request.attachments[1],
+        duplicate_name,
+    ]
+    with pytest.raises(EvidenceExtractionError) as raised:
+        evidence_service.extract(request)
+    assert raised.value.code == "duplicate_attachment_filename"
+
+
 def test_corrupt_pdf_never_silently_becomes_empty_evidence(
     evidence_service: InsurancePOCEvidenceService,
 ) -> None:

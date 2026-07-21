@@ -25,7 +25,10 @@ from app.insurance_poc.models import (
     SourceModality,
 )
 from app.insurance_poc.routing import ExplainableInsuranceRouter
-from app.insurance_poc.workflow import InsurancePOCGoldenWorkflow
+from app.insurance_poc.workflow import (
+    InsurancePOCExecutionError,
+    InsurancePOCGoldenWorkflow,
+)
 
 __all__ = [
     "AttachmentUpload",
@@ -45,6 +48,7 @@ __all__ = [
     "GoldenWorkflowRequest",
     "GoldenWorkflowResponse",
     "InsurancePOCEvidenceService",
+    "InsurancePOCExecutionError",
     "InsurancePOCGoldenWorkflow",
     "PrivacyLevel",
     "RoutingPreviewRequest",

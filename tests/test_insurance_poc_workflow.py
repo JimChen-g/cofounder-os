@@ -15,6 +15,7 @@ from app.domain import Artifact
 from app.insurance_poc import (
     GoldenWorkflowRequest,
     InsurancePOCEvidenceService,
+    InsurancePOCExecutionError,
     InsurancePOCGoldenWorkflow,
 )
 from app.insurance_poc.runtime import InsurancePOCTaskRuntime
@@ -234,6 +235,24 @@ async def test_submitted_fallback_is_bound_to_actual_local_execution(tmp_path: P
     assert route.metadata["execution_backend"] == "deterministic_local_agent"
 
 
+@pytest.mark.asyncio
+async def test_actual_workflow_refuses_to_auto_execute_a_human_route(
+    tmp_path: Path,
+) -> None:
+    evidence_service, workflow, _, _ = _services(tmp_path)
+    request = _request(evidence_service)
+    request.unavailable_models = [
+        "product-agent-local",
+        "generic-deterministic-agent-local",
+    ]
+
+    with pytest.raises(InsurancePOCExecutionError) as raised:
+        await workflow.execute(request, evidence_service.extract(request))
+
+    assert raised.value.code == "manual_route_required"
+    assert "will not claim automatic execution" in raised.value.detail
+
+
 def test_golden_workflow_api_issues_capability_and_rejects_missing_cookie(
     tmp_path: Path,
 ) -> None:
@@ -272,6 +291,36 @@ def test_golden_workflow_api_issues_capability_and_rejects_missing_cookie(
             },
         )
     assert denied.status_code == 409
+
+
+def test_golden_workflow_api_reports_manual_route_without_creating_a_fake_run(
+    tmp_path: Path,
+) -> None:
+    evidence_service, workflow, product, _ = _services(tmp_path)
+    app = FastAPI()
+    app.state.insurance_poc_evidence_service = evidence_service
+    app.state.insurance_poc_workflow = workflow
+    app.state.product_api_service = product
+    app.include_router(insurance_router)
+
+    with TestClient(app) as client:
+        fixture = client.get("/api/insurance-poc/fixture").json()
+        response = client.post(
+            "/api/insurance-poc/runs",
+            json={
+                "mission": fixture["mission"],
+                "attachments": fixture["attachments"],
+                "owner": "Founder",
+                "unavailable_models": [
+                    "product-agent-local",
+                    "generic-deterministic-agent-local",
+                ],
+            },
+        )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "manual_route_required"
+    assert response.json()["recoverable"] is True
 
 
 @pytest.mark.asyncio

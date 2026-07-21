@@ -22,6 +22,9 @@ from .models import EvidencePackage
 
 
 EXECUTION_BACKEND = "deterministic_local_agent"
+EXECUTABLE_ROUTE_PROVIDERS = frozenset(
+    {"dgx-local-adapter", "dgx-local-deterministic-agent"}
+)
 SAFE_DECISION_MODE = "model_recommendation_plus_human_review"
 
 D14_EXPECTED_OUTPUTS: dict[str, frozenset[str]] = {
@@ -89,6 +92,16 @@ class InsurancePOCTaskRuntime:
     ) -> None:
         current = next(item for item in snapshot.tasks if item.id == task.id)
         key = str(current.metadata.get("task_key"))
+        matching_routes = [
+            route for route in snapshot.route_decisions if route.task_id == current.id
+        ]
+        if len(matching_routes) != 1:
+            raise RuntimeError(f"D14 task {key} requires exactly one persisted route")
+        if matching_routes[0].provider not in EXECUTABLE_ROUTE_PROVIDERS:
+            raise RuntimeError(
+                f"D14 task {key} cannot auto-execute route provider "
+                f"{matching_routes[0].provider}"
+            )
         failure_key = snapshot.run.metadata.get("failure_injection_task")
         if failure_key == key and current.attempt_count == 1:
             raise RuntimeError(f"Injected recoverable D14 failure for {key}")

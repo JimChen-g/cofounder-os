@@ -167,6 +167,9 @@ workflow records; local Agent latency and the harness runtime are measured.
 - No real-time video, audio, speech transcription, or model fine-tuning exists.
 - Routes are persisted decisions; this offline golden workflow performs no
   live Qwen or Step call.
+- A preview may identify a human/live-provider fallback, but the offline Run
+  refuses to auto-execute that route and asks the operator to restore a local
+  executable route or provide the missing assignment.
 - The Engineering deliverable is a plan only. It exposes `code_diff=null` and
   `test_result=null` instead of fabricating execution.
 - No external insurer write, email, payment, or production integration occurs.

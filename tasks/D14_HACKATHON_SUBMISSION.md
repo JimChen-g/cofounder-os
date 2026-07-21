@@ -2,10 +2,10 @@
 
 ## Status
 
-RELEASE CANDIDATE. P0-P6 implementation and local release gates completed on
-2026-07-21. The accepted D06-D13 authorities remain unchanged. D14 is not
-marked accepted until the repository's independent review and release process
-is performed.
+INDEPENDENT TERMINAL ACCEPTANCE PASSED on 2026-07-21. P0-P6 implementation,
+independent review, corrective fixes, package build, and installed-wheel API
+acceptance are complete. The accepted D06-D13 authorities remain unchanged.
+The Founder's final Mission Control walkthrough remains a separate manual check.
 
 ## Deadline
 
@@ -127,6 +127,24 @@ editor or a new Agent framework.
 
 ## Release-candidate evidence
 
+- The independent D14 review rejected duplicate attachment names/content so a
+  renamed fixture cannot create duplicate Evidence IDs.
+- A human or live-provider route remains a decision-only fallback. The offline
+  Run now returns a recoverable `manual_route_required` conflict instead of
+  claiming that the deterministic local runtime executed that route.
+- The development dependency set now includes the declared release tooling;
+  the documented `python -m build --no-isolation` command builds both sdist and
+  wheel from a clean release invocation.
+- The full 451-test suite exits successfully. D14's 22 focused Evidence,
+  Routing, Workflow, approval, fallback, recovery, and evaluation tests pass;
+  Ruff, MyPy, JavaScript syntax, fixture checksums, dependency compatibility,
+  and Git whitespace checks pass.
+- The built wheel was installed with resolved runtime dependencies into a
+  temporary Python 3.14 environment outside the source tree. Two consecutive
+  API demonstrations completed (standard and submitted local fallback), each
+  with 10 tasks, 10 routes, 17 artifacts, Policy denial, Founder approval, and
+  a governed release receipt. The same installed-wheel check confirmed a 422
+  duplicate-evidence rejection and a 409 manual-route stop.
 - Six deterministic demo-evaluation runs exercise the success path and persist
   the comparison result in `examples/insurance-poc/demo-evaluation-results.json`.
 - Workflow tests exercise approval, rejection, fallback, replay, recovery, and

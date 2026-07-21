@@ -98,7 +98,16 @@ class InsurancePOCEvidenceService:
 
         decoded: list[tuple[AttachmentUpload, bytes, str]] = []
         total_bytes = 0
+        seen_filenames: set[str] = set()
+        seen_checksums: set[str] = set()
         for attachment in request.attachments:
+            normalized_filename = attachment.filename.casefold()
+            if normalized_filename in seen_filenames:
+                raise EvidenceExtractionError(
+                    "duplicate_attachment_filename",
+                    f"{attachment.filename} is submitted more than once.",
+                )
+            seen_filenames.add(normalized_filename)
             payload = self._decode(attachment)
             total_bytes += len(payload)
             if total_bytes > MAX_TOTAL_BYTES:
@@ -106,7 +115,17 @@ class InsurancePOCEvidenceService:
                     "total_upload_too_large",
                     "The submitted evidence exceeds the 10 MiB demo boundary.",
                 )
-            decoded.append((attachment, payload, hashlib.sha256(payload).hexdigest()))
+            checksum = hashlib.sha256(payload).hexdigest()
+            if checksum in seen_checksums:
+                raise EvidenceExtractionError(
+                    "duplicate_attachment_content",
+                    (
+                        f"{attachment.filename} duplicates an already submitted file. "
+                        "Remove the duplicate and retry."
+                    ),
+                )
+            seen_checksums.add(checksum)
+            decoded.append((attachment, payload, checksum))
 
         pdfs = [item for item in decoded if item[0].content_type == "application/pdf"]
         images = [item for item in decoded if item[0].content_type == "image/png"]

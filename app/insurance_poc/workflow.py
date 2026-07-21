@@ -22,7 +22,12 @@ from .models import (
     RoutingPreviewResponse,
 )
 from .routing import ExplainableInsuranceRouter
-from .runtime import D14_EXPECTED_OUTPUTS, EXECUTION_BACKEND, InsurancePOCTaskRuntime
+from .runtime import (
+    D14_EXPECTED_OUTPUTS,
+    EXECUTABLE_ROUTE_PROVIDERS,
+    EXECUTION_BACKEND,
+    InsurancePOCTaskRuntime,
+)
 
 
 WORKFLOW_ACTOR = "insurance-poc-workflow"
@@ -32,6 +37,16 @@ EXECUTION_DISCLOSURE = (
     "adapters over persisted upstream artifacts. No live Qwen, Step, code execution, "
     "test success, or external delivery is claimed."
 )
+
+
+class InsurancePOCExecutionError(RuntimeError):
+    """Recoverable mismatch between a route decision and the offline runtime."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+        self.recoverable = True
 
 
 @dataclass(frozen=True)
@@ -213,6 +228,21 @@ class InsurancePOCGoldenWorkflow:
                 unavailable_models=request.unavailable_models,
             )
         )
+        non_executable = [
+            decision
+            for decision in routing.decisions
+            if decision.provider not in EXECUTABLE_ROUTE_PROVIDERS
+        ]
+        if non_executable:
+            task_keys = ", ".join(decision.task_key for decision in non_executable)
+            raise InsurancePOCExecutionError(
+                "manual_route_required",
+                (
+                    "The selected route requires a live provider or human assignment "
+                    f"for: {task_keys}. Restore an executable local route and retry; "
+                    "the offline workflow will not claim automatic execution."
+                ),
+            )
         metadata: dict[str, Any] = {
             "scenario_id": evidence_package.scenario_id,
             "demo_primary": True,

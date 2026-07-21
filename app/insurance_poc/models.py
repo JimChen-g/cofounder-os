@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain import utc_now
 from app.services.orchestration import RunSnapshot
@@ -114,6 +114,13 @@ class EvidencePackage(StrictModel):
     evidence: list[EvidenceItem] = Field(min_length=5)
     constraints: list[str] = Field(min_length=1)
     warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def evidence_ids_must_be_unique(self) -> "EvidencePackage":
+        identifiers = [item.evidence_id for item in self.evidence]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("evidence_id values must be unique within a package")
+        return self
 
 
 class EvidencePreviewRequest(StrictModel):

@@ -20,6 +20,7 @@ from app.insurance_poc import (
     GoldenWorkflowRequest,
     GoldenWorkflowResponse,
     InsurancePOCEvidenceService,
+    InsurancePOCExecutionError,
     InsurancePOCGoldenWorkflow,
     RoutingPreviewRequest,
     RoutingPreviewResponse,
@@ -79,6 +80,19 @@ def _error(request: Request, exc: EvidenceExtractionError) -> JSONResponse:
         status_code=422,
         content={
             "error": "evidence_extraction_failed",
+            "code": exc.code,
+            "detail": exc.detail,
+            "recoverable": exc.recoverable,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+
+def _workflow_error(request: Request, exc: InsurancePOCExecutionError) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "error": "insurance_workflow_unavailable",
             "code": exc.code,
             "detail": exc.detail,
             "recoverable": exc.recoverable,
@@ -158,6 +172,8 @@ async def create_insurance_poc_run(
         return result
     except EvidenceExtractionError as exc:
         return _error(request, exc)
+    except InsurancePOCExecutionError as exc:
+        return _workflow_error(request, exc)
 
 
 @router.get("/evaluation", response_model=DemoEvaluationResponse)

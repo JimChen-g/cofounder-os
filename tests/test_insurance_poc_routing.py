@@ -72,6 +72,25 @@ def test_router_records_simulated_fallback_without_claiming_model_execution() ->
     assert "not model-call claims" in plan.simulation_disclosure
 
 
+def test_router_exposes_human_route_as_decision_only_when_local_routes_are_unavailable() -> None:
+    plan = ExplainableInsuranceRouter().route(
+        RoutingPreviewRequest(
+            evidence_package=_package(),
+            unavailable_models=[
+                "product-agent-local",
+                "generic-deterministic-agent-local",
+            ],
+        )
+    )
+
+    product = next(
+        decision for decision in plan.decisions if decision.task_key == "product-analysis"
+    )
+    assert product.selected_model == "human-review"
+    assert product.provider == "human"
+    assert product.execution_status == "decision_only"
+
+
 def test_explainable_route_fields_persist_in_authoritative_run_state(
     tmp_path: Path,
 ) -> None:
