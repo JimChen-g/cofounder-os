@@ -14,11 +14,13 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-REMOTE_USER="${COFOUNDER_REMOTE_USER:-cofounder}"
-REMOTE_HOST="${COFOUNDER_REMOTE_HOST:-spark.example.invalid}"
+REMOTE_USER="${COFOUNDER_REMOTE_USER:?Set COFOUNDER_REMOTE_USER}"
+REMOTE_HOST="${COFOUNDER_REMOTE_HOST:?Set COFOUNDER_REMOTE_HOST}"
 REMOTE_PORT="${COFOUNDER_REMOTE_PORT:-22}"
-SSH_KEY="${COFOUNDER_SSH_KEY:-$HOME/.ssh/id_ed25519}"
-REMOTE_REPO="${COFOUNDER_REMOTE_REPO:-/home/cofounder/cofounder-os}"
+REMOTE_HOME="${COFOUNDER_REMOTE_HOME:-/home/$REMOTE_USER}"
+SSH_KEY="${COFOUNDER_SSH_KEY:?Set COFOUNDER_SSH_KEY}"
+REMOTE_REPO="${COFOUNDER_REMOTE_REPO:-$REMOTE_HOME/cofounder-os}"
+REMOTE_CTL="${COFOUNDER_REMOTE_CTL:-$REMOTE_HOME/.local/bin/cofounderctl}"
 
 SSH_ARGS=(
   -i "$SSH_KEY"
@@ -132,10 +134,10 @@ fi
 
 echo "--- Remote Status ---"
 ssh "${SSH_ARGS[@]}" \
-  '/home/cofounder/.local/bin/cofounderctl status 2>/dev/null' || fail "Remote cofounderctl status failed"
+  "'$REMOTE_CTL' status 2>/dev/null" || fail "Remote cofounderctl status failed"
 echo "--- Remote Health ---"
 ssh "${SSH_ARGS[@]}" \
-  '/home/cofounder/.local/bin/cofounderctl health 2>/dev/null' || fail "Remote cofounderctl health failed"
+  "'$REMOTE_CTL' health 2>/dev/null" || fail "Remote cofounderctl health failed"
 
 # 8. Clipboard summary — report real worktree state
 section "CLIPBOARD"

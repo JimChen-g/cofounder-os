@@ -60,6 +60,12 @@ TOOL_REPO="${COFOUNDER_TOOL_REPO:-$HOME/Projects/cofounder-os}"
 PYTEST_BIN="${COFOUNDER_PYTEST_BIN:-$TOOL_REPO/.venv/bin/pytest}"
 RUFF_BIN="${COFOUNDER_RUFF_BIN:-$TOOL_REPO/.venv/bin/ruff}"
 REVIEW_STATUS="${COFOUNDER_REVIEW_STATUS:-PENDING}"
+REMOTE_USER="${COFOUNDER_REMOTE_USER:-}"
+REMOTE_HOST="${COFOUNDER_REMOTE_HOST:-}"
+REMOTE_PORT="${COFOUNDER_REMOTE_PORT:-22}"
+REMOTE_HOME="${COFOUNDER_REMOTE_HOME:-${REMOTE_USER:+/home/$REMOTE_USER}}"
+REMOTE_REPO="${COFOUNDER_REMOTE_REPO:-${REMOTE_HOME:+$REMOTE_HOME/cofounder-os}}"
+SSH_KEY="${COFOUNDER_SSH_KEY:-}"
 PYTEST_BIN_DISPLAY="${PYTEST_BIN/#$HOME/\$HOME}"
 BACKUP_DIR_DISPLAY="${BACKUP_DIR/#$HOME/\$HOME}"
 
@@ -368,7 +374,11 @@ FULL_SUITE_COUNT=$("$PYTEST_BIN" tests/ -x --tb=short 2>&1 | /usr/bin/grep -oE "
 
 LOCAL_SHA="$(/usr/bin/git rev-parse HEAD)"
 ORIGIN_SHA="$(/usr/bin/git rev-parse origin/main 2>/dev/null || echo 'unavailable')"
-SPARK_SHA="$(ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -p 22 cofounder@spark.example.invalid "git -C /home/cofounder/cofounder-os rev-parse HEAD 2>/dev/null" || echo 'unavailable')"
+if [[ -n "$REMOTE_USER" && -n "$REMOTE_HOST" && -n "$REMOTE_REPO" && -n "$SSH_KEY" ]]; then
+  SPARK_SHA="$(ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -p "$REMOTE_PORT" "$REMOTE_USER@$REMOTE_HOST" "git -C '$REMOTE_REPO' rev-parse HEAD 2>/dev/null" || echo 'unavailable')"
+else
+  SPARK_SHA="unavailable"
+fi
 
 /bin/cat > "$STAGE_REPORT" <<EOF
 STAGE_ID: $STAGE_ID

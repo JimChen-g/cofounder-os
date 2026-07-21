@@ -13,11 +13,13 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-REMOTE_USER="${COFOUNDER_REMOTE_USER:-cofounder}"
-REMOTE_HOST="${COFOUNDER_REMOTE_HOST:-spark.example.invalid}"
+REMOTE_USER="${COFOUNDER_REMOTE_USER:?Set COFOUNDER_REMOTE_USER}"
+REMOTE_HOST="${COFOUNDER_REMOTE_HOST:?Set COFOUNDER_REMOTE_HOST}"
 REMOTE_PORT="${COFOUNDER_REMOTE_PORT:-22}"
-REMOTE_REPO="${COFOUNDER_REMOTE_REPO:-/home/cofounder/cofounder-os}"
-SSH_KEY="${COFOUNDER_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+REMOTE_HOME="${COFOUNDER_REMOTE_HOME:-/home/$REMOTE_USER}"
+REMOTE_REPO="${COFOUNDER_REMOTE_REPO:-$REMOTE_HOME/cofounder-os}"
+SSH_KEY="${COFOUNDER_SSH_KEY:?Set COFOUNDER_SSH_KEY}"
+REMOTE_CTL="${COFOUNDER_REMOTE_CTL:-$REMOTE_HOME/.local/bin/cofounderctl}"
 
 STAMP="$(date '+%Y%m%d-%H%M%S')"
 LOCAL_DEPLOY_ROOT="$HOME/Library/Application Support/CoFounderOS/deployments"
@@ -25,7 +27,7 @@ LOCAL_DEPLOY_DIR="$LOCAL_DEPLOY_ROOT/$STAMP"
 LOCAL_BUNDLE="$LOCAL_DEPLOY_DIR/cofounder-os.bundle"
 LOG_DIR="$HOME/Library/Logs/CoFounderOS/dev"
 LOG="$LOG_DIR/deploy-to-spark-$STAMP.log"
-REMOTE_DEPLOY_DIR="/home/cofounder/.config/cofounder-os/deployments/$STAMP"
+REMOTE_DEPLOY_DIR="$REMOTE_HOME/.config/cofounder-os/deployments/$STAMP"
 REMOTE_BUNDLE="$REMOTE_DEPLOY_DIR/cofounder-os.bundle"
 
 mkdir -p "$LOCAL_DEPLOY_DIR" "$LOG_DIR"
@@ -58,8 +60,8 @@ rollback_remote() {
 
   remote_run \
     "git -C '$REMOTE_REPO' reset --hard '$previous_head' &&
-     /home/cofounder/.local/bin/cofounderctl status &&
-     /home/cofounder/.local/bin/cofounderctl smoke" ||
+     '$REMOTE_CTL' status &&
+     '$REMOTE_CTL' smoke" ||
     true
 }
 
@@ -165,9 +167,9 @@ remote_run \
    git fetch '$REMOTE_BUNDLE' refs/heads/main &&
    git reset --hard FETCH_HEAD &&
    test \"\$(git rev-parse HEAD)\" = '$LOCAL_HEAD' &&
-   /home/cofounder/.local/bin/cofounderctl status &&
-   /home/cofounder/.local/bin/cofounderctl health &&
-   /home/cofounder/.local/bin/cofounderctl smoke"
+   '$REMOTE_CTL' status &&
+   '$REMOTE_CTL' health &&
+   '$REMOTE_CTL' smoke"
 DEPLOY_RC=$?
 set -e
 
