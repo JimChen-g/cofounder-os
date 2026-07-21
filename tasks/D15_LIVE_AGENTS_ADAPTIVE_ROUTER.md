@@ -2,6 +2,25 @@
 
 Deadline: 2026-07-22 18:00 Asia/Shanghai
 
+## Execution status — 2026-07-21
+
+- P0-P4 implemented on branch `codex/d15-live-agents-adaptive-router`.
+- Checkpoints: `0dedd62` (feature) and `c4073cc` (live-output hardening).
+- Local verification: 455 tests pass; Ruff, Mypy (66 source files), frontend
+  JavaScript syntax, and `git diff --check` pass.
+- Browser acceptance at `127.0.0.1:9100/ui`: the stable fixture produces five
+  sources, ten evidence facts, sixteen artifacts, and one pending approval.
+  Engineering route-outage simulation recalculates to the generic declared
+  fallback, restores normally, and produces no browser warning/error.
+- First isolated DGX acceptance on checkpoint `0dedd62`: the adaptive Router
+  selected healthy local Qwen for both new Agents. Risk Review completed a real
+  Gateway-backed call after one bounded repair. Engineering made two real calls,
+  then safely fell back because its repaired output was still invalid JSON.
+- Checkpoint `c4073cc` replaces pseudo-schema prompts with valid RFC 8259 examples,
+  accepts fenced JSON safely, preserves failed-call evidence, and counts every
+  verified live attempt. A second isolated DGX run remains required before both
+  live Agents can be marked accepted.
+
 ## Scope
 
 D15 upgrades the accepted D14 insurance POC without replacing the D06–D14
