@@ -236,6 +236,7 @@ class _LiveSpecialistAgent:
         system_prompt: str,
         context: dict[str, Any],
         allowed_evidence_ids: set[str],
+        max_tokens: int = 4096,
     ) -> tuple[
         EngineeringPlanningResult | RiskReviewResult,
         LiveAgentCallEvidence,
@@ -247,7 +248,8 @@ class _LiveSpecialistAgent:
             ChatMessage(
                 role=Role.USER,
                 content=(
-                    "Use only this persisted, checksum-verified context. Return JSON only.\n"
+                    "/no_think\nUse only this persisted, checksum-verified context. "
+                    "Return JSON only.\n"
                     + json.dumps(context, ensure_ascii=False, sort_keys=True)
                 ),
             ),
@@ -256,7 +258,7 @@ class _LiveSpecialistAgent:
             messages,
             model=virtual_model,
             temperature=0.1,
-            max_tokens=4096,
+            max_tokens=max_tokens,
         )
         call = LiveAgentCallEvidence.from_completion(completion)
         result, errors = self._validate(completion.content, allowed_evidence_ids)
@@ -270,7 +272,8 @@ class _LiveSpecialistAgent:
                     ChatMessage(
                         role=Role.USER,
                         content=(
-                            "Repair the response. Return one strict RFC 8259 JSON object only. "
+                            "/no_think\nRepair the response. Return one strict RFC 8259 JSON "
+                            "object only. "
                             "Use double quotes for every key and string; do not use Markdown, "
                             "comments, trailing commas, or unescaped quotes inside strings. "
                             "Validation errors:\n- " + "\n- ".join(errors)
@@ -279,7 +282,7 @@ class _LiveSpecialistAgent:
                 ],
                 model=virtual_model,
                 temperature=0,
-                max_tokens=4096,
+                max_tokens=max_tokens,
             )
             call = LiveAgentCallEvidence.from_completion(repaired).model_copy(
                 update={"call_count": 2, "repair_performed": True}
@@ -371,6 +374,7 @@ class EngineeringPlanningAgent(_LiveSpecialistAgent):
                 "project_status": project_status,
             },
             allowed_evidence_ids={item.evidence_id for item in evidence.evidence},
+            max_tokens=8192,
         )
         if not isinstance(result, EngineeringPlanningResult):
             raise TypeError("Engineering Agent returned the wrong result contract")

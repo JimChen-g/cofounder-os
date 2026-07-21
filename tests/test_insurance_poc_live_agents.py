@@ -157,10 +157,12 @@ async def test_engineering_agent_repairs_once_and_records_live_evidence() -> Non
     )
     evidence_id = package.evidence[0].evidence_id
     calls = 0
+    payloads: list[dict[str, object]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
+        payloads.append(json.loads(request.content))
         if calls == 1:
             return _gateway_response({"invalid": True}, "req-invalid")
         return _gateway_response(_engineering_result(evidence_id), "req-repaired")
@@ -184,6 +186,13 @@ async def test_engineering_agent_repairs_once_and_records_live_evidence() -> Non
     assert call.repair_performed is True
     assert call.request_id == "req-repaired"
     assert call.selected_upstream_model == "qwen-live-test"
+    assert all(payload["max_tokens"] == 8192 for payload in payloads)
+    first_messages = payloads[0]["messages"]
+    assert isinstance(first_messages, list)
+    assert first_messages[1]["content"].startswith("/no_think\n")
+    repaired_messages = payloads[1]["messages"]
+    assert isinstance(repaired_messages, list)
+    assert repaired_messages[-1]["content"].startswith("/no_think\n")
 
 
 @pytest.mark.asyncio
