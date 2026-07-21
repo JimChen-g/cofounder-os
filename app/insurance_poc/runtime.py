@@ -14,16 +14,29 @@ from typing import Any
 from uuid import UUID
 
 from app.artifacts import FileArtifactStore
+from app.clients import GatewayClient, GatewayClientError
 from app.domain import AuditEvent, AuditOutcome, Task
 from app.services.artifact_write import ArtifactRegistrationService
 from app.services.orchestration import OrchestrationService, RunSnapshot
 
 from .models import EvidencePackage
+from .live_agents import (
+    EngineeringPlanningAgent,
+    LiveAgentCallEvidence,
+    LiveAgentValidationFailure,
+    RiskReviewAgent,
+)
 
 
 EXECUTION_BACKEND = "deterministic_local_agent"
+LIVE_EXECUTION_BACKEND = "gateway_llm_agent"
 EXECUTABLE_ROUTE_PROVIDERS = frozenset(
-    {"dgx-local-adapter", "dgx-local-deterministic-agent"}
+    {
+        "dgx-local-adapter",
+        "dgx-local-deterministic-agent",
+        "qwen-local-dgx",
+        "step-cloud",
+    }
 )
 SAFE_DECISION_MODE = "model_recommendation_plus_human_review"
 
@@ -60,10 +73,14 @@ class InsurancePOCTaskRuntime:
         *,
         orchestration: OrchestrationService,
         artifact_store: FileArtifactStore,
+        gateway: GatewayClient | None = None,
     ) -> None:
         self.orchestration = orchestration
         self.artifact_store = artifact_store
         self.writer = ArtifactRegistrationService(artifact_store, orchestration)
+        self.gateway = gateway
+        self.engineering_llm = EngineeringPlanningAgent(gateway) if gateway else None
+        self.risk_llm = RiskReviewAgent(gateway) if gateway else None
         self._handlers: dict[str, Callable[[Task, RunSnapshot, str | None], None]] = {
             "evidence-extraction": self._evidence,
             "executive-orchestration": self._executive,
@@ -97,30 +114,86 @@ class InsurancePOCTaskRuntime:
         ]
         if len(matching_routes) != 1:
             raise RuntimeError(f"D14 task {key} requires exactly one persisted route")
-        if matching_routes[0].provider not in EXECUTABLE_ROUTE_PROVIDERS:
+        route = matching_routes[0]
+        if route.provider not in EXECUTABLE_ROUTE_PROVIDERS:
             raise RuntimeError(
                 f"D14 task {key} cannot auto-execute route provider "
-                f"{matching_routes[0].provider}"
+                f"{route.provider}"
             )
         failure_key = snapshot.run.metadata.get("failure_injection_task")
         if failure_key == key and current.attempt_count == 1:
             raise RuntimeError(f"Injected recoverable D14 failure for {key}")
-        try:
-            handler = self._handlers[key]
-        except KeyError as exc:
-            raise RuntimeError(f"No D14 runtime handler for {key}") from exc
         started = time.perf_counter()
-        handler(current, snapshot, correlation_id)
+        backend = EXECUTION_BACKEND
+        fallback_used: bool | None = None
+        execution_metadata: dict[str, Any] = {
+            "planned_model": route.selected_model,
+            "planned_provider": route.provider,
+        }
+        live_route = route.provider in {"qwen-local-dgx", "step-cloud"}
+        try:
+            if live_route and key == "engineering-plan":
+                call = await self._engineering_live(
+                    current,
+                    snapshot,
+                    route.selected_model,
+                    correlation_id,
+                )
+                backend = LIVE_EXECUTION_BACKEND
+                execution_metadata.update(call.model_dump(mode="json"))
+                fallback_used = call.fallback_used
+            elif live_route and key == "risk-review":
+                call = await self._risk_live(
+                    current,
+                    snapshot,
+                    route.selected_model,
+                    correlation_id,
+                )
+                backend = LIVE_EXECUTION_BACKEND
+                execution_metadata.update(call.model_dump(mode="json"))
+                fallback_used = call.fallback_used
+            else:
+                if live_route:
+                    raise RuntimeError(
+                        f"D15 live routing is implemented only for Engineering and Risk, not {key}"
+                    )
+                self._handler(key)(current, snapshot, correlation_id)
+        except (GatewayClientError, LiveAgentValidationFailure, ValueError) as exc:
+            if not live_route or key not in {"engineering-plan", "risk-review"}:
+                raise
+            self._handler(key)(current, snapshot, correlation_id)
+            fallback_used = True
+            execution_metadata.update(
+                {
+                    "live_call_succeeded": False,
+                    "fallback_model": f"{current.assigned_agent}-local",
+                    "fallback_reason": str(exc),
+                }
+            )
         latency_ms = (time.perf_counter() - started) * 1_000
         self.orchestration.mark_route_executed(
             current.run_id,
             current.id,
             actor=current.assigned_agent or "insurance-poc-runtime",
-            execution_backend=EXECUTION_BACKEND,
+            execution_backend=backend,
             correlation_id=correlation_id,
             latency_ms=latency_ms,
+            fallback_used=fallback_used,
+            execution_metadata=execution_metadata,
         )
-        self._append_execution_event(current, key, correlation_id)
+        self._append_execution_event(
+            current,
+            key,
+            correlation_id,
+            backend=backend,
+            execution_metadata=execution_metadata,
+        )
+
+    def _handler(self, key: str) -> Callable[[Task, RunSnapshot, str | None], None]:
+        try:
+            return self._handlers[key]
+        except KeyError as exc:
+            raise RuntimeError(f"No D14 runtime handler for {key}") from exc
 
     def _evidence(self, task: Task, snapshot: RunSnapshot, correlation_id: str | None) -> None:
         evidence = self._evidence_package(snapshot)
@@ -236,6 +309,43 @@ class InsurancePOCTaskRuntime:
         }
         self._write_json(task, "finance-budget-analysis", payload, evidence, correlation_id)
 
+    async def _engineering_live(
+        self,
+        task: Task,
+        snapshot: RunSnapshot,
+        virtual_model: str,
+        correlation_id: str | None,
+    ) -> LiveAgentCallEvidence:
+        if self.engineering_llm is None:
+            raise GatewayClientError("Engineering live Agent has no configured Gateway")
+        evidence = self._evidence_package(snapshot)
+        product = self._dependency_json(snapshot, task, "product-scope-proposal")
+        finance = self._dependency_json(snapshot, task, "finance-budget-analysis")
+        scenario = self._scenario(snapshot)
+        project_status = self._dict(scenario["project_status"], "project_status")
+        result, call = await self.engineering_llm.execute(
+            virtual_model=virtual_model,
+            evidence=evidence,
+            product=product,
+            finance=finance,
+            project_status=project_status,
+        )
+        payload = {
+            **result.model_dump(mode="json"),
+            "accepted_scope": finance["accepted_scope"],
+            "execution_backend": LIVE_EXECUTION_BACKEND,
+            "model_call": call.model_dump(mode="json"),
+        }
+        self._write_json(
+            task,
+            "engineering-delivery-plan",
+            payload,
+            evidence,
+            correlation_id,
+            live_call=call,
+        )
+        return call
+
     def _engineering(
         self,
         task: Task,
@@ -264,6 +374,79 @@ class InsurancePOCTaskRuntime:
         }
         self._write_json(task, "engineering-delivery-plan", payload, evidence, correlation_id)
 
+    async def _risk_live(
+        self,
+        task: Task,
+        snapshot: RunSnapshot,
+        virtual_model: str,
+        correlation_id: str | None,
+    ) -> LiveAgentCallEvidence:
+        if self.risk_llm is None:
+            raise GatewayClientError("Risk live Agent has no configured Gateway")
+        evidence = self._evidence_package(snapshot)
+        product = self._dependency_json(snapshot, task, "product-scope-proposal")
+        finance = self._dependency_json(snapshot, task, "finance-budget-analysis")
+        result, call = await self.risk_llm.execute(
+            virtual_model=virtual_model,
+            evidence=evidence,
+            product=product,
+            finance=finance,
+        )
+        requested_mode = str(product["requested_decision_mode"])
+        human_review_required = any(
+            "human" in item.content.lower() and "review" in item.content.lower()
+            for item in evidence.evidence
+            if item.category.value == "compliance/constraint"
+        )
+        accepted_mode = (
+            SAFE_DECISION_MODE
+            if human_review_required or not evidence.authoritative
+            else result.recommended_decision_mode
+        )
+        conflict = self._authority_conflict(
+            evidence,
+            requested_mode=requested_mode,
+            accepted_mode=accepted_mode,
+            human_review_required=human_review_required,
+        )
+        payload = {
+            "schema_version": "insurance-risk-review-3.0",
+            "accepted_decision_mode": accepted_mode,
+            "authority_conflict": conflict,
+            "llm_review": result.model_dump(mode="json"),
+            "policy_override_applied": (
+                accepted_mode != result.recommended_decision_mode
+                or result.private_upload_allowed
+                or not result.required_human_approval
+            ),
+            "proposed_private_action": {
+                "operation": "upload",
+                "tool_name": "insurer-file-upload",
+                "target": "external-insurer-endpoint",
+                "external_write": True,
+                "private_data": True,
+            },
+            "proposed_sanitized_action": {
+                "operation": "message",
+                "tool_name": "sanitized-poc-dispatch",
+                "target": "external-insurer-reviewer",
+                "external_write": True,
+                "private_data": False,
+            },
+            "source_evidence": self._used_by(evidence, "risk-agent"),
+            "execution_backend": LIVE_EXECUTION_BACKEND,
+            "model_call": call.model_dump(mode="json"),
+        }
+        self._write_json(
+            task,
+            "risk-governance-review",
+            payload,
+            evidence,
+            correlation_id,
+            live_call=call,
+        )
+        return call
+
     def _risk(self, task: Task, snapshot: RunSnapshot, correlation_id: str | None) -> None:
         evidence = self._evidence_package(snapshot)
         product = self._dependency_json(snapshot, task, "product-scope-proposal")
@@ -278,23 +461,12 @@ class InsurancePOCTaskRuntime:
             if human_review_required or not evidence.authoritative
             else requested_mode
         )
-        conflict = {
-            "conflict_id": "C-AUTHORITY-001",
-            "conflict_type": "authority_boundary",
-            "raised_by": "risk-agent",
-            "affected_agents": ["product-agent", "engineering-agent", "risk-agent"],
-            "source_evidence": self._used_by(evidence, "risk-agent"),
-            "proposal_before": {"decision_mode": requested_mode},
-            "constraint": {
-                "authoritative": evidence.authoritative,
-                "human_review_required": human_review_required,
-                "external_write_without_approval": False,
-            },
-            "proposal_after": {"decision_mode": accepted_mode},
-            "resolution_rule": "non_authoritative_output_requires_human_review",
-            "resolution_status": "resolved" if accepted_mode != requested_mode else "not_required",
-            "accepted_by": ["risk-agent"],
-        }
+        conflict = self._authority_conflict(
+            evidence,
+            requested_mode=requested_mode,
+            accepted_mode=accepted_mode,
+            human_review_required=human_review_required,
+        )
         payload = {
             "schema_version": "insurance-risk-review-2.0",
             "accepted_decision_mode": accepted_mode,
@@ -317,6 +489,32 @@ class InsurancePOCTaskRuntime:
             "execution_backend": EXECUTION_BACKEND,
         }
         self._write_json(task, "risk-governance-review", payload, evidence, correlation_id)
+
+    def _authority_conflict(
+        self,
+        evidence: EvidencePackage,
+        *,
+        requested_mode: str,
+        accepted_mode: str,
+        human_review_required: bool,
+    ) -> dict[str, Any]:
+        return {
+            "conflict_id": "C-AUTHORITY-001",
+            "conflict_type": "authority_boundary",
+            "raised_by": "risk-agent",
+            "affected_agents": ["product-agent", "engineering-agent", "risk-agent"],
+            "source_evidence": self._used_by(evidence, "risk-agent"),
+            "proposal_before": {"decision_mode": requested_mode},
+            "constraint": {
+                "authoritative": evidence.authoritative,
+                "human_review_required": human_review_required,
+                "external_write_without_approval": False,
+            },
+            "proposal_after": {"decision_mode": accepted_mode},
+            "resolution_rule": "non_authoritative_output_requires_human_review",
+            "resolution_status": "resolved" if accepted_mode != requested_mode else "not_required",
+            "accepted_by": ["risk-agent", "deterministic-policy-gate"],
+        }
 
     def _synthesis(self, task: Task, snapshot: RunSnapshot, correlation_id: str | None) -> None:
         evidence = self._evidence_package(snapshot)
@@ -542,6 +740,7 @@ class InsurancePOCTaskRuntime:
         payload: dict[str, Any],
         evidence: EvidencePackage,
         correlation_id: str | None,
+        live_call: LiveAgentCallEvidence | None = None,
     ) -> None:
         self.writer.write_json(
             task.run_id,
@@ -553,7 +752,7 @@ class InsurancePOCTaskRuntime:
             relation="output",
             idempotency_key=f"{task.run_id}:{task.id}:{logical_name}:v2",
             correlation_id=correlation_id,
-            provenance=self._provenance(task, evidence),
+            provenance=self._provenance(task, evidence, live_call=live_call),
         )
 
     def _write_text(
@@ -579,7 +778,12 @@ class InsurancePOCTaskRuntime:
         )
 
     @staticmethod
-    def _provenance(task: Task, evidence: EvidencePackage) -> dict[str, Any]:
+    def _provenance(
+        task: Task,
+        evidence: EvidencePackage,
+        *,
+        live_call: LiveAgentCallEvidence | None = None,
+    ) -> dict[str, Any]:
         task_key = task.metadata.get("task_key")
         source_agents = [task.assigned_agent or "insurance-poc-runtime"]
         validation_status = "agent_output_validated"
@@ -593,15 +797,20 @@ class InsurancePOCTaskRuntime:
                 "verifier",
             ]
             validation_status = "verified_with_revision"
-        return {
+        value: dict[str, Any] = {
             "artifact_version": "2.0",
             "source_agents": source_agents,
             "source_evidence": [item.evidence_id for item in evidence.evidence],
             "validation_status": validation_status,
-            "execution_backend": EXECUTION_BACKEND,
-            "live_model_calls": 0,
+            "execution_backend": (
+                LIVE_EXECUTION_BACKEND if live_call is not None else EXECUTION_BACKEND
+            ),
+            "live_model_calls": live_call.call_count if live_call is not None else 0,
             "authoritative": False,
         }
+        if live_call is not None:
+            value["model_call"] = live_call.model_dump(mode="json")
+        return value
 
     def _dependency_json(
         self,
@@ -680,6 +889,9 @@ class InsurancePOCTaskRuntime:
         task: Task,
         task_key: str,
         correlation_id: str | None,
+        *,
+        backend: str,
+        execution_metadata: dict[str, Any],
     ) -> None:
         self.orchestration.repository.append_event(
             AuditEvent(
@@ -694,8 +906,14 @@ class InsurancePOCTaskRuntime:
                 correlation_id=correlation_id,
                 details={
                     "task_key": task_key,
-                    "execution_backend": EXECUTION_BACKEND,
-                    "live_model_calls": 0,
+                    "execution_backend": backend,
+                    "live_model_calls": int(execution_metadata.get("call_count", 0)),
+                    "selected_provider": execution_metadata.get("selected_provider"),
+                    "selected_upstream_model": execution_metadata.get(
+                        "selected_upstream_model"
+                    ),
+                    "request_id": execution_metadata.get("request_id"),
+                    "fallback_reason": execution_metadata.get("fallback_reason"),
                 },
             )
         )

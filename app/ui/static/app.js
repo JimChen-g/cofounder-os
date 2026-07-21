@@ -13,6 +13,7 @@ const state = {
   evidencePackage: null,
   routingPlan: null,
   unavailableModels: [],
+  routeSimulationTarget: null,
   conflicts: [],
   selectedArtifactId: null,
   activeView: "mission",
@@ -299,14 +300,15 @@ function renderRoutingBoard() {
   const fallbackCount = plan.decisions.filter(
     (decision) => decision.fallback_used,
   ).length;
+  const health = Object.entries(plan.measured_provider_health || {})
+    .map(([model, status]) => `${model.replace("cofounder-", "")}: ${status}`)
+    .join(" · ");
   selectors.routingBoardSummary.textContent =
-    `${plan.decisions.length} task routes · ${fallbackCount} fallback${fallbackCount === 1 ? "" : "s"} · ${plan.live_model_calls} live model calls (offline demo)`;
-  const simulatedOutage = state.unavailableModels.includes(
-    "product-agent-local",
-  );
+    `${plan.decisions.length} task routes · ${fallbackCount} fallback${fallbackCount === 1 ? "" : "s"} · ${plan.live_model_calls} verified live model call${plan.live_model_calls === 1 ? "" : "s"}${health ? ` · ${health}` : ""}`;
+  const simulatedOutage = state.unavailableModels.length > 0;
   selectors.simulateRouteFallback.textContent = simulatedOutage
     ? "Restore normal routing"
-    : "Simulate Product Agent outage";
+    : "Simulate Engineering route outage";
 
   plan.decisions.forEach((decision) => {
     const card = element(
@@ -320,13 +322,26 @@ function renderRoutingBoard() {
       element("span", "route-task-key", decision.task_key),
       element("h3", null, decision.task_title),
     );
+    const execution = decision.execution_metadata || {};
+    const livePlanned = ["qwen-local-dgx", "step-cloud"].includes(
+      decision.provider,
+    );
+    const executionMode =
+      execution.execution_backend === "gateway_llm_agent"
+        ? "LIVE LLM"
+        : execution.fallback_reason ||
+            (decision.fallback_used && execution.execution_backend)
+          ? "LOCAL FALLBACK"
+          : livePlanned && decision.execution_status !== "executed"
+            ? "LIVE LLM PLANNED"
+            : "DETERMINISTIC CONTROL";
     append(
       heading,
       headingCopy,
       element(
         "span",
-        `route-provider ${decision.fallback_used ? "fallback" : ""}`,
-        decision.fallback_used ? "Fallback" : labelize(decision.provider),
+        `route-provider ${decision.fallback_used ? "fallback" : ""} ${execution.execution_backend === "gateway_llm_agent" ? "live" : ""}`,
+        executionMode,
       ),
     );
     const selected = element("div", "route-selection");
@@ -334,6 +349,13 @@ function renderRoutingBoard() {
       selected,
       element("span", null, "Selected"),
       element("strong", null, decision.selected_model),
+      decision.candidate_scores?.[decision.selected_model] !== undefined
+        ? element(
+            "small",
+            "route-score-summary",
+            `Adaptive score ${Number(decision.candidate_scores[decision.selected_model]).toFixed(3)}`,
+          )
+        : null,
       decision.requested_model !== decision.selected_model
         ? element("small", null, `Requested ${decision.requested_model}`)
         : null,
@@ -357,6 +379,22 @@ function renderRoutingBoard() {
       capabilities.append(element("span", null, labelize(capability))),
     );
     const exclusions = Object.entries(decision.excluded_models || {});
+    const rankedScores = Object.entries(decision.candidate_scores || {}).sort(
+      ([, left], [, right]) => Number(right) - Number(left),
+    );
+    const scoreBlock = rankedScores.length ? element("div", "route-scores") : null;
+    if (scoreBlock) {
+      scoreBlock.append(element("strong", null, "Eligible candidate scores"));
+      rankedScores.forEach(([model, score], index) => {
+        scoreBlock.append(
+          element(
+            "p",
+            index === 0 ? "is-selected" : null,
+            `${index + 1}. ${model} · ${Number(score).toFixed(3)}`,
+          ),
+        );
+      });
+    }
     const exclusionBlock = exclusions.length
       ? element("div", "route-exclusions")
       : null;
@@ -367,13 +405,40 @@ function renderRoutingBoard() {
         );
       });
     }
+    const callEvidence =
+      execution.execution_backend === "gateway_llm_agent"
+        ? element("div", "route-live-evidence")
+        : null;
+    let fallbackEvidence = null;
+    if (callEvidence) {
+      append(
+        callEvidence,
+        element("strong", null, "Verified live call"),
+        element(
+          "p",
+          null,
+          `${execution.selected_provider} · ${execution.selected_upstream_model} · ${Number(execution.latency_ms || 0).toFixed(1)} ms · ${execution.total_tokens || 0} tokens`,
+        ),
+        element("p", null, `Request ${execution.request_id}`),
+      );
+    } else if (execution.fallback_reason) {
+      fallbackEvidence = element("div", "route-fallback-evidence");
+      append(
+        fallbackEvidence,
+        element("strong", null, "Live route failed safely"),
+        element("p", null, execution.fallback_reason),
+      );
+    }
     append(
       card,
       heading,
       selected,
       element("p", "route-reason", decision.reason),
       capabilities,
+      scoreBlock,
       facts,
+      callEvidence,
+      fallbackEvidence,
       element("p", "route-privacy", decision.privacy_decision),
       exclusionBlock,
       element(
@@ -433,20 +498,27 @@ async function simulateRouteFallback() {
   hideAlert();
   setButtonLoading(selectors.simulateRouteFallback, true);
   try {
-    const restoreNormal = state.unavailableModels.includes(
-      "product-agent-local",
+    const restoreNormal = state.unavailableModels.length > 0;
+    const engineering = state.routingPlan?.decisions?.find(
+      (decision) => decision.task_key === "engineering-plan",
     );
+    const target =
+      state.routeSimulationTarget || engineering?.selected_model || "engineering-agent-local";
+    if (!restoreNormal) {
+      state.routeSimulationTarget = target;
+    }
     const plan = await loadRoutingDecisions(
-      restoreNormal ? [] : ["product-agent-local"],
+      restoreNormal ? [] : [target],
     );
     if (restoreNormal) {
-      toast("Normal routing restored; Product Agent is eligible again.");
+      state.routeSimulationTarget = null;
+      toast("Normal routing restored; measured provider health will be used again.");
     } else {
-      const product = plan.decisions.find(
-        (decision) => decision.task_key === "product-analysis",
+      const rerouted = plan.decisions.find(
+        (decision) => decision.task_key === "engineering-plan",
       );
       toast(
-        `Route recalculated: ${product?.requested_model || "product-agent-local"} → ${product?.selected_model || "declared fallback"}. This is an executable local Adapter fallback; no live model call was claimed.`,
+        `Engineering route recalculated: ${target} → ${rerouted?.selected_model || "declared fallback"}. Simulation changes availability only and is not counted as a live call.`,
       );
     }
   } catch (error) {
@@ -1139,6 +1211,8 @@ function hydrateInsuranceRunState() {
     );
     state.routingPlan = {
       ...metadata.routing_plan,
+      live_model_calls:
+        metadata.live_model_calls ?? metadata.routing_plan.live_model_calls ?? 0,
       decisions: (metadata.routing_plan.decisions || []).map((decision) => {
         const actual = actualRoutes.get(decision.task_key);
         return actual
@@ -1153,6 +1227,13 @@ function hydrateInsuranceRunState() {
               estimated_latency_ms: actual.estimated_latency_ms,
               estimated_cost_usd: actual.estimated_cost_usd,
               execution_status: actual.execution_status,
+              candidate_scores:
+                actual.metadata?.candidate_scores || decision.candidate_scores || {},
+              score_factors:
+                actual.metadata?.score_factors || decision.score_factors || {},
+              provider_health:
+                actual.metadata?.provider_health || decision.provider_health || {},
+              execution_metadata: actual.metadata || {},
             }
           : decision;
       }),

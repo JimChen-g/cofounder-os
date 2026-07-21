@@ -136,6 +136,7 @@ class RoutingPreviewRequest(StrictModel):
     evidence_package: EvidencePackage
     unavailable_models: list[str] = Field(default_factory=list, max_length=8)
     provider_health: dict[str, bool] = Field(default_factory=dict)
+    provider_latency_ms: dict[str, float] = Field(default_factory=dict)
     latency_budget_ms: float | None = Field(default=None, ge=0)
     cost_budget_usd: float | None = Field(default=None, ge=0)
 
@@ -165,6 +166,12 @@ class ExplainableRouteDecision(StrictModel):
     fallback_used: bool
     validation_required: bool
     validation_requirement: str
+    selection_strategy: Literal["adaptive_constraint_score"] = (
+        "adaptive_constraint_score"
+    )
+    candidate_scores: dict[str, float] = Field(default_factory=dict)
+    score_factors: dict[str, dict[str, float]] = Field(default_factory=dict)
+    provider_health: dict[str, str] = Field(default_factory=dict)
     execution_status: Literal["decision_only", "executed", "failed"] = "decision_only"
 
 
@@ -173,6 +180,10 @@ class RoutingPreviewResponse(StrictModel):
     package_id: UUID
     decisions: list[ExplainableRouteDecision] = Field(min_length=3)
     live_model_calls: int = 0
+    routing_strategy: Literal["adaptive_constraint_score"] = (
+        "adaptive_constraint_score"
+    )
+    measured_provider_health: dict[str, str] = Field(default_factory=dict)
     simulation_disclosure: str
 
 

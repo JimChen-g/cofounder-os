@@ -33,6 +33,7 @@ class Candidate:
     cost_usd: float
     max_context: int
     cloud: bool = False
+    semantic_quality: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class RouteRule:
     latency_budget_ms: float
     cost_budget_usd: float
     validation_requirement: str
+    semantic_llm_preferred: bool = False
 
 
 ALL_MODALITIES = frozenset(SourceModality)
@@ -75,6 +77,7 @@ CANDIDATES: dict[str, Candidate] = {
         450,
         0,
         120_000,
+        semantic_quality=0.65,
     ),
     **{
         f"{agent}-local": Candidate(
@@ -86,6 +89,7 @@ CANDIDATES: dict[str, Candidate] = {
             25,
             0,
             120_000,
+            semantic_quality=0.68,
         )
         for agent, capabilities in LOCAL_CAPABILITIES.items()
         if agent != "evidence-extractor"
@@ -99,6 +103,7 @@ CANDIDATES: dict[str, Candidate] = {
         35,
         0,
         120_000,
+        semantic_quality=0.48,
     ),
     QWEN: Candidate(
         QWEN,
@@ -109,6 +114,7 @@ CANDIDATES: dict[str, Candidate] = {
         2_500,
         0,
         64_000,
+        semantic_quality=0.88,
     ),
     STEP: Candidate(
         STEP,
@@ -120,6 +126,7 @@ CANDIDATES: dict[str, Candidate] = {
         0.04,
         128_000,
         cloud=True,
+        semantic_quality=0.95,
     ),
     HUMAN_REVIEW: Candidate(
         HUMAN_REVIEW,
@@ -130,6 +137,7 @@ CANDIDATES: dict[str, Candidate] = {
         0,
         0,
         1_000_000,
+        semantic_quality=1.0,
     ),
 }
 
@@ -146,13 +154,19 @@ def _rule(
     latency: float = 8_000,
     cost: float = 0.05,
     validation: str = "Schema, provenance, and upstream checksum validation",
+    semantic_llm_preferred: bool = False,
 ) -> RouteRule:
     local = EVIDENCE_ADAPTER if agent == "evidence-extractor" else f"{agent}-local"
+    preferred = (
+        (QWEN, STEP, local, GENERIC_LOCAL, HUMAN_REVIEW)
+        if semantic_llm_preferred
+        else (local, GENERIC_LOCAL, QWEN, STEP, HUMAN_REVIEW)
+    )
     return RouteRule(
         key,
         title,
         agent,
-        (local, GENERIC_LOCAL, QWEN, STEP, HUMAN_REVIEW),
+        preferred,
         capabilities,
         modalities,
         complexity,
@@ -160,6 +174,7 @@ def _rule(
         latency,
         cost,
         validation,
+        semantic_llm_preferred,
     )
 
 
@@ -205,6 +220,7 @@ RULES = (
         LOCAL_CAPABILITIES["engineering-agent"],
         tool="planning-only execution contract with no fabricated test result",
         cost=0,
+        semantic_llm_preferred=True,
     ),
     _rule(
         "risk-review",
@@ -213,6 +229,7 @@ RULES = (
         LOCAL_CAPABILITIES["risk-agent"],
         tool="deterministic policy and authority rules",
         cost=0,
+        semantic_llm_preferred=True,
     ),
     _rule(
         "private-upload-policy",
@@ -260,15 +277,21 @@ class ExplainableInsuranceRouter:
     def route(self, request: RoutingPreviewRequest) -> RoutingPreviewResponse:
         context_length = self._estimated_context_length(request.evidence_package)
         decisions = [self._decision(rule, request, context_length) for rule in RULES]
+        measured_health = {
+            model: ("healthy" if request.provider_health.get(model, False) else "unavailable")
+            for model in (QWEN, STEP)
+        }
         return RoutingPreviewResponse(
             package_id=request.evidence_package.package_id,
             decisions=decisions,
             live_model_calls=0,
+            measured_provider_health=measured_health,
             simulation_disclosure=(
-                "These are persisted deterministic policy decisions, not model-call claims. "
-                "Qwen and Step remain excluded until live-provider health is explicitly "
-                "confirmed; eligible candidates use the fixed preference order declared for "
-                "each task."
+                "These are adaptive constraint-and-score decisions, not model-call claims. "
+                "Server-measured health, capability, modality, privacy, context, "
+                "latency, and cost are hard filters; eligible candidates are scored for "
+                "semantic depth, specialist fit, locality, measured latency, and budget "
+                "headroom."
             ),
         )
 
@@ -313,21 +336,44 @@ class ExplainableInsuranceRouter:
                 viable.append(candidate)
         if not viable:
             raise ValueError(f"No viable route for {rule.task_key}")
-        selected = viable[0]
-        for candidate in viable[1:]:
+        scores: dict[str, float] = {}
+        score_factors: dict[str, dict[str, float]] = {}
+        for candidate in viable:
+            factors = self._score_factors(
+                candidate,
+                rule,
+                privacy,
+                latency_budget,
+                cost_budget,
+                request.provider_latency_ms,
+            )
+            score_factors[candidate.name] = factors
+            scores[candidate.name] = round(sum(factors.values()), 3)
+        ranked = sorted(
+            viable,
+            key=lambda candidate: (-scores[candidate.name], rule.preferred.index(candidate.name)),
+        )
+        selected = ranked[0]
+        for candidate in ranked[1:]:
             excluded[candidate.name] = (
-                f"Eligible but lower-ranked than {selected.name} for this bounded task."
+                f"Eligible with adaptive score {scores[candidate.name]:.3f}, below "
+                f"{selected.name} at {scores[selected.name]:.3f}."
             )
         preferred_name = rule.preferred[0]
         fallback_used = selected.name != preferred_name
         fallback = next(
-            (candidate.name for candidate in viable[1:]),
+            (candidate.name for candidate in ranked[1:]),
             HUMAN_REVIEW,
         )
+        selected_latency = request.provider_latency_ms.get(
+            selected.name,
+            selected.latency_ms,
+        )
         reason = (
-            f"Selected {selected.name}: it satisfies {len(rule.required_capabilities)} "
-            f"required capabilities, {privacy.value} privacy, {context_length} estimated "
-            f"tokens, and the {latency_budget:.0f} ms / ${cost_budget:.2f} budgets."
+            f"Selected {selected.name} with adaptive score {scores[selected.name]:.3f} "
+            f"after hard filters; it satisfies {len(rule.required_capabilities)} required "
+            f"capabilities, {privacy.value} privacy, {context_length} estimated tokens, "
+            f"and the {latency_budget:.0f} ms / ${cost_budget:.2f} budgets."
         )
         return ExplainableRouteDecision(
             task_key=rule.task_key,
@@ -346,7 +392,7 @@ class ExplainableInsuranceRouter:
             tool_requirement=rule.tool_requirement,
             latency_budget_ms=latency_budget,
             cost_budget_usd=cost_budget,
-            estimated_latency_ms=selected.latency_ms,
+            estimated_latency_ms=selected_latency,
             estimated_cost_usd=selected.cost_usd,
             privacy_decision=(
                 "Cloud use is allowed only for evidence explicitly marked cloud_eligible."
@@ -357,7 +403,61 @@ class ExplainableInsuranceRouter:
             fallback_used=fallback_used,
             validation_required=True,
             validation_requirement=rule.validation_requirement,
+            candidate_scores=scores,
+            score_factors=score_factors,
+            provider_health={
+                model: (
+                    "healthy"
+                    if request.provider_health.get(model, False)
+                    else "unavailable"
+                )
+                for model in (QWEN, STEP)
+            },
         )
+
+    @staticmethod
+    def _score_factors(
+        candidate: Candidate,
+        rule: RouteRule,
+        privacy: PrivacyLevel,
+        latency_budget: float,
+        cost_budget: float,
+        measured_latency: dict[str, float],
+    ) -> dict[str, float]:
+        """Return transparent, bounded factors; no trained-model claim is made."""
+
+        local_name = (
+            EVIDENCE_ADAPTER
+            if rule.agent == "evidence-extractor"
+            else f"{rule.agent}-local"
+        )
+        latency = measured_latency.get(candidate.name, candidate.latency_ms)
+        factors = {
+            "semantic_quality": candidate.semantic_quality * 100,
+            "specialist_fit": 20.0 if candidate.name == local_name else 0.0,
+            "semantic_task_fit": (
+                30.0
+                if rule.semantic_llm_preferred and candidate.name in {QWEN, STEP}
+                else 30.0
+                if not rule.semantic_llm_preferred and candidate.name == local_name
+                else -20.0
+                if not rule.semantic_llm_preferred and candidate.name in {QWEN, STEP}
+                else 0.0
+            ),
+            "privacy_locality": (
+                10.0
+                if privacy == PrivacyLevel.RESTRICTED and not candidate.cloud
+                else 0.0
+            ),
+            "latency_headroom": max(0.0, 1 - latency / max(latency_budget, 1)) * 10,
+            "cost_headroom": (
+                10.0
+                if cost_budget == 0 and candidate.cost_usd == 0
+                else max(0.0, 1 - candidate.cost_usd / max(cost_budget, 0.000001)) * 10
+            ),
+            "manual_penalty": -200.0 if candidate.name == HUMAN_REVIEW else 0.0,
+        }
+        return {name: round(value, 3) for name, value in factors.items()}
 
     @staticmethod
     def _exclusion_reason(
@@ -389,7 +489,11 @@ class ExplainableInsuranceRouter:
             return "One or more relevant evidence items are not cloud eligible."
         if context_length > candidate.max_context:
             return "Estimated context exceeds the candidate limit."
-        if candidate.latency_ms > latency_budget:
+        effective_latency = request.provider_latency_ms.get(
+            candidate.name,
+            candidate.latency_ms,
+        )
+        if effective_latency > latency_budget:
             return "Estimated latency exceeds the request budget."
         if candidate.cost_usd > cost_budget:
             return "Estimated cost exceeds the request budget."

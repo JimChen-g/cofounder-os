@@ -128,7 +128,7 @@ Evaluation makes no model call and cannot mutate workflow state. See
 [`docs/evaluation-dashboard.md`](docs/evaluation-dashboard.md) for the score
 contract and verification procedure.
 
-### Hackathon golden demo (D14)
+### Hackathon golden demo (D14 + D15)
 
 The NVIDIA DGX Spark submission is frozen around one synthetic traffic-accident
 insurance POC mission. Stable PDF/image inputs, budget, privacy constraints,
@@ -141,7 +141,7 @@ PRODUCT_DATA_DIR=/tmp/cofounder-os-insurance-demo/data GATEWAY_PORT=9100 bash sc
 ```
 
 Open `http://127.0.0.1:9100/ui`, click **Load stable demo**, and launch the
-Mission. The path produces the shared Evidence Package, ten explainable route
+Mission. The path produces the shared Evidence Package, ten adaptive explainable route
 decisions, fixed golden DAG, two structured conflict resolutions, six final
 deliverables, Verifier revisions, a real Policy Gate decision, and Founder
 Approval.
@@ -155,13 +155,18 @@ python scripts/run_insurance_poc_evaluation.py \
 ```
 
 The image fixture Adapter is deterministic and SHA-256-bound; arbitrary images
-fail recoverably. Executed local Agent routes are bound to their persisted execution records;
-unavailable live-model candidates remain disclosed rather than simulated. Engineering is
-plan-only, and no external write is executed. See
+fail recoverably. D15 adds real Gateway-backed Engineering Planning and Risk
+Review Agents. A server-measured healthy local Qwen route records its actual
+provider, upstream model, request ID, latency, token usage, validation, and
+bounded repair. If the provider is unavailable or a live call fails, the
+declared local fallback executes and no live-call claim is made. Engineering is
+plan-only, Policy Gate and Release remain deterministic, and no external write
+is executed. See
 [`docs/insurance-poc-demo.md`](docs/insurance-poc-demo.md) for architecture,
 startup, the four-minute backup-demo script, DGX Spark value, verification, and
-known limitations. See `tasks/D14_HACKATHON_SUBMISSION.md` for the P0-P6
-contract and frozen exclusions.
+known limitations. See `tasks/D14_HACKATHON_SUBMISSION.md` for the accepted
+P0-P6 base and `tasks/D15_LIVE_AGENTS_ADAPTIVE_ROUTER.md` for the bounded live
+Agent and adaptive-routing contract.
 
 For a video-ready, fully synthetic traffic-accident liability case, see
 [`docs/traffic-liability-demo.md`](docs/traffic-liability-demo.md). The fixture

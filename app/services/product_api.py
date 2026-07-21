@@ -439,6 +439,7 @@ def build_product_api_service(settings: Settings) -> ProductAPIService:
         InsurancePOCTaskRuntime(
             orchestration=orchestration,
             artifact_store=artifact_store,
+            gateway=gateway,
         )
     )
     return ProductAPIService(

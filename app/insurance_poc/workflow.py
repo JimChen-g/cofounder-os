@@ -37,6 +37,11 @@ EXECUTION_DISCLOSURE = (
     "adapters over persisted upstream artifacts. No live Qwen, Step, code execution, "
     "test success, or external delivery is claimed."
 )
+LIVE_EXECUTION_DISCLOSURE = (
+    "Engineering Planning and Risk Review executed through the configured Gateway-backed "
+    "LLM route where health checks passed. All other tasks remained deterministic; Policy "
+    "Gate, Founder approval, and release authority were never delegated to an LLM."
+)
 
 
 class InsurancePOCExecutionError(RuntimeError):
@@ -220,18 +225,26 @@ class InsurancePOCGoldenWorkflow:
         correlation_id: str | None = None,
         approval_capability_sha256: str | None = None,
         failure_injection_task: str | None = None,
+        provider_health: dict[str, bool] | None = None,
+        provider_latency_ms: dict[str, float] | None = None,
     ) -> GoldenWorkflowResponse:
         scenario = self._scenario()
         routing = self.router.route(
             RoutingPreviewRequest(
                 evidence_package=evidence_package,
                 unavailable_models=request.unavailable_models,
+                provider_health=dict(provider_health or {}),
+                provider_latency_ms=dict(provider_latency_ms or {}),
             )
         )
         non_executable = [
             decision
             for decision in routing.decisions
             if decision.provider not in EXECUTABLE_ROUTE_PROVIDERS
+            or (
+                decision.provider in {"qwen-local-dgx", "step-cloud"}
+                and decision.task_key not in {"engineering-plan", "risk-review"}
+            )
         ]
         if non_executable:
             task_keys = ", ".join(decision.task_key for decision in non_executable)
@@ -256,6 +269,7 @@ class InsurancePOCGoldenWorkflow:
             "evidence_package": evidence_package.model_dump(mode="json"),
             "scenario_context": scenario,
             "routing_plan": routing.model_dump(mode="json"),
+            "provider_health": routing.measured_provider_health,
         }
         if approval_capability_sha256:
             metadata["approval_capability_sha256"] = approval_capability_sha256
@@ -299,6 +313,24 @@ class InsurancePOCGoldenWorkflow:
             max_cycles=100,
         )
         snapshot = result.snapshot
+        live_model_calls = sum(
+            int(route.metadata.get("call_count", 0))
+            for route in snapshot.route_decisions
+            if route.metadata.get("execution_backend") == "gateway_llm_agent"
+        )
+        disclosure = (
+            LIVE_EXECUTION_DISCLOSURE if live_model_calls else EXECUTION_DISCLOSURE
+        )
+        self.orchestration.update_run_metadata(
+            run.id,
+            {
+                "live_model_calls": live_model_calls,
+                "execution_disclosure": disclosure,
+            },
+            actor=WORKFLOW_ACTOR,
+            correlation_id=correlation_id,
+        )
+        snapshot = self.orchestration.get_snapshot(run.id)
         pending = [
             item
             for item in snapshot.approvals
@@ -319,7 +351,8 @@ class InsurancePOCGoldenWorkflow:
                 else decision
                 for decision in routing.decisions
             ],
-            live_model_calls=0,
+            live_model_calls=live_model_calls,
+            measured_provider_health=routing.measured_provider_health,
             simulation_disclosure=routing.simulation_disclosure,
         )
         return GoldenWorkflowResponse(
@@ -330,7 +363,7 @@ class InsurancePOCGoldenWorkflow:
             evidence_package=evidence_package,
             routing_plan=executed_routing,
             conflicts=conflicts,
-            execution_disclosure=EXECUTION_DISCLOSURE,
+            execution_disclosure=disclosure,
         )
 
     def _scenario(self) -> dict[str, Any]:
@@ -416,7 +449,14 @@ class InsurancePOCGoldenWorkflow:
                 fallback_used=decision.fallback_used,
                 actor="explainable-insurance-router",
                 correlation_id=correlation_id,
-                metadata={"task_key": task_key, "selected_for_execution": True},
+                metadata={
+                    "task_key": task_key,
+                    "selected_for_execution": True,
+                    "selection_strategy": decision.selection_strategy,
+                    "candidate_scores": decision.candidate_scores,
+                    "score_factors": decision.score_factors,
+                    "provider_health": decision.provider_health,
+                },
             )
 
     def _load_conflicts(self, snapshot: Any) -> list[ConflictRecord]:

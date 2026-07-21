@@ -100,18 +100,18 @@ def test_ui_files_do_not_embed_external_assets_or_inline_code() -> None:
     assert "http://" not in html
     assert "<style" not in html
     assert "<script>" not in html
-    assert '<script src="/ui/assets/app.js?v=d14" defer></script>' in html
-    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d14">' in html
+    assert '<script src="/ui/assets/app.js?v=d15" defer></script>' in html
+    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d15">' in html
 
 
-def test_insurance_poc_ui_labels_fixture_adapter_without_live_model_claim() -> None:
+def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> None:
     script = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
     html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
 
     assert "Build Evidence Package" in html
-    assert "Simulate Product Agent outage" in html
-    assert "Deterministic policy router" in html
-    assert "This offline demo is not a learned router" in html
+    assert "Simulate Engineering route outage" in html
+    assert "Adaptive explainable router" in html
+    assert "not a trained or learned Router" in html
     assert "Simulate Step unavailable" not in html
     assert "Files are normalized locally before any model route" in html
     assert "source.adapter_mode" in script
@@ -120,7 +120,10 @@ def test_insurance_poc_ui_labels_fixture_adapter_without_live_model_claim() -> N
     assert "decision.excluded_models" in script
     assert "decision.privacy_decision" in script
     assert "decision.validation_requirement" in script
-    assert "no live model call was claimed" in script
+    assert "Simulation changes availability only" in script
+    assert "Verified live call" in script
+    assert "candidate_scores" in script
+    assert "execution_metadata" in script
     assert "Restore normal routing" in script
     assert "Route recalculated from submitted constraints" in script
     assert "function renderConflicts()" in script

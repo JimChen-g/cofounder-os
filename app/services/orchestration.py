@@ -269,6 +269,38 @@ class OrchestrationService:
             correlation_id=correlation_id,
         )
 
+    def update_run_metadata(
+        self,
+        run_id: UUID | str,
+        values: dict[str, Any],
+        *,
+        actor: str,
+        correlation_id: str | None = None,
+    ) -> tuple[Run, AuditEvent]:
+        """Persist a bounded metadata patch with an audit event."""
+
+        normalized_actor = _required_text(actor, "actor")
+        if not values:
+            raise ValueError("values must not be empty")
+        with self.repository.transaction(run_id) as transaction:
+            current = transaction.get_run()
+            updated = current.model_copy(deep=True)
+            updated.metadata.update(values)
+            updated.updated_at = utc_now()
+            transaction.save_run(updated)
+            event = _event(
+                run_id=updated.id,
+                event_type="run.metadata_updated",
+                actor=normalized_actor,
+                action="update_metadata",
+                target_type="run",
+                target_id=str(updated.id),
+                correlation_id=correlation_id,
+                details={"keys": sorted(values)},
+            )
+            transaction.append_event(event)
+        return updated, event
+
     def wait_run_for_approval(
         self,
         run_id: UUID | str,
@@ -672,6 +704,7 @@ class OrchestrationService:
         correlation_id: str | None = None,
         latency_ms: float | None = None,
         fallback_used: bool | None = None,
+        execution_metadata: dict[str, Any] | None = None,
     ) -> tuple[RouteDecision, AuditEvent | None]:
         """Bind a persisted routing decision to the execution that actually ran."""
 
@@ -700,6 +733,8 @@ class OrchestrationService:
                 updated.fallback_used = fallback_used
             updated.metadata["execution_backend"] = normalized_backend
             updated.metadata["executed_at"] = utc_now().isoformat()
+            if execution_metadata:
+                updated.metadata.update(execution_metadata)
             transaction.save_route_decision(updated)
             event = _event(
                 run_id=updated.run_id,
@@ -716,6 +751,7 @@ class OrchestrationService:
                     "execution_backend": normalized_backend,
                     "fallback_used": updated.fallback_used,
                     "latency_ms": updated.latency_ms,
+                    "execution_metadata": dict(execution_metadata or {}),
                 },
             )
             transaction.append_event(event)

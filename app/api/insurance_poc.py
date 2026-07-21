@@ -29,6 +29,8 @@ from app.artifacts import FileArtifactStore
 from app.config import get_settings
 from app.services.artifact_write import ArtifactRegistrationService
 from app.services.product_api import ProductAPIService, build_product_api_service
+from app.providers.registry import get_registry
+from app.insurance_poc.routing import QWEN, STEP
 
 
 router = APIRouter(prefix="/api/insurance-poc", tags=["insurance-poc"])
@@ -73,6 +75,21 @@ def _workflow(request: Request) -> InsurancePOCGoldenWorkflow:
     )
     request.app.state.insurance_poc_workflow = created
     return created
+
+
+async def _measured_provider_health() -> tuple[dict[str, bool], dict[str, float]]:
+    """Return server-trusted health; callers cannot assert provider availability."""
+
+    statuses = await get_registry().health_status()
+    healthy = {QWEN: False, STEP: False}
+    latencies: dict[str, float] = {}
+    for status in statuses:
+        model = str(status["provider"])
+        healthy[model] = status["status"] == "healthy"
+        latency = status.get("latency_ms")
+        if latency is not None:
+            latencies[model] = float(latency)
+    return healthy, latencies
 
 
 def _error(request: Request, exc: EvidenceExtractionError) -> JSONResponse:
@@ -134,7 +151,14 @@ async def preview_insurance_poc_routing(
 ) -> RoutingPreviewResponse:
     """Explain model/tool choices without claiming execution."""
 
-    return ExplainableInsuranceRouter().route(body)
+    health, latency = await _measured_provider_health()
+    trusted = body.model_copy(
+        update={
+            "provider_health": health,
+            "provider_latency_ms": latency,
+        }
+    )
+    return ExplainableInsuranceRouter().route(trusted)
 
 
 @router.post(
@@ -151,11 +175,14 @@ async def create_insurance_poc_run(
 
     try:
         evidence = _service(request).extract(body)
+        provider_health, provider_latency = await _measured_provider_health()
         capability = secrets.token_urlsafe(32)
         result = await _workflow(request).execute(
             body,
             evidence,
             correlation_id=getattr(request.state, "request_id", None),
+            provider_health=provider_health,
+            provider_latency_ms=provider_latency,
             approval_capability_sha256=hashlib.sha256(
                 capability.encode("utf-8")
             ).hexdigest(),

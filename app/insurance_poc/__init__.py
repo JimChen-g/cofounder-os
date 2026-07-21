@@ -25,6 +25,14 @@ from app.insurance_poc.models import (
     SourceModality,
 )
 from app.insurance_poc.routing import ExplainableInsuranceRouter
+from app.insurance_poc.live_agents import (
+    EngineeringPlanningAgent,
+    EngineeringPlanningResult,
+    LiveAgentCallEvidence,
+    LiveAgentValidationFailure,
+    RiskReviewAgent,
+    RiskReviewResult,
+)
 from app.insurance_poc.workflow import (
     InsurancePOCExecutionError,
     InsurancePOCGoldenWorkflow,
@@ -42,6 +50,8 @@ __all__ = [
     "EvidencePreviewRequest",
     "EvidencePreviewResponse",
     "EvidenceSource",
+    "EngineeringPlanningAgent",
+    "EngineeringPlanningResult",
     "ExplainableInsuranceRouter",
     "ExplainableRouteDecision",
     "FixtureResponse",
@@ -50,8 +60,12 @@ __all__ = [
     "InsurancePOCEvidenceService",
     "InsurancePOCExecutionError",
     "InsurancePOCGoldenWorkflow",
+    "LiveAgentCallEvidence",
+    "LiveAgentValidationFailure",
     "PrivacyLevel",
     "RoutingPreviewRequest",
     "RoutingPreviewResponse",
+    "RiskReviewAgent",
+    "RiskReviewResult",
     "SourceModality",
 ]

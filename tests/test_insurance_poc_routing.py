@@ -72,6 +72,34 @@ def test_router_records_simulated_fallback_without_claiming_model_execution() ->
     assert "not model-call claims" in plan.simulation_disclosure
 
 
+def test_router_adaptively_selects_healthy_qwen_for_semantic_specialists() -> None:
+    plan = ExplainableInsuranceRouter().route(
+        RoutingPreviewRequest(
+            evidence_package=_package(),
+            provider_health={"cofounder-qwen": True, "cofounder-step": False},
+            provider_latency_ms={"cofounder-qwen": 125.0},
+        )
+    )
+
+    by_task = {decision.task_key: decision for decision in plan.decisions}
+    for key in ("engineering-plan", "risk-review"):
+        decision = by_task[key]
+        assert decision.selected_model == "cofounder-qwen"
+        assert decision.provider == "qwen-local-dgx"
+        assert decision.fallback_used is False
+        assert decision.candidate_scores["cofounder-qwen"] > (
+            decision.candidate_scores[f"{decision.task_key.split('-')[0]}-agent-local"]
+        )
+        assert decision.estimated_latency_ms == 125.0
+        assert decision.selection_strategy == "adaptive_constraint_score"
+    assert by_task["product-analysis"].selected_model == "product-agent-local"
+    assert by_task["finance-analysis"].selected_model == "finance-agent-local"
+    assert plan.measured_provider_health == {
+        "cofounder-qwen": "healthy",
+        "cofounder-step": "unavailable",
+    }
+
+
 def test_router_exposes_human_route_as_decision_only_when_local_routes_are_unavailable() -> None:
     plan = ExplainableInsuranceRouter().route(
         RoutingPreviewRequest(
