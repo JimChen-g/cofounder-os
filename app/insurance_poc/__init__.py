@@ -4,9 +4,9 @@ from app.insurance_poc.evidence import (
     EvidenceExtractionError,
     InsurancePOCEvidenceService,
 )
-from app.insurance_poc.routing import ExplainableInsuranceRouter
 from app.insurance_poc.models import (
     AttachmentUpload,
+    ConflictRecord,
     EvidenceCategory,
     EvidenceItem,
     EvidencePackage,
@@ -15,14 +15,19 @@ from app.insurance_poc.models import (
     EvidenceSource,
     ExplainableRouteDecision,
     FixtureResponse,
+    GoldenWorkflowRequest,
+    GoldenWorkflowResponse,
     PrivacyLevel,
     RoutingPreviewRequest,
     RoutingPreviewResponse,
     SourceModality,
 )
+from app.insurance_poc.routing import ExplainableInsuranceRouter
+from app.insurance_poc.workflow import InsurancePOCGoldenWorkflow
 
 __all__ = [
     "AttachmentUpload",
+    "ConflictRecord",
     "EvidenceCategory",
     "EvidenceExtractionError",
     "EvidenceItem",
@@ -33,7 +38,10 @@ __all__ = [
     "ExplainableInsuranceRouter",
     "ExplainableRouteDecision",
     "FixtureResponse",
+    "GoldenWorkflowRequest",
+    "GoldenWorkflowResponse",
     "InsurancePOCEvidenceService",
+    "InsurancePOCGoldenWorkflow",
     "PrivacyLevel",
     "RoutingPreviewRequest",
     "RoutingPreviewResponse",

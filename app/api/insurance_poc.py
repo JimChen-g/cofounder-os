@@ -13,10 +13,18 @@ from app.insurance_poc import (
     EvidencePreviewResponse,
     ExplainableInsuranceRouter,
     FixtureResponse,
+    GoldenWorkflowRequest,
+    GoldenWorkflowResponse,
     InsurancePOCEvidenceService,
+    InsurancePOCGoldenWorkflow,
     RoutingPreviewRequest,
     RoutingPreviewResponse,
 )
+from app.artifacts import FileArtifactStore
+from app.config import get_settings
+from app.policy import DeterministicPolicyGate
+from app.services.artifact_write import ArtifactRegistrationService
+from app.services.product_api import ProductAPIService, build_product_api_service
 
 
 router = APIRouter(prefix="/api/insurance-poc", tags=["insurance-poc"])
@@ -29,6 +37,36 @@ def _service(request: Request) -> InsurancePOCEvidenceService:
         return existing
     created = InsurancePOCEvidenceService(FIXTURE_DIR)
     request.app.state.insurance_poc_evidence_service = created
+    return created
+
+
+def _product_service(request: Request) -> ProductAPIService:
+    existing = getattr(request.app.state, "product_api_service", None)
+    if isinstance(existing, ProductAPIService):
+        return existing
+    created = build_product_api_service(get_settings())
+    request.app.state.product_api_service = created
+    return created
+
+
+def _workflow(request: Request) -> InsurancePOCGoldenWorkflow:
+    existing = getattr(request.app.state, "insurance_poc_workflow", None)
+    if isinstance(existing, InsurancePOCGoldenWorkflow):
+        return existing
+    product = _product_service(request)
+    artifact_store = product.artifact_store
+    if not isinstance(artifact_store, FileArtifactStore):
+        raise TypeError("Insurance POC requires the accepted FileArtifactStore")
+    created = InsurancePOCGoldenWorkflow(
+        fixture_dir=FIXTURE_DIR,
+        orchestration=product.orchestration,
+        artifacts=ArtifactRegistrationService(
+            artifact_store,
+            product.orchestration,
+        ),
+        policy_gate=DeterministicPolicyGate(),
+    )
+    request.app.state.insurance_poc_workflow = created
     return created
 
 
@@ -79,3 +117,25 @@ async def preview_insurance_poc_routing(
     """Explain model/tool choices without claiming execution."""
 
     return ExplainableInsuranceRouter().route(body)
+
+
+@router.post(
+    "/runs",
+    response_model=GoldenWorkflowResponse,
+    status_code=201,
+)
+async def create_insurance_poc_run(
+    request: Request,
+    body: GoldenWorkflowRequest,
+) -> GoldenWorkflowResponse | JSONResponse:
+    """Execute the fixed, shared-evidence golden DAG to human approval."""
+
+    try:
+        evidence = _service(request).extract(body)
+        return _workflow(request).execute(
+            body,
+            evidence,
+            correlation_id=getattr(request.state, "request_id", None),
+        )
+    except EvidenceExtractionError as exc:
+        return _error(request, exc)

@@ -47,13 +47,15 @@ _APPROVAL_TTL = timedelta(hours=1)
 _REQUIRED_OUTPUTS = {
     "product-agent": frozenset({"product-brief", "product-brief-md"}),
     "finance-agent": frozenset({"finance-brief", "finance-brief-md"}),
-    SYNTHESIS_TASK_TYPE: frozenset({
-        "executive-decision-memo",
-        "prd-product-brief",
-        "budget-summary",
-        "risk-register",
-        "action-plan",
-    }),
+    SYNTHESIS_TASK_TYPE: frozenset(
+        {
+            "executive-decision-memo",
+            "prd-product-brief",
+            "budget-summary",
+            "risk-register",
+            "action-plan",
+        }
+    ),
 }
 
 
@@ -188,10 +190,7 @@ class WorkflowController:
                 progress = True
 
             snapshot = self.orchestration.get_snapshot(run_uuid)
-            if any(
-                TaskStatus(task.status) == TaskStatus.FAILED
-                for task in snapshot.tasks
-            ):
+            if any(TaskStatus(task.status) == TaskStatus.FAILED for task in snapshot.tasks):
                 return self._fail_run(
                     run_uuid,
                     actor,
@@ -241,8 +240,7 @@ class WorkflowController:
                     progress = True
                     continue
                 if (
-                    decision.disposition
-                    == PolicyDisposition.REQUIRE_APPROVAL
+                    decision.disposition == PolicyDisposition.REQUIRE_APPROVAL
                     and not self._has_valid_approved_task(
                         snapshot,
                         task,
@@ -259,8 +257,7 @@ class WorkflowController:
                         )
                         action_digest = self._policy_action_digest(action)
                         approval_correlation_id = (
-                            correlation_id
-                            or f"policy:{run_uuid}:{task.id}:{action_digest[:16]}"
+                            correlation_id or f"policy:{run_uuid}:{task.id}:{action_digest[:16]}"
                         )
                         approval = self.orchestration.request_approval(
                             run_uuid,
@@ -273,16 +270,10 @@ class WorkflowController:
                             metadata={
                                 "policy_rule_ids": decision.rule_ids,
                                 "policy_action_sha256": action_digest,
-                                "policy_action_schema_version": (
-                                    action.schema_version
-                                ),
-                                "reviewer_required": (
-                                    decision.reviewer_required
-                                ),
+                                "policy_action_schema_version": (action.schema_version),
+                                "reviewer_required": (decision.reviewer_required),
                                 "claim_token": claim.claim_token,
-                                "policy_correlation_id": (
-                                    approval_correlation_id
-                                ),
+                                "policy_correlation_id": (approval_correlation_id),
                             },
                         )
                     except Exception as exc:
@@ -336,10 +327,7 @@ class WorkflowController:
                 progress = True
 
             snapshot = self.orchestration.get_snapshot(run_uuid)
-            if any(
-                TaskStatus(task.status) == TaskStatus.FAILED
-                for task in snapshot.tasks
-            ):
+            if any(TaskStatus(task.status) == TaskStatus.FAILED for task in snapshot.tasks):
                 return self._fail_run(
                     run_uuid,
                     actor,
@@ -353,8 +341,7 @@ class WorkflowController:
                 )
 
             if snapshot.tasks and all(
-                TaskStatus(task.status)
-                in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
+                TaskStatus(task.status) in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
                 for task in snapshot.tasks
             ):
                 self.orchestration.complete_run(
@@ -373,8 +360,7 @@ class WorkflowController:
                 )
 
             if any(
-                TaskStatus(task.status) == TaskStatus.WAITING_APPROVAL
-                for task in snapshot.tasks
+                TaskStatus(task.status) == TaskStatus.WAITING_APPROVAL for task in snapshot.tasks
             ):
                 return self._result(
                     snapshot,
@@ -441,9 +427,7 @@ class WorkflowController:
             await self._dispatch(task, correlation_id)
             current = self.orchestration.repository.get_task(run_id, task.id)
             if not self._verify_task_outputs(current):
-                raise WorkflowControllerError(
-                    "Task output bundle is incomplete or corrupt"
-                )
+                raise WorkflowControllerError("Task output bundle is incomplete or corrupt")
         except Exception as exc:
             self.agent_execution.record_attempt_failure(
                 run_id,
@@ -511,10 +495,7 @@ class WorkflowController:
                 task.run_id,
                 task.id,
                 claim_token=task.claim_token,
-                error=(
-                    "Policy denied recovered action: "
-                    + "; ".join(decision.reasons)
-                ),
+                error=("Policy denied recovered action: " + "; ".join(decision.reasons)),
                 actor=task.claimed_by,
                 correlation_id=correlation_id,
             )
@@ -581,12 +562,9 @@ class WorkflowController:
                     ),
                     founder_context=founder_context,
                     constraints=constraints,
-                    dependency_artifact_ids=[
-                        summary.artifact_id for summary in inputs
-                    ],
+                    dependency_artifact_ids=[summary.artifact_id for summary in inputs],
                     dependency_artifact_checksums={
-                        str(summary.artifact_id): summary.checksum
-                        for summary in inputs
+                        str(summary.artifact_id): summary.checksum for summary in inputs
                     },
                     dependency_artifact_summaries=inputs,
                 )
@@ -615,9 +593,7 @@ class WorkflowController:
                     ),
                     founder_context=founder_context,
                     constraints=constraints,
-                    dependency_artifact_ids=[
-                        summary.artifact_id for summary in inputs
-                    ],
+                    dependency_artifact_ids=[summary.artifact_id for summary in inputs],
                     dependency_artifact_summaries=inputs,
                 )
             )
@@ -661,29 +637,19 @@ class WorkflowController:
         snapshot: RunSnapshot,
     ) -> list[DependencyArtifactSummary]:
         if len(task.input_artifact_ids) > 20:
-            raise WorkflowControllerError(
-                "A task cannot include more than 20 input artifacts"
-            )
+            raise WorkflowControllerError("A task cannot include more than 20 input artifacts")
         if len(task.input_artifact_ids) != len(set(task.input_artifact_ids)):
-            raise WorkflowControllerError(
-                "Duplicate task input_artifact_ids are not allowed"
-            )
+            raise WorkflowControllerError("Duplicate task input_artifact_ids are not allowed")
 
-        artifacts_by_id = {
-            artifact.id: artifact for artifact in snapshot.artifacts
-        }
+        artifacts_by_id = {artifact.id: artifact for artifact in snapshot.artifacts}
         valid_lineage = {task.id, *task.dependency_ids}
         summaries: list[DependencyArtifactSummary] = []
         for artifact_id in task.input_artifact_ids:
             artifact = artifacts_by_id.get(artifact_id)
             if artifact is None:
-                raise WorkflowControllerError(
-                    f"Input artifact {artifact_id} does not exist"
-                )
+                raise WorkflowControllerError(f"Input artifact {artifact_id} does not exist")
             if artifact.run_id != task.run_id:
-                raise WorkflowControllerError(
-                    f"Input artifact {artifact.id} has the wrong run"
-                )
+                raise WorkflowControllerError(f"Input artifact {artifact.id} has the wrong run")
             if artifact.task_id not in valid_lineage:
                 raise WorkflowControllerError(
                     f"Input artifact {artifact.id} has invalid task lineage"
@@ -693,14 +659,13 @@ class WorkflowController:
                     f"Input artifact {artifact.id} is not registered as input"
                 )
             self._verify_artifact(artifact)
-            summaries.append(DependencyArtifactSummary(
-                artifact_id=artifact.id,
-                checksum=artifact.checksum_sha256 or "",
-                summary=(
-                    f"{artifact.name} from verified input lineage "
-                    f"{artifact.task_id}"
-                ),
-            ))
+            summaries.append(
+                DependencyArtifactSummary(
+                    artifact_id=artifact.id,
+                    checksum=artifact.checksum_sha256 or "",
+                    summary=(f"{artifact.name} from verified input lineage {artifact.task_id}"),
+                )
+            )
         return summaries
 
     def _load_synthesis_inputs(
@@ -712,14 +677,12 @@ class WorkflowController:
         product_artifacts = [
             artifact
             for artifact in snapshot.artifacts
-            if artifact.task_id in dependency_ids
-            and artifact.name == "product-brief"
+            if artifact.task_id in dependency_ids and artifact.name == "product-brief"
         ]
         finance_artifacts = [
             artifact
             for artifact in snapshot.artifacts
-            if artifact.task_id in dependency_ids
-            and artifact.name == "finance-brief"
+            if artifact.task_id in dependency_ids and artifact.name == "finance-brief"
         ]
         if len(product_artifacts) != 1 or len(finance_artifacts) != 1:
             raise WorkflowControllerError(
@@ -746,6 +709,8 @@ class WorkflowController:
         )
 
     def _verify_task_outputs(self, task: Task) -> bool:
+        if task.metadata.get("execution_mode") == "deterministic_acceptance_fixture":
+            return self._verify_declared_fixture_outputs(task)
         task_key = (
             SYNTHESIS_TASK_TYPE
             if task.metadata.get("task_type") == SYNTHESIS_TASK_TYPE
@@ -783,36 +748,61 @@ class WorkflowController:
         except Exception:
             return False
 
+    def _verify_declared_fixture_outputs(self, task: Task) -> bool:
+        """Verify a completed fixture task without dispatching an unimplemented Agent.
+
+        This is an integrity-only replay path. It does not execute the declared
+        model route or turn fixture output into a live model claim.
+        """
+
+        expected = task.metadata.get("expected_output_names")
+        if (
+            not isinstance(expected, list)
+            or not expected
+            or not all(isinstance(name, str) and name for name in expected)
+        ):
+            return False
+        try:
+            artifacts = [
+                self.orchestration.repository.get_artifact(task.run_id, artifact_id)
+                for artifact_id in task.output_artifact_ids
+            ]
+            if len(artifacts) != len(expected):
+                return False
+            names = [artifact.name for artifact in artifacts]
+            if sorted(names) != sorted(expected):
+                return False
+            for artifact in artifacts:
+                if (
+                    artifact.run_id != task.run_id
+                    or artifact.task_id != task.id
+                    or artifact.metadata.get("relation") != "output"
+                ):
+                    return False
+                self._verify_artifact(artifact)
+            return True
+        except Exception:
+            return False
+
     def _verify_artifact(self, artifact: Artifact) -> None:
         logical_name = artifact.metadata.get("logical_name")
         filename = artifact.metadata.get("filename")
         if not logical_name or not filename:
-            raise WorkflowControllerError(
-                f"Artifact {artifact.id} lacks store addressing metadata"
-            )
+            raise WorkflowControllerError(f"Artifact {artifact.id} lacks store addressing metadata")
         stored = self.artifact_store.verify(
             artifact.run_id,
             str(logical_name),
             str(filename),
             artifact.task_id,
         )
-        if (
-            not artifact.checksum_sha256
-            or stored.checksum_sha256 != artifact.checksum_sha256
-        ):
+        if not artifact.checksum_sha256 or stored.checksum_sha256 != artifact.checksum_sha256:
             raise WorkflowControllerError(
                 f"Artifact {artifact.id} checksum evidence does not match"
             )
-        if artifact.size_bytes is not None and (
-            stored.size_bytes != artifact.size_bytes
-        ):
-            raise WorkflowControllerError(
-                f"Artifact {artifact.id} size evidence does not match"
-            )
+        if artifact.size_bytes is not None and (stored.size_bytes != artifact.size_bytes):
+            raise WorkflowControllerError(f"Artifact {artifact.id} size evidence does not match")
         if stored.uri != artifact.uri:
-            raise WorkflowControllerError(
-                f"Artifact {artifact.id} URI evidence does not match"
-            )
+            raise WorkflowControllerError(f"Artifact {artifact.id} URI evidence does not match")
 
     def _verify_completed_snapshot(self, snapshot: RunSnapshot) -> None:
         invalid_task_ids = [
@@ -824,14 +814,11 @@ class WorkflowController:
         inconsistent_task_ids = [
             task.id
             for task in snapshot.tasks
-            if TaskStatus(task.status)
-            not in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
+            if TaskStatus(task.status) not in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
         ]
         invalid_task_ids.extend(inconsistent_task_ids)
         if invalid_task_ids:
-            identifiers = ", ".join(
-                str(task_id) for task_id in invalid_task_ids
-            )
+            identifiers = ", ".join(str(task_id) for task_id in invalid_task_ids)
             raise WorkflowControllerError(
                 "Completed run replay failed artifact integrity validation "
                 f"for task(s): {identifiers}"
@@ -852,19 +839,13 @@ class WorkflowController:
         status: TaskStatus,
     ) -> list[Task]:
         return sorted(
-            (
-                task
-                for task in snapshot.tasks
-                if TaskStatus(task.status) == status
-            ),
+            (task for task in snapshot.tasks if TaskStatus(task.status) == status),
             key=lambda task: (task.created_at, str(task.id)),
         )
 
     @staticmethod
     def _string_list(value: Any) -> list[str]:
-        if not isinstance(value, list) or any(
-            not isinstance(item, str) for item in value
-        ):
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
             raise WorkflowControllerError("constraints must be a list of strings")
         return value
 
@@ -902,11 +883,7 @@ class WorkflowController:
         if task.approval_id is None or task.claim_token is None:
             return False
         approval = next(
-            (
-                candidate
-                for candidate in snapshot.approvals
-                if candidate.id == task.approval_id
-            ),
+            (candidate for candidate in snapshot.approvals if candidate.id == task.approval_id),
             None,
         )
         if (
@@ -931,13 +908,10 @@ class WorkflowController:
 
         metadata = approval.metadata
         return (
-            metadata.get("policy_action_sha256")
-            == cls._policy_action_digest(action)
-            and metadata.get("policy_action_schema_version")
-            == action.schema_version
+            metadata.get("policy_action_sha256") == cls._policy_action_digest(action)
+            and metadata.get("policy_action_schema_version") == action.schema_version
             and metadata.get("policy_rule_ids") == decision.rule_ids
-            and metadata.get("reviewer_required")
-            == decision.reviewer_required
+            and metadata.get("reviewer_required") == decision.reviewer_required
             and metadata.get("claim_token") == task.claim_token
             and bool(metadata.get("policy_correlation_id"))
         )

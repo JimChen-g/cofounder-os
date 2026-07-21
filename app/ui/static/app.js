@@ -1,5 +1,7 @@
 "use strict";
 
+const ACTIVE_RUN_KEY = "cofounder-os.active-run-id";
+
 const state = {
   runId: null,
   snapshot: null,
@@ -9,6 +11,7 @@ const state = {
   pendingAttachments: [],
   evidencePackage: null,
   routingPlan: null,
+  conflicts: [],
   selectedArtifactId: null,
   activeView: "mission",
   requestEpoch: 0,
@@ -42,6 +45,36 @@ const agentDefinitions = {
     monogram: "E",
     discipline: "Decision synthesis",
   },
+  "evidence-extractor": {
+    className: "evidence",
+    label: "Evidence Extractor",
+    monogram: "V",
+    discipline: "Multimodal evidence",
+  },
+  "engineering-agent": {
+    className: "engineering",
+    label: "Engineering Agent",
+    monogram: "G",
+    discipline: "Executable delivery",
+  },
+  "risk-agent": {
+    className: "risk",
+    label: "Risk Agent",
+    monogram: "R",
+    discipline: "Authority & privacy",
+  },
+  "artifact-synthesizer": {
+    className: "synthesis",
+    label: "Artifact Synthesizer",
+    monogram: "S",
+    discipline: "Delivery package",
+  },
+  verifier: {
+    className: "verifier",
+    label: "Independent Verifier",
+    monogram: "✓",
+    discipline: "Consistency & revision",
+  },
 };
 
 const selectors = {
@@ -56,6 +89,9 @@ const selectors = {
   auditCount: document.querySelector("#audit-count"),
   auditList: document.querySelector("#audit-list"),
   composer: document.querySelector("#mission-composer"),
+  conflictGrid: document.querySelector("#conflict-grid"),
+  conflictSection: document.querySelector("#conflict-section"),
+  conflictSummary: document.querySelector("#conflict-summary"),
   downloadSelected: document.querySelector("#download-selected"),
   emptyOverview: document.querySelector("#empty-overview"),
   evaluationAgents: document.querySelector("#evaluation-agents"),
@@ -589,31 +625,28 @@ async function createMission(event) {
   const requestEpoch = ++state.requestEpoch;
   hideAlert();
   const data = new FormData(selectors.missionForm);
-  const payload = {
+  const genericPayload = {
     objective: String(data.get("objective") || "").trim(),
     max_cycles: 100,
   };
   let context = String(data.get("context") || "").trim();
   const owner = String(data.get("owner") || "").trim();
+  const insuranceMission = state.pendingAttachments.length > 0;
   if (state.pendingAttachments.length) {
     try {
       if (!state.evidencePackage) {
         await buildEvidencePackage({ quiet: true });
       }
-      const evidenceContext = JSON.stringify(state.evidencePackage);
-      context = context
-        ? `${context}\n\nEVIDENCE_PACKAGE_JSON=${evidenceContext}`
-        : `EVIDENCE_PACKAGE_JSON=${evidenceContext}`;
     } catch (error) {
       showAlert("Mission evidence is not ready", error);
       return;
     }
   }
   if (context) {
-    payload.context = context;
+    genericPayload.context = context;
   }
   if (owner) {
-    payload.owner = owner;
+    genericPayload.owner = owner;
   }
 
   setButtonLoading(selectors.launchButton, true);
@@ -624,15 +657,35 @@ async function createMission(event) {
       "Agents are executing; bounded validation and repair may take several minutes.";
   }, 12000);
   try {
-    const created = await apiRequest("/api/runs", {
+    const endpoint = insuranceMission
+      ? "/api/insurance-poc/runs"
+      : "/api/runs";
+    const requestBody = insuranceMission
+      ? {
+          mission: context
+            ? `${genericPayload.objective}\n\nFounder context: ${context}`
+            : genericPayload.objective,
+          attachments: state.pendingAttachments,
+          owner: owner || "Founder",
+        }
+      : genericPayload;
+    const created = await apiRequest(endpoint, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestBody),
     });
     if (requestEpoch !== state.requestEpoch) {
       return;
     }
     state.runId = created.run_id;
-    state.snapshot = created.workflow.snapshot;
+    window.localStorage.setItem(ACTIVE_RUN_KEY, state.runId);
+    state.snapshot = insuranceMission
+      ? created.snapshot
+      : created.workflow.snapshot;
+    state.conflicts = created.conflicts || [];
+    if (insuranceMission) {
+      state.evidencePackage = created.evidence_package;
+      state.routingPlan = created.routing_plan;
+    }
     state.artifacts = [];
     state.events = state.snapshot.events || [];
     state.selectedArtifactId = null;
@@ -679,6 +732,7 @@ async function loadRun({ useCurrentSnapshot = false } = {}) {
     state.snapshot = snapshot;
     state.artifacts = artifactResponse.artifacts || [];
     state.events = eventResponse.events || [];
+    hydrateInsuranceRunState();
     if (
       state.selectedArtifactId &&
       !state.artifacts.some(
@@ -833,9 +887,12 @@ function renderAll() {
   selectors.emptyOverview.classList.add("is-hidden");
   selectors.runWorkspace.classList.remove("is-hidden");
   selectors.refreshRun.classList.remove("is-hidden");
+  renderEvidenceBoard();
+  renderRoutingBoard();
   renderRunSummary();
   renderWorkflow();
   renderPolicy();
+  renderConflicts();
   renderAgents();
   renderApprovals();
   renderArtifacts();
@@ -932,14 +989,35 @@ function taskAgent(task) {
   );
 }
 
+function tasksInStageOrder() {
+  return [...state.snapshot.tasks].sort((left, right) => {
+    const stageDifference =
+      Number(left.metadata?.stage || 999) - Number(right.metadata?.stage || 999);
+    if (stageDifference) {
+      return stageDifference;
+    }
+    return String(left.metadata?.task_key || left.title).localeCompare(
+      String(right.metadata?.task_key || right.title),
+    );
+  });
+}
+
 function renderWorkflow() {
   const track = document.querySelector("#workflow-track");
   track.replaceChildren();
   const tasksById = new Map(
     state.snapshot.tasks.map((task) => [task.id, task]),
   );
-  state.snapshot.tasks.forEach((task, index) => {
+  const tasks = tasksInStageOrder();
+  const stageCounts = new Map();
+  tasks.forEach((task) => {
+    const stage = Number(task.metadata?.stage || 0);
+    stageCounts.set(stage, (stageCounts.get(stage) || 0) + 1);
+  });
+  tasks.forEach((task) => {
     const definition = taskAgent(task);
+    const stage = Number(task.metadata?.stage || 0);
+    const parallel = (stageCounts.get(stage) || 0) > 1;
     const dependencies = task.dependency_ids
       .map((id) => tasksById.get(id)?.title)
       .filter(Boolean);
@@ -956,7 +1034,7 @@ function renderWorkflow() {
     const stepIndex = element(
       "span",
       "step-index",
-      task.status === "completed" ? "✓" : String(index + 1).padStart(2, "0"),
+      task.status === "completed" ? "✓" : String(stage).padStart(2, "0"),
     );
     const copy = element("div");
     append(
@@ -965,9 +1043,11 @@ function renderWorkflow() {
       element(
         "p",
         null,
-        dependencies.length
-          ? `Depends on ${dependencies.join(" + ")}`
-          : "Ready at workflow start",
+        `${parallel ? `Stage ${String(stage).padStart(2, "0")} · parallel · ` : ""}${
+          dependencies.length
+            ? `Depends on ${dependencies.join(" + ")}`
+            : "Ready at workflow start"
+        }`,
       ),
     );
     const badge = element(
@@ -982,6 +1062,83 @@ function renderWorkflow() {
     `Updated ${formatTime(state.snapshot.run.updated_at)}`;
 }
 
+function hydrateInsuranceRunState() {
+  const metadata = state.snapshot?.run?.metadata || {};
+  if (metadata.evidence_package) {
+    state.evidencePackage = metadata.evidence_package;
+  }
+  if (metadata.routing_plan) {
+    state.routingPlan = metadata.routing_plan;
+  }
+  const resource = state.artifacts.find(
+    (item) => item.artifact?.name === "conflict-resolution-log",
+  );
+  if (resource?.content) {
+    try {
+      const value = JSON.parse(resource.content);
+      state.conflicts = Array.isArray(value.conflicts) ? value.conflicts : [];
+    } catch (_error) {
+      state.conflicts = [];
+    }
+  }
+}
+
+function conflictValue(conflict, side) {
+  if (conflict.conflict_type === "scope_budget") {
+    const proposal = conflict[side] || {};
+    const cost = Number(proposal.planned_cost_cny || 0).toLocaleString();
+    return side === "proposal_before"
+      ? `CNY ${cost} scope request`
+      : `CNY ${cost}; deferred ${proposal.deferred || "optional work"}`;
+  }
+  return labelize(conflict[side]?.decision_mode || "unknown");
+}
+
+function renderConflicts() {
+  selectors.conflictGrid.replaceChildren();
+  if (!state.conflicts.length) {
+    selectors.conflictSection.classList.add("is-hidden");
+    return;
+  }
+  selectors.conflictSection.classList.remove("is-hidden");
+  selectors.conflictSummary.textContent =
+    `${state.conflicts.length} resolved from structured outputs`;
+  state.conflicts.forEach((conflict) => {
+    const card = element("article", "conflict-card");
+    const head = element("div", "conflict-head");
+    append(
+      head,
+      element("span", "conflict-id", conflict.conflict_id),
+      element("span", "task-status status-completed", "Resolved"),
+    );
+    const transition = element("div", "conflict-transition");
+    append(
+      transition,
+      element("div", "conflict-before", conflictValue(conflict, "proposal_before")),
+      element("span", "conflict-arrow", "→"),
+      element("div", "conflict-after", conflictValue(conflict, "proposal_after")),
+    );
+    append(
+      card,
+      head,
+      element("h3", null, labelize(conflict.conflict_type)),
+      element(
+        "p",
+        "conflict-agents",
+        `${labelize(conflict.raised_by)} challenged ${conflict.affected_agents.map(labelize).join(", ")}`,
+      ),
+      transition,
+      element("p", "conflict-rule", `Rule: ${labelize(conflict.resolution_rule)}`),
+      element(
+        "small",
+        null,
+        `Evidence ${conflict.source_evidence.join(", ")} · accepted by ${conflict.accepted_by.map(labelize).join(", ")}`,
+      ),
+    );
+    selectors.conflictGrid.append(card);
+  });
+}
+
 function policyEvidence() {
   const pending = state.snapshot.approvals.filter(
     (approval) => approval.status === "pending",
@@ -991,7 +1148,10 @@ function policyEvidence() {
     .map((task) => task.metadata?.policy_action)
     .filter((action) => action && typeof action === "object");
   const rules = pending.flatMap(
-    (approval) => approval.metadata?.policy_rule_ids || [],
+    (approval) => [
+      ...(approval.metadata?.policy_rule_ids || []),
+      ...(approval.metadata?.blocked_policy_rule_ids || []),
+    ],
   );
   const reviewer = pending
     .map((approval) => approval.metadata?.reviewer_required)
@@ -1064,7 +1224,7 @@ function renderAgents() {
     (task) => task.status === "completed",
   ).length;
 
-  state.snapshot.tasks.forEach((task) => {
+  tasksInStageOrder().forEach((task) => {
     const definition = taskAgent(task);
     const route = state.snapshot.route_decisions
       .filter(
@@ -1702,9 +1862,13 @@ function renderEvaluationProviders(distribution, evaluatedRunCount) {
 function openEvaluatedRun(runId) {
   state.requestEpoch += 1;
   state.runId = runId;
+  window.localStorage.setItem(ACTIVE_RUN_KEY, state.runId);
   state.snapshot = null;
   state.artifacts = [];
   state.events = [];
+  state.evidencePackage = null;
+  state.routingPlan = null;
+  state.conflicts = [];
   state.selectedArtifactId = null;
   selectors.composer.classList.add("is-hidden");
   selectors.emptyOverview.classList.add("is-hidden");
@@ -1760,6 +1924,8 @@ function startNewMission() {
   state.pendingAttachments = [];
   state.evidencePackage = null;
   state.routingPlan = null;
+  state.conflicts = [];
+  window.localStorage.removeItem(ACTIVE_RUN_KEY);
   selectors.composer.classList.remove("is-hidden");
   selectors.emptyOverview.classList.remove("is-hidden");
   selectors.runWorkspace.classList.add("is-hidden");
@@ -1797,3 +1963,15 @@ document
 renderEmptyDataViews();
 renderAttachmentList();
 checkHealth();
+const persistedRunId = window.localStorage.getItem(ACTIVE_RUN_KEY);
+if (
+  persistedRunId &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    persistedRunId,
+  )
+) {
+  state.runId = persistedRunId;
+  selectors.composer.classList.add("is-hidden");
+  selectors.emptyOverview.classList.add("is-hidden");
+  loadRun();
+}

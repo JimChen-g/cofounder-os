@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain import utc_now
+from app.services.orchestration import RunSnapshot
 
 
 class StrictModel(BaseModel):
@@ -162,6 +163,42 @@ class RoutingPreviewResponse(StrictModel):
     decisions: list[ExplainableRouteDecision] = Field(min_length=3)
     live_model_calls: int = 0
     simulation_disclosure: str
+
+
+class GoldenWorkflowRequest(EvidencePreviewRequest):
+    """Create the frozen golden workflow from validated demo evidence."""
+
+    owner: str = Field(default="Founder", min_length=1, max_length=200)
+    unavailable_models: list[str] = Field(default_factory=list, max_length=8)
+
+
+class ConflictRecord(StrictModel):
+    """One structured, evidence-backed cross-Agent disagreement."""
+
+    conflict_id: str
+    conflict_type: Literal["scope_budget", "authority_boundary"]
+    raised_by: str
+    affected_agents: list[str] = Field(min_length=2)
+    source_evidence: list[str] = Field(min_length=1)
+    proposal_before: dict[str, object]
+    constraint: dict[str, object]
+    proposal_after: dict[str, object]
+    resolution_rule: str
+    resolution_status: Literal["resolved"] = "resolved"
+    accepted_by: list[str] = Field(min_length=1)
+
+
+class GoldenWorkflowResponse(StrictModel):
+    """Persisted result of the deterministic golden-demo execution."""
+
+    run_id: UUID
+    status: str
+    approval_id: UUID
+    snapshot: RunSnapshot
+    evidence_package: EvidencePackage
+    routing_plan: RoutingPreviewResponse
+    conflicts: list[ConflictRecord] = Field(min_length=2)
+    execution_disclosure: str
 
 
 class FixtureResponse(StrictModel):

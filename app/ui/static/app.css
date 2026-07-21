@@ -1362,6 +1362,82 @@ p {
   padding: 4px 6px;
 }
 
+.conflict-section {
+  margin-top: 6px;
+}
+
+.conflict-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.conflict-card {
+  background: var(--surface);
+  border: 1px solid #e6d4ad;
+  border-radius: var(--radius);
+  box-shadow: inset 4px 0 0 var(--amber);
+  padding: 18px;
+}
+
+.conflict-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.conflict-id {
+  color: var(--ink-faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8px;
+}
+
+.conflict-card h3 {
+  font-size: 15px;
+  margin: 13px 0 5px;
+}
+
+.conflict-agents,
+.conflict-rule,
+.conflict-card small {
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.conflict-transition {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  margin: 14px 0;
+}
+
+.conflict-before,
+.conflict-after {
+  border-radius: 9px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 10px;
+}
+
+.conflict-before {
+  background: var(--red-pale);
+  color: #78423d;
+}
+
+.conflict-after {
+  background: var(--accent-pale);
+  color: var(--accent-dark);
+}
+
+.conflict-arrow {
+  align-self: center;
+  color: var(--amber);
+  font-weight: 900;
+}
+
 .agent-grid {
   display: grid;
   gap: 14px;
@@ -1387,6 +1463,20 @@ p {
 
 .agent-card.executive .agent-card-bar {
   background: var(--purple);
+}
+
+.agent-card.evidence .agent-card-bar,
+.agent-card.engineering .agent-card-bar {
+  background: #187b83;
+}
+
+.agent-card.risk .agent-card-bar {
+  background: var(--amber);
+}
+
+.agent-card.synthesis .agent-card-bar,
+.agent-card.verifier .agent-card-bar {
+  background: #8657b9;
 }
 
 .agent-card-body {
@@ -1424,6 +1514,23 @@ p {
 }
 
 .agent-card.executive .agent-monogram {
+  background: var(--purple-pale);
+  color: var(--purple);
+}
+
+.agent-card.evidence .agent-monogram,
+.agent-card.engineering .agent-monogram {
+  background: #e1f3f3;
+  color: #12676e;
+}
+
+.agent-card.risk .agent-monogram {
+  background: var(--amber-pale);
+  color: var(--amber);
+}
+
+.agent-card.synthesis .agent-monogram,
+.agent-card.verifier .agent-monogram {
   background: var(--purple-pale);
   color: var(--purple);
 }
@@ -2179,6 +2286,10 @@ p {
   }
 
   .agent-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .conflict-grid {
     grid-template-columns: 1fr;
   }
 

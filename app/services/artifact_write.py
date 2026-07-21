@@ -7,7 +7,12 @@ from __future__ import annotations
 from typing import Any, Dict, Literal, Optional, Union
 from uuid import UUID
 
-from app.artifacts import ArtifactConflictError, ArtifactIntegrityError, ArtifactPathError, FileArtifactStore
+from app.artifacts import (
+    ArtifactConflictError,
+    ArtifactIntegrityError,
+    ArtifactPathError,
+    FileArtifactStore,
+)
 from app.domain import ArtifactKind
 from app.services.orchestration import ArtifactRelationError, OrchestrationService
 
@@ -70,9 +75,7 @@ class ArtifactRegistrationService:
             raise ArtifactRelationError("Run artifacts must not include task_id")
 
         if relation in {"input", "output"} and task_id is None:
-            raise ArtifactRelationError(
-                f"{relation} artifacts require task_id"
-            )
+            raise ArtifactRelationError(f"{relation} artifacts require task_id")
 
         kind = ArtifactKind.REPORT
         if content_type.startswith("text/"):
@@ -122,6 +125,16 @@ class ArtifactRegistrationService:
                     "idempotency_key": stored.idempotency_key,
                     "provenance": stored.provenance,
                     "relation": relation,
+                    **{
+                        key: stored.provenance[key]
+                        for key in (
+                            "artifact_version",
+                            "source_agents",
+                            "source_evidence",
+                            "validation_status",
+                        )
+                        if key in stored.provenance
+                    },
                 },
             )
         except ArtifactConflictError as exc:
@@ -153,9 +166,7 @@ class ArtifactRegistrationService:
             raise ArtifactRelationError("Run artifacts must not include task_id")
 
         if relation in {"input", "output"} and task_id is None:
-            raise ArtifactRelationError(
-                f"{relation} artifacts require task_id"
-            )
+            raise ArtifactRelationError(f"{relation} artifacts require task_id")
 
         try:
             stored = self.artifact_store.write_json(
@@ -197,6 +208,16 @@ class ArtifactRegistrationService:
                     "idempotency_key": stored.idempotency_key,
                     "provenance": stored.provenance,
                     "relation": relation,
+                    **{
+                        key: stored.provenance[key]
+                        for key in (
+                            "artifact_version",
+                            "source_agents",
+                            "source_evidence",
+                            "validation_status",
+                        )
+                        if key in stored.provenance
+                    },
                 },
             )
         except ArtifactConflictError as exc:
