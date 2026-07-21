@@ -1,6 +1,6 @@
 # D13 — Evaluation Dashboard
 
-Status: IMPLEMENTED — PENDING INDEPENDENT REVIEW
+Status: ACCEPTED
 
 ## Objective
 
@@ -68,4 +68,4 @@ Grades: `excellent >= 85`, `good >= 70`, `attention >= 50`, otherwise
   audit tests remain green.
 - Evaluation service/API tests, repository discovery tests, UI contract tests,
   lint, typecheck, build, and a real local browser/API flow pass.
-- Independent review is required before D13 is marked accepted or published.
+- Independent review passed before D13 was marked accepted and published.

@@ -15,7 +15,7 @@
 | D10 | Workflow Controller and recovery | ACCEPTED |
 | D11 | Product API | ACCEPTED |
 | D12 | Founder Mission Control UI | ACCEPTED |
-| D13 | Evaluation Dashboard | IMPLEMENTED — PENDING INDEPENDENT REVIEW |
+| D13 | Evaluation Dashboard | ACCEPTED |
 | D14 | Hackathon submission package | PENDING |
 
 ## Change Control

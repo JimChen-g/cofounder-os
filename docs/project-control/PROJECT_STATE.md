@@ -28,27 +28,21 @@ This document must be updated in the same commit as every accepted stage.
 | D10 | Workflow Controller and recovery | 4800001 |
 | D11 | Product API | 6c7de61 |
 | D12 | Founder Mission Control UI | b96b557 |
+| D13 | Evaluation Dashboard | 5feb555 |
 | G01 | Project delivery unification | g01-accepted (annotated tag) |
 
 ## Release Candidates
 
-D13 Evaluation Dashboard is implemented on
-`codex/d13-evaluation-dashboard` and is pending independent review. It adds
-deterministic, read-only Run scoring and an Evaluation view without changing
-the accepted D06-D12 authorities, service topology, provider boundary, or
-runtime state. Initial candidate evidence: 411 tests passed; Ruff, strict mypy,
-JavaScript syntax, sdist, and wheel gates passed; read-only API and desktop plus
-390px browser flows passed with no console errors. The first independent review
-findings were closed in corrective commit `290fb31`; the updated candidate has
-418 passing tests and is pending a second independent review.
+None. D13 passed corrective independent review, governance-delta review,
+GitHub publication, Spark deployment, three-plane verification, desktop plus
+390px browser/API flows, and recovery packaging on 2026-07-21.
 
 ## Accepted Follow-up
 
-D12 has no P0 or P1 defects. The D13 release candidate implements the accepted
-presentation corrective: stale-response guards, terminal-failure recovery
-messaging, compact narrow-screen mission controls, and static behavior contract
-coverage. Independent D13 review must confirm these corrections before they are
-accepted.
+D13 has no open P0-P3 findings. Its deterministic Evaluation service remains
+read-only, and the D12 presentation correctives are accepted without changing
+D06-D12 workflow authority, provider routing, persistence, or Product API
+contracts.
 
 ## Corrective History
 
@@ -86,27 +80,24 @@ accepted.
 
 ## Current State
 
-- **Current accepted product reference**: D12 implementation commit `b96b557`
-- **Resolve accepted product commit with**: `git rev-parse b96b557`
+- **Current accepted product reference**: D13 implementation commit `5feb555`
+- **Resolve accepted product commit with**: `git rev-parse 5feb555`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
 - **Current governance stage**: G01 — accepted
-- **Current product stage**: D13 — Evaluation Dashboard — implemented, pending
-  independent review
-- **Current release worktree**: `codex/d13-evaluation-dashboard`
-- **Independent D13 reference**: pending
+- **Current product stage**: D13 — Evaluation Dashboard — accepted
+- **Current release worktree**: `main`
+- **Independent D13 reference**: `codex/d13-evaluation-dashboard`
 - **Independent D12 reference**: `codex/d12-founder-mission-control`
 - **Independent D11 reference**: `codex/d11-product-api`
 - **Independent D07-D10 reference**: `codex/d07-d10`
 - **Current release scope**: D13 — deterministic evaluation service and API,
-  Evaluation UI, D12 presentation corrective, local quality gates, independent
-  review, publication, deployment, three-plane verification, and recovery
-- **Next product stage**: D14 — Hackathon submission package — blocked on D13
-  acceptance
-- **Current implementation candidate**:
-  `290fb319cc5d96aff34ea2535b68f6ecf44de156` on
-  `codex/d13-evaluation-dashboard`
-- **Next acceptance action**: perform a second independent review of the
-  corrective candidate before merge or deployment
+  Evaluation UI, D12 presentation corrective, 418-test quality gates,
+  independent review, publication, deployment, three-plane verification, and
+  recovery packaging passed
+- **Next product stage**: D14 — Hackathon submission package — ready to start
+- **Current implementation candidate**: none
+- **Next acceptance action**: begin D14 without changing accepted D06-D13
+  authorities
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`
@@ -122,6 +113,9 @@ accepted.
 - **D12 recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D12/`
 - **D12 accepted implementation HEAD**: b96b557324b98e10db5874ea806adcfab0de24b1
 - **D12 recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D12/20260720-110401Z/`
+- **D13 recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D13/`
+- **D13 accepted implementation HEAD**: 5feb555c5cba211095e425ca97bc88b6d15e1a1c
+- **D13 recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D13/20260721-000329Z/`
 
 ## Mandatory Update Block
 
