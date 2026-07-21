@@ -405,7 +405,7 @@ def _write_executive_outputs(
 
 1. 在 Mission 页面说明这是合成事故和非执法结论。
 2. 展示三个 Agent 的完成状态、Qwen 路由标签和九个校验产物。
-3. 打开责任研判报告，讲解 80% / 20%、86% 置信度和证据链。
+3. 打开责任研判报告，讲解 70% / 30%、86% 置信度和证据链。
 4. 打开 Approval center，说明高风险结论必须由 Founder/专家复核。
 5. 填写复核理由并批准，展示 Workflow Controller 收口为 Completed。
 6. 打开 Audit trail 与 Evaluation，展示可追溯记录和质量评分。

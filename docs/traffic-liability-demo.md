@@ -5,7 +5,8 @@
 ## 当前边界
 
 - 案例不包含真实姓名、车牌、地点或事故材料。
-- 页面中的 80% / 20% 和 86% 置信度是固定演示结果。
+- 页面中的 70% / 30% 和 86% 置信度是固定演示结果。
+- 《道路交通安全法》第七十六条要求机动车双方按照各自过错比例分担责任；《道路交通事故处理程序规定》第六十条规定主要、同等和次要责任分类。两条规定均未直接规定全国统一的 70% / 30%，本 Demo 将其作为机动车之间主次责任的常见演示比例，而不是法律条文中的固定换算公式。
 - 路由记录明确标识为 `qwen-traffic-liability-demo-fixture-v0`。
 - 本次不调用实时模型；正式 Adapter 状态是 `pending_clean_dataset_and_formal_adapter`。
 - 所有主要产物都声明“非执法、非司法、非理赔结论”，最终结果受 Founder 人工审批控制。
@@ -35,7 +36,7 @@ http://127.0.0.1:9100/ui
 ## 90 秒 Demo 视频路径
 
 1. **Mission（0-20 秒）**：说明合成案例和非执法边界；展示三个 Agent 完成、九个产物完整、Qwen 演示路由以及 Founder 审批待决。
-2. **Artifacts（20-45 秒）**：打开 `executive-decision-memo.md`，展示车辆 B 主要责任 80%、车辆 A 次要责任 20%、86% 置信度、证据链和缺失证据。
+2. **Artifacts（20-45 秒）**：打开 `executive-decision-memo.md`，展示车辆 B 主要责任 70%、车辆 A 次要责任 30%、86% 置信度、证据链和缺失证据。
 3. **Approvals（45-65 秒）**：展示两条策略规则；Reviewer 保持 `founder`，填写“已核对合成证据与非权威边界，同意用于 Demo 展示”，点击 **Approve & resume**。
 4. **Mission（65-75 秒）**：展示 Workflow Controller 将状态收口为 Completed。
 5. **Audit trail / Evaluation（75-90 秒）**：展示路由、产物校验、审批事件和可解释评分。

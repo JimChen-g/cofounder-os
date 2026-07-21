@@ -25,6 +25,12 @@ CASE_FILE = (
 def test_seeded_case_is_video_ready_and_explicitly_non_authoritative(
     tmp_path: Path,
 ) -> None:
+    fixture = json.loads(CASE_FILE.read_text(encoding="utf-8"))
+    assert [
+        allocation["share_percent"]
+        for allocation in fixture["prediction"]["allocations"]
+    ] == [70, 30]
+
     data_dir = tmp_path / "traffic-demo"
     result = seed_traffic_liability_demo(data_dir, CASE_FILE)
     service = build_product_api_service(
