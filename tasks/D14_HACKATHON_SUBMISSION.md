@@ -2,8 +2,10 @@
 
 ## Status
 
-IN PROGRESS. Founder-approved scope freeze on 2026-07-21. The accepted D06-D13
-authorities remain unchanged.
+RELEASE CANDIDATE. P0-P6 implementation and local release gates completed on
+2026-07-21. The accepted D06-D13 authorities remain unchanged. D14 is not
+marked accepted until the repository's independent review and release process
+is performed.
 
 ## Deadline
 
@@ -122,6 +124,20 @@ editor or a new Agent framework.
 - The fixed demonstration succeeds twice without state loss.
 - README, architecture, launch guide, known limitations, DGX Spark value, and
   a 3-5 minute backup-demo script are complete.
+
+## Release-candidate evidence
+
+- Six deterministic demo-evaluation runs exercise the success path and persist
+  the comparison result in `examples/insurance-poc/demo-evaluation-results.json`.
+- Workflow tests exercise approval, rejection, fallback, replay, recovery, and
+  evaluation without a live model call.
+- Eight real 1280x720 browser walkthrough frames and a three-minute H.264
+  backup walkthrough were generated outside the repository as submission
+  deliverables. The video is explicitly a silent guided screenshot walkthrough,
+  not a live screen recording or a claim of live model inference.
+- Model endpoints were unavailable during local acceptance. Routing records are
+  therefore auditable decisions with estimates and deterministic fallbacks;
+  they are not represented as successful provider calls.
 
 ## Frozen exclusions
 

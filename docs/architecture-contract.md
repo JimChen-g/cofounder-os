@@ -199,3 +199,24 @@ D00 is accepted only when:
 - Architecture and development guardrails are committed.
 - Infrastructure health checks pass before and after the commit.
 - The annotated `infra-stable-20260717` tag points to the accepted commit.
+
+## D14 Insurance POC overlay
+
+D14 preserves every frozen plane and authority above. It adds one bounded
+product overlay:
+
+```text
+synthetic PDF/PNG/JSON -> Evidence Package -> explainable route decisions
+-> fixed eight-task DAG -> Artifact Store -> Verifier -> Policy Gate/Approval
+```
+
+Raw restricted inputs remain on the DGX product plane. The Router may select
+Step only for sanitized, minimum-necessary planning context. Finance, Risk, and
+verification prefer local Qwen. Repository actions retain the existing
+Engineering execution boundary. The offline golden fixture stores route
+decisions as `decision_only` and executes deterministic acceptance rules; it
+does not claim a provider call.
+
+This overlay does not change ports, virtual model identifiers, service names,
+deployment source of truth, Workflow Controller authority, or the prohibition
+against direct Qwen/Step access.

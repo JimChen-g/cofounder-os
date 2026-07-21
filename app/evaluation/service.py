@@ -33,6 +33,16 @@ REQUIRED_ARTIFACTS = frozenset(
         "action-plan",
     }
 )
+INSURANCE_POC_REQUIRED_ARTIFACTS = frozenset(
+    {
+        "executive-decision-memo",
+        "insurance-poc-product-brief",
+        "technical-implementation-plan",
+        "budget-summary",
+        "risk-register",
+        "two-week-action-plan",
+    }
+)
 
 _DIMENSION_LABELS: dict[DimensionKey, str] = {
     "workflow": "Workflow outcome",
@@ -115,17 +125,10 @@ class EvaluationService:
         run_status = RunStatus(run.status)
         task_count = len(snapshot.tasks)
         completed_tasks = sum(
-            TaskStatus(task.status) == TaskStatus.COMPLETED
-            for task in snapshot.tasks
+            TaskStatus(task.status) == TaskStatus.COMPLETED for task in snapshot.tasks
         )
-        failed_tasks = sum(
-            TaskStatus(task.status) == TaskStatus.FAILED
-            for task in snapshot.tasks
-        )
-        retry_count = sum(
-            max(0, task.attempt_count - 1)
-            for task in snapshot.tasks
-        )
+        failed_tasks = sum(TaskStatus(task.status) == TaskStatus.FAILED for task in snapshot.tasks)
+        retry_count = sum(max(0, task.attempt_count - 1) for task in snapshot.tasks)
 
         dimensions = [
             self._workflow_dimension(run_status),
@@ -134,14 +137,15 @@ class EvaluationService:
                 completed_tasks=completed_tasks,
                 retry_count=retry_count,
                 first_pass_tasks=sum(
-                    TaskStatus(task.status) == TaskStatus.COMPLETED
-                    and task.attempt_count == 1
+                    TaskStatus(task.status) == TaskStatus.COMPLETED and task.attempt_count == 1
                     for task in snapshot.tasks
                 ),
             ),
         ]
+        required_artifacts = self._required_artifacts(snapshot)
         artifact_dimension, verified_artifacts = self._artifact_dimension(
             snapshot,
+            required_artifacts,
         )
         dimensions.append(artifact_dimension)
         dimensions.append(self._governance_dimension(snapshot))
@@ -174,18 +178,11 @@ class EvaluationService:
             failed_tasks=failed_tasks,
             retry_count=retry_count,
             artifact_count=len(snapshot.artifacts),
-            required_artifact_count=len(REQUIRED_ARTIFACTS),
+            required_artifact_count=len(required_artifacts),
             verified_artifact_count=verified_artifacts,
             pending_approval_count=pending_approvals,
-            providers=sorted(
-                {decision.provider for decision in snapshot.route_decisions}
-            ),
-            models=sorted(
-                {
-                    decision.selected_model
-                    for decision in snapshot.route_decisions
-                }
-            ),
+            providers=sorted({decision.provider for decision in snapshot.route_decisions}),
+            models=sorted({decision.selected_model for decision in snapshot.route_decisions}),
             dimensions=dimensions,
             agent_performance=self._agent_performance(snapshot),
         )
@@ -194,22 +191,13 @@ class EvaluationService:
         """Aggregate a bounded newest-first set of persisted Runs."""
 
         runs = self.orchestration.repository.list_runs(limit=limit)
-        evaluations = [
-            self.evaluate_run(run.id)
-            for run in runs
-        ]
+        evaluations = [self.evaluate_run(run.id) for run in runs]
         run_count = len(evaluations)
-        completed_runs = sum(
-            item.status == RunStatus.COMPLETED.value
-            for item in evaluations
-        )
+        completed_runs = sum(item.status == RunStatus.COMPLETED.value for item in evaluations)
         total_tasks = sum(item.task_count for item in evaluations)
         completed_tasks = sum(item.completed_tasks for item in evaluations)
         total_artifacts = sum(item.artifact_count for item in evaluations)
-        verified_artifacts = sum(
-            item.verified_artifact_count
-            for item in evaluations
-        )
+        verified_artifacts = sum(item.verified_artifact_count for item in evaluations)
 
         return EvaluationSummary(
             generated_at=utc_now(),
@@ -217,8 +205,7 @@ class EvaluationService:
             completion_rate=_percentage(completed_runs, run_count),
             average_score=(
                 round(
-                    sum(item.overall_score for item in evaluations)
-                    / run_count,
+                    sum(item.overall_score for item in evaluations) / run_count,
                     1,
                 )
                 if run_count
@@ -230,19 +217,11 @@ class EvaluationService:
                 total_artifacts,
             ),
             total_retries=sum(item.retry_count for item in evaluations),
-            status_distribution=dict(
-                sorted(Counter(item.status for item in evaluations).items())
-            ),
-            grade_distribution=dict(
-                sorted(Counter(item.grade for item in evaluations).items())
-            ),
+            status_distribution=dict(sorted(Counter(item.status for item in evaluations).items())),
+            grade_distribution=dict(sorted(Counter(item.grade for item in evaluations).items())),
             provider_distribution=dict(
                 sorted(
-                    Counter(
-                        provider
-                        for item in evaluations
-                        for provider in item.providers
-                    ).items()
+                    Counter(provider for item in evaluations for provider in item.providers).items()
                 )
             ),
             agent_performance=self._aggregate_agents(evaluations),
@@ -288,6 +267,7 @@ class EvaluationService:
     def _artifact_dimension(
         self,
         snapshot: RunSnapshot,
+        required_artifacts: frozenset[str],
     ) -> tuple[EvaluationDimension, int]:
         present: set[str] = set()
         verified_required: set[str] = set()
@@ -298,7 +278,7 @@ class EvaluationService:
             filename = artifact.metadata.get("filename")
             if not isinstance(logical_name, str):
                 logical_name = artifact.name
-            if logical_name in REQUIRED_ARTIFACTS:
+            if logical_name in required_artifacts:
                 present.add(logical_name)
             if not isinstance(filename, str):
                 continue
@@ -317,42 +297,32 @@ class EvaluationService:
                 bool(artifact.checksum_sha256)
                 and stored.checksum_sha256 == artifact.checksum_sha256
                 and stored.uri == artifact.uri
-                and (
-                    artifact.size_bytes is None
-                    or stored.size_bytes == artifact.size_bytes
-                )
+                and (artifact.size_bytes is None or stored.size_bytes == artifact.size_bytes)
             )
             if not matches:
                 continue
             verified_count += 1
-            if logical_name in REQUIRED_ARTIFACTS:
+            if logical_name in required_artifacts:
                 verified_required.add(logical_name)
 
         completeness = _percentage(
             len(present),
-            len(REQUIRED_ARTIFACTS),
+            len(required_artifacts),
         )
         required_integrity = _percentage(
             len(verified_required),
-            len(REQUIRED_ARTIFACTS),
+            len(required_artifacts),
         )
         registry_integrity = _percentage(
             verified_count,
             len(snapshot.artifacts),
         )
-        score = (
-            completeness * 0.35
-            + required_integrity * 0.45
-            + registry_integrity * 0.20
-        )
-        missing = sorted(REQUIRED_ARTIFACTS - present)
+        score = completeness * 0.35 + required_integrity * 0.45 + registry_integrity * 0.20
+        missing = sorted(required_artifacts - present)
         evidence = [
+            (f"{len(present)}/{len(required_artifacts)} required outputs are registered."),
             (
-                f"{len(present)}/{len(REQUIRED_ARTIFACTS)} required outputs "
-                "are registered."
-            ),
-            (
-                f"{len(verified_required)}/{len(REQUIRED_ARTIFACTS)} required "
+                f"{len(verified_required)}/{len(required_artifacts)} required "
                 "outputs passed store integrity checks."
             ),
             (
@@ -361,10 +331,17 @@ class EvaluationService:
             ),
         ]
         if missing:
-            evidence.append(
-                "Missing required outputs: " + ", ".join(missing) + "."
-            )
+            evidence.append("Missing required outputs: " + ", ".join(missing) + ".")
         return _dimension("artifacts", score, *evidence), verified_count
+
+    @staticmethod
+    def _required_artifacts(snapshot: RunSnapshot) -> frozenset[str]:
+        if (
+            snapshot.run.metadata.get("demo_primary") is True
+            and snapshot.run.metadata.get("scenario_id") == "insurance-poc-golden-001"
+        ):
+            return INSURANCE_POC_REQUIRED_ARTIFACTS
+        return REQUIRED_ARTIFACTS
 
     @staticmethod
     def _governance_dimension(
@@ -410,36 +387,26 @@ class EvaluationService:
             for decision in snapshot.route_decisions
             if decision.task_id is not None
         }
-        if any(
-            decision.task_id is None
-            for decision in snapshot.route_decisions
-        ):
+        if any(decision.task_id is None for decision in snapshot.route_decisions):
             routed_task_ids.update(
                 task.id
                 for task in snapshot.tasks
                 if task.assigned_agent == "executive-orchestrator"
             )
         route_coverage = (
-            _percentage(len(task_ids & routed_task_ids), len(task_ids))
-            if task_ids
-            else 100.0
+            _percentage(len(task_ids & routed_task_ids), len(task_ids)) if task_ids else 100.0
         )
         score = (event_coverage * 0.60) + (route_coverage * 0.40)
         missing_events = sorted(expected - event_types)
         evidence = [
-            (
-                f"{len(present_events)}/{len(expected)} expected lifecycle "
-                "event types are present."
-            ),
+            (f"{len(present_events)}/{len(expected)} expected lifecycle event types are present."),
             (
                 f"{len(task_ids & routed_task_ids)}/{len(task_ids)} tasks "
                 "have persisted route evidence."
             ),
         ]
         if missing_events:
-            evidence.append(
-                "Missing event evidence: " + ", ".join(missing_events) + "."
-            )
+            evidence.append("Missing event evidence: " + ", ".join(missing_events) + ".")
         return _dimension("auditability", score, *evidence)
 
     @staticmethod
@@ -452,18 +419,9 @@ class EvaluationService:
 
         performance: list[AgentPerformance] = []
         for agent_id, tasks in sorted(grouped.items()):
-            completed = sum(
-                TaskStatus(task.status) == TaskStatus.COMPLETED
-                for task in tasks
-            )
-            failed = sum(
-                TaskStatus(task.status) == TaskStatus.FAILED
-                for task in tasks
-            )
-            retries = sum(
-                max(0, task.attempt_count - 1)
-                for task in tasks
-            )
+            completed = sum(TaskStatus(task.status) == TaskStatus.COMPLETED for task in tasks)
+            failed = sum(TaskStatus(task.status) == TaskStatus.FAILED for task in tasks)
+            retries = sum(max(0, task.attempt_count - 1) for task in tasks)
             attempts = sum(task.attempt_count for task in tasks)
             performance.append(
                 AgentPerformance(
@@ -473,11 +431,7 @@ class EvaluationService:
                     failed=failed,
                     retries=retries,
                     success_rate=_percentage(completed, len(tasks)),
-                    average_attempts=(
-                        round(attempts / len(tasks), 2)
-                        if tasks
-                        else 0.0
-                    ),
+                    average_attempts=(round(attempts / len(tasks), 2) if tasks else 0.0),
                 )
             )
         return performance
@@ -518,11 +472,7 @@ class EvaluationService:
                         int(total["completed"]),
                         tasks,
                     ),
-                    average_attempts=(
-                        round(total["attempts"] / tasks, 2)
-                        if tasks
-                        else 0.0
-                    ),
+                    average_attempts=(round(total["attempts"] / tasks, 2) if tasks else 0.0),
                 )
             )
         return result

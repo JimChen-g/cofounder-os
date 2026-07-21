@@ -126,20 +126,39 @@ Evaluation makes no model call and cannot mutate workflow state. See
 [`docs/evaluation-dashboard.md`](docs/evaluation-dashboard.md) for the score
 contract and verification procedure.
 
-### Hackathon golden demo (D14 in progress)
+### Hackathon golden demo (D14)
 
 The NVIDIA DGX Spark submission is frozen around one synthetic traffic-accident
 insurance POC mission. Stable PDF/image inputs, budget, privacy constraints,
 project status, and acceptance criteria live in `examples/insurance-poc/`.
-Regenerate and verify the binary fixtures with:
+Regenerate and verify the binary fixtures, then start an isolated demo runtime:
 
 ```bash
 python scripts/build_insurance_poc_fixtures.py
+PRODUCT_DATA_DIR=/tmp/cofounder-os-insurance-demo/data GATEWAY_PORT=9100 bash scripts/run_gateway.sh
 ```
 
-The current image fixture Adapter is deterministic and SHA-256-bound; it does
-not claim live multimodal inference. See `tasks/D14_HACKATHON_SUBMISSION.md` for
-the P0-P6 contract and frozen exclusions.
+Open `http://127.0.0.1:9100/ui`, click **Load stable demo**, and launch the
+Mission. The path produces the shared Evidence Package, eight explainable route
+decisions, fixed golden DAG, two structured conflict resolutions, six final
+deliverables, Verifier revisions, a real Policy Gate decision, and Founder
+Approval.
+
+Run the small, explicitly non-statistical comparison with:
+
+```bash
+python scripts/run_insurance_poc_evaluation.py \
+  --data-dir /tmp/cofounder-os-insurance-evaluation \
+  --output examples/insurance-poc/demo-evaluation-results.json
+```
+
+The image fixture Adapter is deterministic and SHA-256-bound; arbitrary images
+fail recoverably. Model routes remain `decision_only` in the offline golden
+path, Engineering is plan-only, and no external write is executed. See
+[`docs/insurance-poc-demo.md`](docs/insurance-poc-demo.md) for architecture,
+startup, the four-minute backup-demo script, DGX Spark value, verification, and
+known limitations. See `tasks/D14_HACKATHON_SUBMISSION.md` for the P0-P6
+contract and frozen exclusions.
 
 For a video-ready, fully synthetic traffic-accident liability case, see
 [`docs/traffic-liability-demo.md`](docs/traffic-liability-demo.md). The fixture

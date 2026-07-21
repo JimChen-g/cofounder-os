@@ -16,7 +16,7 @@
 | D11 | Product API | ACCEPTED |
 | D12 | Founder Mission Control UI | ACCEPTED |
 | D13 | Evaluation Dashboard | ACCEPTED |
-| D14 | Insurance POC golden demo and Hackathon submission package | IN PROGRESS |
+| D14 | Insurance POC golden demo and Hackathon submission package | RELEASE CANDIDATE |
 
 ## Change Control
 

@@ -33,9 +33,13 @@ This document must be updated in the same commit as every accepted stage.
 
 ## Release Candidates
 
-None. D13 passed corrective independent review, governance-delta review,
-GitHub publication, Spark deployment, three-plane verification, desktop plus
-390px browser/API flows, and recovery packaging on 2026-07-21.
+- D14 Insurance POC golden demo: local P0-P6 implementation and release gates
+  complete on branch `codex/d14-insurance-poc`. It remains a release candidate
+  pending the existing independent review, publication, Spark deployment, and
+  recovery-package acceptance process.
+- D13 passed corrective independent review, governance-delta review, GitHub
+  publication, Spark deployment, three-plane verification, desktop plus 390px
+  browser/API flows, and recovery packaging on 2026-07-21.
 
 ## Accepted Follow-up
 
@@ -95,12 +99,12 @@ contracts.
   independent review, publication, deployment, three-plane verification, and
   recovery packaging passed
 - **Next product stage**: D14 — Insurance POC golden demo and Hackathon
-  submission package — in progress
+  submission package — release candidate pending independent acceptance
 - **Current implementation candidate**: `codex/d14-insurance-poc`, based on
   `8276561`; P0-P6 acceptance is defined in
   `tasks/D14_HACKATHON_SUBMISSION.md`
-- **Next acceptance action**: complete D14 without changing accepted D06-D13
-  authorities, then run independent review before acceptance
+- **Next acceptance action**: run independent D14 review, publish the approved
+  candidate, verify it on DGX Spark, and create the accepted recovery package
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`
