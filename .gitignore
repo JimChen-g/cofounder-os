@@ -27,6 +27,7 @@ logs/
 # Packaging
 *.egg-info/
 build/
+tmp/
 
 .env.local
 

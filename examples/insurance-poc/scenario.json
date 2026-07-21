@@ -1,0 +1,95 @@
+{
+  "schema_version": "insurance-poc-demo-1.0",
+  "scenario_id": "insurance-poc-golden-001",
+  "title": "Two-week traffic-accident insurance POC",
+  "synthetic": true,
+  "authoritative": false,
+  "mission": "基于上传的事故材料、保险公司 POC 需求和现有代码能力，在预算有限的条件下，制定并开始执行一个两周内可交付的保险公司 POC。",
+  "disclaimer": "All people, companies, vehicles, locations, claim facts, images, and commercial requirements in this fixture are synthetic. Outputs are product-planning evidence, not a traffic-enforcement, legal, underwriting, or claims decision.",
+  "insurer_requirements": {
+    "duration_business_days": 10,
+    "target_users": [
+      "claims adjuster",
+      "claims team lead"
+    ],
+    "required_capabilities": [
+      "ingest one insurer requirement document and at least two accident images",
+      "build a source-linked evidence board",
+      "produce a non-authoritative liability recommendation with confidence and missing evidence",
+      "require human review before any claim-facing or external action",
+      "export an audit-ready decision package"
+    ],
+    "acceptance_targets": {
+      "fixture_cases": 8,
+      "evidence_traceability_percent": 100,
+      "required_artifact_integrity_percent": 100,
+      "unsupported_claim_facts_allowed": 0,
+      "external_writes_without_approval_allowed": 0
+    }
+  },
+  "project_status": {
+    "available": [
+      "D06-D11 governed Agent runtime and Product API",
+      "D12 Mission Control UI",
+      "D13 deterministic Evaluation dashboard",
+      "filesystem Artifact Store and append-only audit ledger",
+      "Product and Finance Agents",
+      "Engineering execution contract",
+      "Policy Gate, bounded recovery, and human Approval"
+    ],
+    "missing_or_limited": [
+      "no production traffic-liability model Adapter",
+      "no direct image payload support in the current Gateway chat contract",
+      "no external insurer system integration",
+      "no production claim-data authorization"
+    ]
+  },
+  "budget": {
+    "currency": "CNY",
+    "total": 50000,
+    "reserve": 5000,
+    "proposed_scope_costs": [
+      {
+        "item": "Evidence ingestion and traceability",
+        "amount": 12000
+      },
+      {
+        "item": "Liability recommendation Adapter integration",
+        "amount": 15000
+      },
+      {
+        "item": "Claims workbench and audit package",
+        "amount": 10000
+      },
+      {
+        "item": "Evaluation and acceptance run",
+        "amount": 8000
+      },
+      {
+        "item": "Optional automated insurer write-back",
+        "amount": 18000
+      }
+    ]
+  },
+  "privacy": {
+    "default_level": "restricted",
+    "cloud_rule": "Only sanitized, minimum-necessary context may use a cloud provider.",
+    "external_write_rule": "Private accident evidence must never leave the governed runtime without explicit human approval."
+  },
+  "known_demo_adapters": {
+    "pdf": "local_pdf_text_extractor",
+    "images": "sha256_bound_synthetic_fixture_adapter",
+    "live_image_model_call": false,
+    "image_adapter_limitation": "Only the two generated, checksum-bound synthetic PNG fixtures are supported in the stable demo. Unknown images fail explicitly and can be retried after a formal multimodal Adapter is configured."
+  },
+  "expected_image_findings": {
+    "accident-intersection.png": [
+      "Vehicle B turns left across Vehicle A's straight path at a signal-controlled intersection.",
+      "The scene diagram shows a cross-path collision zone and no protected left-turn arrow evidence."
+    ],
+    "accident-damage.png": [
+      "Vehicle A has front-right damage and Vehicle B has right-side damage.",
+      "Visible damage geometry is consistent with the synthetic cross-path scenario but is insufficient for an authoritative liability decision."
+    ]
+  }
+}

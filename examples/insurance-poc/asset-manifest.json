@@ -1,0 +1,24 @@
+{
+  "schema_version": "insurance-poc-assets-1.0",
+  "generated_by": "scripts/build_insurance_poc_fixtures.py",
+  "assets": [
+    {
+      "filename": "insurance-poc-requirements.pdf",
+      "sha256": "05b060eadbfb395c5df82887d29ec5ce0c0a8ef6dcd30cceb6ec9eede0d32acd",
+      "size_bytes": 5167,
+      "synthetic": true
+    },
+    {
+      "filename": "accident-intersection.png",
+      "sha256": "a0fa8dba02f683c21641abb4b8c22d7a60deeab24cd6769b2980d5c62c1ee3ef",
+      "size_bytes": 36895,
+      "synthetic": true
+    },
+    {
+      "filename": "accident-damage.png",
+      "sha256": "ccb223990969f0b856068494161e8c5c1e4544983bfaa46c248eadb504dbc010",
+      "size_bytes": 38493,
+      "synthetic": true
+    }
+  ]
+}

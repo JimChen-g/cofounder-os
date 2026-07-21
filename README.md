@@ -126,6 +126,21 @@ Evaluation makes no model call and cannot mutate workflow state. See
 [`docs/evaluation-dashboard.md`](docs/evaluation-dashboard.md) for the score
 contract and verification procedure.
 
+### Hackathon golden demo (D14 in progress)
+
+The NVIDIA DGX Spark submission is frozen around one synthetic traffic-accident
+insurance POC mission. Stable PDF/image inputs, budget, privacy constraints,
+project status, and acceptance criteria live in `examples/insurance-poc/`.
+Regenerate and verify the binary fixtures with:
+
+```bash
+python scripts/build_insurance_poc_fixtures.py
+```
+
+The current image fixture Adapter is deterministic and SHA-256-bound; it does
+not claim live multimodal inference. See `tasks/D14_HACKATHON_SUBMISSION.md` for
+the P0-P6 contract and frozen exclusions.
+
 For a video-ready, fully synthetic traffic-accident liability case, see
 [`docs/traffic-liability-demo.md`](docs/traffic-liability-demo.md). The fixture
 uses the same governed Run and Artifact contracts, clearly marks the Qwen-derived

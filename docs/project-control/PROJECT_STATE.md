@@ -94,10 +94,13 @@ contracts.
   Evaluation UI, D12 presentation corrective, 418-test quality gates,
   independent review, publication, deployment, three-plane verification, and
   recovery packaging passed
-- **Next product stage**: D14 — Hackathon submission package — ready to start
-- **Current implementation candidate**: none
-- **Next acceptance action**: begin D14 without changing accepted D06-D13
-  authorities
+- **Next product stage**: D14 — Insurance POC golden demo and Hackathon
+  submission package — in progress
+- **Current implementation candidate**: `codex/d14-insurance-poc`, based on
+  `8276561`; P0-P6 acceptance is defined in
+  `tasks/D14_HACKATHON_SUBMISSION.md`
+- **Next acceptance action**: complete D14 without changing accepted D06-D13
+  authorities, then run independent review before acceptance
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
 - **D06-B recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-B/`
