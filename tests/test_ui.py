@@ -36,6 +36,9 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
         assert 'id="conflict-grid"' in response.text
         assert 'id="demo-strategy-grid"' in response.text
         assert 'id="demo-evaluation-disclosure"' in response.text
+        assert "Engineering Agent" in response.text
+        assert "Risk Agent" in response.text
+        assert "D15 · 2 LIVE LLM SPECIALISTS" in response.text
 
         stylesheet = client.get("/ui/assets/app.css")
         script = client.get("/ui/assets/app.js")
@@ -80,7 +83,7 @@ def test_ui_uses_only_the_accepted_product_api_boundary() -> None:
         "/api/insurance-poc/evidence",
         "/api/insurance-poc/fixture",
         "/api/insurance-poc/routing",
-        "/api/insurance-poc/runs",
+        "/api/insurance-poc/run-jobs",
         "/api/insurance-poc/evaluation",
         "/api/runs",
         "/artifacts",
@@ -103,8 +106,8 @@ def test_ui_files_do_not_embed_external_assets_or_inline_code() -> None:
     assert "http://" not in html
     assert "<style" not in html
     assert "<script>" not in html
-    assert '<script src="/ui/assets/app.js?v=d15-live-proof" defer></script>' in html
-    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d15-live-proof">' in html
+    assert '<script src="/ui/assets/app.js?v=d15-live-proof-2" defer></script>' in html
+    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d15-live-proof-2">' in html
 
 
 def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> None:
@@ -144,6 +147,8 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
     assert '["LATENCY", formatExecutionLatency' in script
     assert '["REPAIR", repairValue]' in script
     assert '["FALLBACK", fallbackValue]' in script
+    assert "function waitForInsuranceWorkflow(jobId, requestEpoch)" in script
+    assert "DGX accepted the run · live Agents executing" in script
 
 
 def test_ui_static_root_contains_only_reviewable_source_assets() -> None:

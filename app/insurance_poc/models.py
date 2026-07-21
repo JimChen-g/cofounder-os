@@ -223,6 +223,30 @@ class GoldenWorkflowResponse(StrictModel):
     execution_disclosure: str
 
 
+class GoldenWorkflowJobAccepted(StrictModel):
+    """Immediate acknowledgement for a long-running golden workflow."""
+
+    job_id: UUID
+    status: Literal["running"] = "running"
+
+
+class GoldenWorkflowJobError(StrictModel):
+    """Safe, recoverable failure surfaced by an asynchronous workflow job."""
+
+    code: str
+    detail: str
+    recoverable: bool
+
+
+class GoldenWorkflowJobStatus(StrictModel):
+    """Pollable status that delivers the workflow and approval capability."""
+
+    job_id: UUID
+    status: Literal["running", "completed", "failed"]
+    result: GoldenWorkflowResponse | None = None
+    error: GoldenWorkflowJobError | None = None
+
+
 class DemoEvaluationMetrics(StrictModel):
     """Aggregate metrics for one executable demo strategy."""
 

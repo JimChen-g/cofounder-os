@@ -1281,8 +1281,8 @@ p {
 
 .system-map {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   position: relative;
 }
 
@@ -1292,9 +1292,11 @@ p {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   display: flex;
-  gap: 15px;
-  min-height: 120px;
-  padding: 20px;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 148px;
+  padding: 17px;
 }
 
 .map-card p {
@@ -1337,6 +1339,16 @@ p {
 .map-card.executive .agent-monogram {
   background: var(--purple-pale);
   color: var(--purple);
+}
+
+.map-card.engineering .agent-monogram {
+  background: var(--amber-pale);
+  color: var(--amber);
+}
+
+.map-card.risk .agent-monogram {
+  background: var(--red-pale);
+  color: var(--red);
 }
 
 .map-join {

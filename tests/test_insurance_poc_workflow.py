@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import time
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -291,6 +292,56 @@ def test_golden_workflow_api_issues_capability_and_rejects_missing_cookie(
             },
         )
     assert denied.status_code == 409
+
+
+def test_async_golden_workflow_job_returns_result_and_approval_cookie(
+    tmp_path: Path,
+) -> None:
+    evidence_service, workflow, product, _ = _services(tmp_path)
+    app = FastAPI()
+    app.state.insurance_poc_evidence_service = evidence_service
+    app.state.insurance_poc_workflow = workflow
+    app.state.product_api_service = product
+    app.include_router(insurance_router)
+    app.include_router(product_router)
+
+    with TestClient(app) as client:
+        fixture = client.get("/api/insurance-poc/fixture").json()
+        accepted = client.post(
+            "/api/insurance-poc/run-jobs",
+            json={
+                "mission": fixture["mission"],
+                "attachments": fixture["attachments"],
+                "owner": "Founder",
+            },
+        )
+        assert accepted.status_code == 202
+        assert accepted.json()["status"] == "running"
+        job_id = accepted.json()["job_id"]
+
+        status = None
+        for _ in range(100):
+            status = client.get(f"/api/insurance-poc/run-jobs/{job_id}")
+            assert status.status_code == 200
+            if status.json()["status"] != "running":
+                break
+            time.sleep(0.01)
+
+        assert status is not None
+        payload = status.json()
+        assert payload["status"] == "completed"
+        assert payload["error"] is None
+        result = payload["result"]
+        assert result["status"] == "waiting_approval"
+        assert len(result["snapshot"]["route_decisions"]) == 10
+        cookie_name = f"cofounder_approval_{result['run_id'].replace('-', '')}"
+        assert client.cookies.get(cookie_name)
+
+        missing = client.get(
+            "/api/insurance-poc/run-jobs/00000000-0000-4000-8000-000000000000"
+        )
+        assert missing.status_code == 404
+        assert missing.json()["error"] == "workflow_job_not_found"
 
 
 def test_golden_workflow_api_reports_manual_route_without_creating_a_fake_run(

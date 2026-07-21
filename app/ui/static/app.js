@@ -951,7 +951,7 @@ async function createMission(event) {
   }, 12000);
   try {
     const endpoint = insuranceMission
-      ? "/api/insurance-poc/runs"
+      ? "/api/insurance-poc/run-jobs"
       : "/api/runs";
     const requestBody = insuranceMission
       ? {
@@ -963,10 +963,16 @@ async function createMission(event) {
           unavailable_models: state.unavailableModels,
         }
       : genericPayload;
-    const created = await apiRequest(endpoint, {
+    const submitted = await apiRequest(endpoint, {
       method: "POST",
       body: JSON.stringify(requestBody),
     });
+    const created = insuranceMission
+      ? await waitForInsuranceWorkflow(submitted.job_id, requestEpoch)
+      : submitted;
+    if (!created) {
+      return;
+    }
     if (requestEpoch !== state.requestEpoch) {
       return;
     }
@@ -997,6 +1003,33 @@ async function createMission(event) {
       "Generic missions remain available · Insurance POC is the primary demo";
     setButtonLoading(selectors.launchButton, false);
   }
+}
+
+async function waitForInsuranceWorkflow(jobId, requestEpoch) {
+  if (!jobId) {
+    throw new Error("The DGX workflow did not return a job ID.");
+  }
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (requestEpoch !== state.requestEpoch) {
+      return null;
+    }
+    const job = await apiRequest(`/api/insurance-poc/run-jobs/${jobId}`);
+    if (job.status === "completed" && job.result) {
+      return job.result;
+    }
+    if (job.status === "failed") {
+      throw new Error(
+        job.error?.detail || "The governed DGX workflow stopped safely.",
+      );
+    }
+    const elapsedSeconds = Math.max(1, (attempt + 1) * 2);
+    selectors.formHint.textContent =
+      `DGX accepted the run · live Agents executing · ${elapsedSeconds}s elapsed`;
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+  }
+  throw new Error(
+    "The DGX workflow is still running after four minutes. Open Evaluation to recover the persisted Run.",
+  );
 }
 
 async function loadRun({ useCurrentSnapshot = false } = {}) {
