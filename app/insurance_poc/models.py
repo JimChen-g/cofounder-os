@@ -123,6 +123,47 @@ class EvidencePreviewResponse(StrictModel):
     evidence_package: EvidencePackage
 
 
+class RoutingPreviewRequest(StrictModel):
+    evidence_package: EvidencePackage
+    unavailable_models: list[str] = Field(default_factory=list, max_length=8)
+
+
+class ExplainableRouteDecision(StrictModel):
+    schema_version: Literal["insurance-route-1.0"] = "insurance-route-1.0"
+    task_key: str
+    task_title: str
+    requested_model: str
+    selected_model: str
+    provider: str
+    reason: str
+    candidate_models: list[str]
+    excluded_models: dict[str, str] = Field(default_factory=dict)
+    required_capabilities: list[str]
+    input_modalities: list[SourceModality]
+    privacy_level: PrivacyLevel
+    complexity: Literal["low", "medium", "high"]
+    context_length: int = Field(ge=0)
+    tool_requirement: str
+    latency_budget_ms: float = Field(ge=0)
+    cost_budget_usd: float = Field(ge=0)
+    estimated_latency_ms: float = Field(ge=0)
+    estimated_cost_usd: float = Field(ge=0)
+    privacy_decision: str
+    fallback_model: str
+    fallback_used: bool
+    validation_required: bool
+    validation_requirement: str
+    execution_status: Literal["decision_only"] = "decision_only"
+
+
+class RoutingPreviewResponse(StrictModel):
+    schema_version: Literal["insurance-routing-plan-1.0"] = "insurance-routing-plan-1.0"
+    package_id: UUID
+    decisions: list[ExplainableRouteDecision] = Field(min_length=3)
+    live_model_calls: int = 0
+    simulation_disclosure: str
+
+
 class FixtureResponse(StrictModel):
     scenario_id: str
     mission: str

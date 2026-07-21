@@ -159,6 +159,22 @@ class RouteDecision(DomainRecord):
     provider: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     candidate_models: List[str] = Field(default_factory=list)
+    excluded_models: Dict[str, str] = Field(default_factory=dict)
+    required_capabilities: List[str] = Field(default_factory=list)
+    input_modalities: List[str] = Field(default_factory=list)
+    privacy_level: Optional[str] = None
+    complexity: Optional[str] = None
+    context_length: Optional[int] = Field(default=None, ge=0)
+    tool_requirement: Optional[str] = None
+    latency_budget_ms: Optional[float] = Field(default=None, ge=0)
+    cost_budget_usd: Optional[float] = Field(default=None, ge=0)
+    estimated_latency_ms: Optional[float] = Field(default=None, ge=0)
+    estimated_cost_usd: Optional[float] = Field(default=None, ge=0)
+    privacy_decision: Optional[str] = None
+    fallback_model: Optional[str] = None
+    validation_required: bool = False
+    validation_requirement: Optional[str] = None
+    execution_status: Literal["decision_only", "executed", "failed"] = "decision_only"
     fallback_used: bool = False
     latency_ms: Optional[float] = Field(default=None, ge=0)
 

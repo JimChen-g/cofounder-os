@@ -11,8 +11,11 @@ from app.insurance_poc import (
     EvidenceExtractionError,
     EvidencePreviewRequest,
     EvidencePreviewResponse,
+    ExplainableInsuranceRouter,
     FixtureResponse,
     InsurancePOCEvidenceService,
+    RoutingPreviewRequest,
+    RoutingPreviewResponse,
 )
 
 
@@ -67,3 +70,12 @@ async def preview_insurance_poc_evidence(
         )
     except EvidenceExtractionError as exc:
         return _error(request, exc)
+
+
+@router.post("/routing", response_model=RoutingPreviewResponse)
+async def preview_insurance_poc_routing(
+    body: RoutingPreviewRequest,
+) -> RoutingPreviewResponse:
+    """Explain model/tool choices without claiming execution."""
+
+    return ExplainableInsuranceRouter().route(body)

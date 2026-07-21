@@ -111,9 +111,7 @@ def _ensure_transition_allowed(
     target_type: str,
 ) -> None:
     if target not in transitions[current]:
-        allowed = ", ".join(
-            sorted(status.value for status in transitions[current])
-        )
+        allowed = ", ".join(sorted(status.value for status in transitions[current]))
         if not allowed:
             allowed = "none"
         raise InvalidTransition(
@@ -161,9 +159,7 @@ class OrchestrationService:
         self.state_machine = state_machine or LifecycleStateMachine(repository)
 
         if self.state_machine.repository is not repository:
-            raise ValueError(
-                "state_machine and service must use the same repository"
-            )
+            raise ValueError("state_machine and service must use the same repository")
 
     def create_run(
         self,
@@ -250,9 +246,7 @@ class OrchestrationService:
                 details={
                     "title": task.title,
                     "assigned_agent": task.assigned_agent,
-                    "dependency_ids": [
-                        str(value) for value in task.dependency_ids
-                    ],
+                    "dependency_ids": [str(value) for value in task.dependency_ids],
                 },
             )
             transaction.append_event(event)
@@ -304,17 +298,12 @@ class OrchestrationService:
             blocking = [
                 task
                 for task in tasks
-                if TaskStatus(task.status)
-                not in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
+                if TaskStatus(task.status) not in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
             ]
 
             if blocking:
-                summary = ", ".join(
-                    f"{task.id}:{task.status}" for task in blocking
-                )
-                raise RunCompletionBlocked(
-                    f"Run has non-completable tasks: {summary}"
-                )
+                summary = ", ".join(f"{task.id}:{task.status}" for task in blocking)
+                raise RunCompletionBlocked(f"Run has non-completable tasks: {summary}")
 
             return self.state_machine.transition_run_in_transaction(
                 transaction,
@@ -376,12 +365,9 @@ class OrchestrationService:
 
             if incomplete_dependencies:
                 summary = ", ".join(
-                    f"{dependency.id}:{dependency.status}"
-                    for dependency in incomplete_dependencies
+                    f"{dependency.id}:{dependency.status}" for dependency in incomplete_dependencies
                 )
-                raise DependencyNotReady(
-                    f"Task dependencies are not complete: {summary}"
-                )
+                raise DependencyNotReady(f"Task dependencies are not complete: {summary}")
 
             return self.state_machine.transition_task_in_transaction(
                 transaction,
@@ -524,9 +510,7 @@ class OrchestrationService:
             content=_required_text(content, "content"),
             correlation_id=correlation_id,
             parent_message_id=(
-                UUID(str(parent_message_id))
-                if parent_message_id is not None
-                else None
+                UUID(str(parent_message_id)) if parent_message_id is not None else None
             ),
             metadata=dict(metadata or {}),
         )
@@ -575,6 +559,22 @@ class OrchestrationService:
         task_id: UUID | str | None = None,
         requested_model: str | None = None,
         candidate_models: Sequence[str] | None = None,
+        excluded_models: dict[str, str] | None = None,
+        required_capabilities: Sequence[str] | None = None,
+        input_modalities: Sequence[str] | None = None,
+        privacy_level: str | None = None,
+        complexity: str | None = None,
+        context_length: int | None = None,
+        tool_requirement: str | None = None,
+        latency_budget_ms: float | None = None,
+        cost_budget_usd: float | None = None,
+        estimated_latency_ms: float | None = None,
+        estimated_cost_usd: float | None = None,
+        privacy_decision: str | None = None,
+        fallback_model: str | None = None,
+        validation_required: bool = False,
+        validation_requirement: str | None = None,
+        execution_status: Literal["decision_only", "executed", "failed"] = "decision_only",
         fallback_used: bool = False,
         latency_ms: float | None = None,
         correlation_id: str | None = None,
@@ -592,6 +592,22 @@ class OrchestrationService:
             provider=_required_text(provider, "provider"),
             reason=_required_text(reason, "reason"),
             candidate_models=list(candidate_models or ()),
+            excluded_models=dict(excluded_models or {}),
+            required_capabilities=list(required_capabilities or ()),
+            input_modalities=list(input_modalities or ()),
+            privacy_level=privacy_level,
+            complexity=complexity,
+            context_length=context_length,
+            tool_requirement=tool_requirement,
+            latency_budget_ms=latency_budget_ms,
+            cost_budget_usd=cost_budget_usd,
+            estimated_latency_ms=estimated_latency_ms,
+            estimated_cost_usd=estimated_cost_usd,
+            privacy_decision=privacy_decision,
+            fallback_model=fallback_model,
+            validation_required=validation_required,
+            validation_requirement=validation_requirement,
+            execution_status=execution_status,
             fallback_used=fallback_used,
             latency_ms=latency_ms,
             metadata=dict(metadata or {}),
@@ -617,6 +633,22 @@ class OrchestrationService:
                     "selected_model": decision.selected_model,
                     "provider": decision.provider,
                     "candidate_models": decision.candidate_models,
+                    "excluded_models": decision.excluded_models,
+                    "required_capabilities": decision.required_capabilities,
+                    "input_modalities": decision.input_modalities,
+                    "privacy_level": decision.privacy_level,
+                    "complexity": decision.complexity,
+                    "context_length": decision.context_length,
+                    "tool_requirement": decision.tool_requirement,
+                    "latency_budget_ms": decision.latency_budget_ms,
+                    "cost_budget_usd": decision.cost_budget_usd,
+                    "estimated_latency_ms": decision.estimated_latency_ms,
+                    "estimated_cost_usd": decision.estimated_cost_usd,
+                    "privacy_decision": decision.privacy_decision,
+                    "fallback_model": decision.fallback_model,
+                    "validation_required": decision.validation_required,
+                    "validation_requirement": decision.validation_requirement,
+                    "execution_status": decision.execution_status,
                     "fallback_used": decision.fallback_used,
                     "latency_ms": decision.latency_ms,
                 },
@@ -700,13 +732,9 @@ class OrchestrationService:
                     "requested_by": approval.requested_by,
                     "reason": approval.reason,
                     "expires_at": (
-                        approval.expires_at.isoformat()
-                        if approval.expires_at is not None
-                        else None
+                        approval.expires_at.isoformat() if approval.expires_at is not None else None
                     ),
-                    "scope": (
-                        "task" if approval.task_id is not None else "run"
-                    ),
+                    "scope": ("task" if approval.task_id is not None else "run"),
                 },
             )
             transaction.append_event(approval_event)
@@ -766,17 +794,13 @@ class OrchestrationService:
             ApprovalStatus.APPROVED,
             ApprovalStatus.REJECTED,
         }:
-            raise ApprovalResolutionError(
-                "Only approved or rejected decisions are supported"
-            )
+            raise ApprovalResolutionError("Only approved or rejected decisions are supported")
 
         with self.repository.transaction(run_id) as transaction:
             approval = transaction.get_approval(approval_id)
 
             if ApprovalStatus(approval.status) != ApprovalStatus.PENDING:
-                raise ApprovalResolutionError(
-                    f"Approval is already resolved: {approval.status}"
-                )
+                raise ApprovalResolutionError(f"Approval is already resolved: {approval.status}")
 
             run = transaction.get_run()
             task = None
@@ -827,16 +851,12 @@ class OrchestrationService:
                     "decision": decision_status.value,
                     "decided_by": normalized_decided_by,
                     "reason": normalized_reason,
-                    "scope": (
-                        "task" if resolved.task_id is not None else "run"
-                    ),
+                    "scope": ("task" if resolved.task_id is not None else "run"),
                 },
             )
             transaction.append_event(approval_event)
 
-            transition_reason = (
-                f"Approval {decision_status.value}: {normalized_reason}"
-            )
+            transition_reason = f"Approval {decision_status.value}: {normalized_reason}"
 
             if resolved.task_id is not None:
                 transitioned_task, transition_event = (
@@ -911,14 +931,10 @@ class OrchestrationService:
         normalized_actor = _required_text(actor, "actor")
 
         if relation == "run" and task_id is not None:
-            raise ArtifactRelationError(
-                "Run artifacts must not include task_id"
-            )
+            raise ArtifactRelationError("Run artifacts must not include task_id")
 
         if relation in {"input", "output"} and task_id is None:
-            raise ArtifactRelationError(
-                f"{relation} artifacts require task_id"
-            )
+            raise ArtifactRelationError(f"{relation} artifacts require task_id")
 
         artifact = Artifact(
             run_id=UUID(str(run_id)),
@@ -948,9 +964,7 @@ class OrchestrationService:
                     transaction, run_id, task_id, idempotency_key
                 )
                 if existing is not None:
-                    if self._check_domain_idempotency_match(
-                        existing, artifact
-                    ):
+                    if self._check_domain_idempotency_match(existing, artifact):
                         # Idempotent retry: return existing artifact, no new event
                         return existing, None
                     raise ArtifactConflictError(
@@ -1061,6 +1075,4 @@ class OrchestrationService:
 
         existing = transaction.get_approval(task.approval_id)
         if ApprovalStatus(existing.status) == ApprovalStatus.PENDING:
-            raise ActiveApprovalExists(
-                f"Task already has pending approval: {existing.id}"
-            )
+            raise ActiveApprovalExists(f"Task already has pending approval: {existing.id}")

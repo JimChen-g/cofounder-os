@@ -8,6 +8,7 @@ const state = {
   evaluation: null,
   pendingAttachments: [],
   evidencePackage: null,
+  routingPlan: null,
   selectedArtifactId: null,
   activeView: "mission",
   requestEpoch: 0,
@@ -74,6 +75,11 @@ const selectors = {
   missionForm: document.querySelector("#mission-form"),
   newMission: document.querySelector("#new-mission"),
   previewEvidence: document.querySelector("#preview-evidence"),
+  routingBoard: document.querySelector("#routing-board"),
+  routingBoardSummary: document.querySelector("#routing-board-summary"),
+  routingDisclosure: document.querySelector("#routing-disclosure"),
+  routingGrid: document.querySelector("#routing-grid"),
+  simulateRouteFallback: document.querySelector("#simulate-route-fallback"),
   refreshRun: document.querySelector("#refresh-run"),
   refreshEvaluation: document.querySelector("#refresh-evaluation"),
   retryRun: document.querySelector("#retry-run"),
@@ -217,12 +223,144 @@ async function handleEvidenceFiles(event) {
     const files = [...(event.target.files || [])];
     state.pendingAttachments = await Promise.all(files.map(fileToAttachment));
     state.evidencePackage = null;
+    state.routingPlan = null;
     selectors.evidenceBoard.classList.add("is-hidden");
+    selectors.routingBoard.classList.add("is-hidden");
     renderAttachmentList();
   } catch (error) {
     state.pendingAttachments = [];
     renderAttachmentList();
     showAlert("Evidence files could not be read", error);
+  }
+}
+
+function renderRoutingBoard() {
+  selectors.routingGrid.replaceChildren();
+  selectors.routingDisclosure.replaceChildren();
+  const plan = state.routingPlan;
+  if (!plan) {
+    selectors.routingBoard.classList.add("is-hidden");
+    return;
+  }
+  selectors.routingBoard.classList.remove("is-hidden");
+  const fallbackCount = plan.decisions.filter(
+    (decision) => decision.fallback_used,
+  ).length;
+  selectors.routingBoardSummary.textContent =
+    `${plan.decisions.length} task routes · ${fallbackCount} fallback${fallbackCount === 1 ? "" : "s"} · ${plan.live_model_calls} live calls during decision`;
+
+  plan.decisions.forEach((decision) => {
+    const card = element(
+      "article",
+      `routing-card ${decision.fallback_used ? "is-fallback" : ""}`,
+    );
+    const heading = element("div", "routing-card-heading");
+    const headingCopy = element("div");
+    append(
+      headingCopy,
+      element("span", "route-task-key", decision.task_key),
+      element("h3", null, decision.task_title),
+    );
+    append(
+      heading,
+      headingCopy,
+      element(
+        "span",
+        `route-provider ${decision.fallback_used ? "fallback" : ""}`,
+        decision.fallback_used ? "Fallback" : labelize(decision.provider),
+      ),
+    );
+    const selected = element("div", "route-selection");
+    append(
+      selected,
+      element("span", null, "Selected"),
+      element("strong", null, decision.selected_model),
+      decision.requested_model !== decision.selected_model
+        ? element("small", null, `Requested ${decision.requested_model}`)
+        : null,
+    );
+    const facts = element("div", "route-facts");
+    [
+      ["Privacy", labelize(decision.privacy_level)],
+      ["Complexity", labelize(decision.complexity)],
+      ["Context", `${decision.context_length} est. tokens`],
+      ["Latency", `${decision.estimated_latency_ms} / ${decision.latency_budget_ms} ms`],
+      ["Cost", `$${decision.estimated_cost_usd.toFixed(2)} / $${decision.cost_budget_usd.toFixed(2)}`],
+      ["Verifier", decision.validation_required ? "Required" : "Not required"],
+    ].forEach(([label, value]) => {
+      const row = element("div");
+      append(row, element("span", null, label), element("strong", null, value));
+      facts.append(row);
+    });
+    const capabilities = element("div", "route-capabilities");
+    decision.required_capabilities.forEach((capability) =>
+      capabilities.append(element("span", null, labelize(capability))),
+    );
+    const exclusions = Object.entries(decision.excluded_models || {});
+    const exclusionBlock = exclusions.length
+      ? element("div", "route-exclusions")
+      : null;
+    if (exclusionBlock) {
+      exclusions.forEach(([model, reason]) => {
+        exclusionBlock.append(
+          element("p", null, `Excluded ${model}: ${reason}`),
+        );
+      });
+    }
+    append(
+      card,
+      heading,
+      selected,
+      element("p", "route-reason", decision.reason),
+      capabilities,
+      facts,
+      element("p", "route-privacy", decision.privacy_decision),
+      exclusionBlock,
+      element(
+        "p",
+        "route-validation",
+        `Validation: ${decision.validation_requirement}`,
+      ),
+    );
+    selectors.routingGrid.append(card);
+  });
+  selectors.routingDisclosure.append(
+    element("strong", null, "Decision-only routing evidence"),
+    element("p", null, plan.simulation_disclosure),
+  );
+}
+
+async function loadRoutingDecisions(unavailableModels = []) {
+  if (!state.evidencePackage) {
+    throw new Error("Build the Evidence Package before routing work.");
+  }
+  const plan = await apiRequest("/api/insurance-poc/routing", {
+    method: "POST",
+    body: JSON.stringify({
+      evidence_package: state.evidencePackage,
+      unavailable_models: unavailableModels,
+    }),
+  });
+  state.routingPlan = plan;
+  renderRoutingBoard();
+  return plan;
+}
+
+async function simulateRouteFallback() {
+  hideAlert();
+  setButtonLoading(selectors.simulateRouteFallback, true);
+  try {
+    const plan = await loadRoutingDecisions(["cofounder-step"]);
+    const fallbackCount = plan.decisions.filter(
+      (decision) => decision.fallback_used,
+    ).length;
+    toast(
+      `${fallbackCount} Step routes moved to declared fallbacks; no model call was claimed.`,
+    );
+  } catch (error) {
+    showAlert("Fallback simulation could not run", error);
+  } finally {
+    setButtonLoading(selectors.simulateRouteFallback, false);
   }
 }
 
@@ -320,6 +458,7 @@ async function buildEvidencePackage({ quiet = false } = {}) {
     });
     state.evidencePackage = response.evidence_package;
     renderEvidenceBoard();
+    await loadRoutingDecisions();
     if (!quiet) {
       toast("Evidence Package built with source, privacy, and Agent-use links.");
       selectors.evidenceBoard.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -348,6 +487,7 @@ async function loadPocFixture() {
     document.querySelector("#owner").value = "Founder";
     state.pendingAttachments = fixture.attachments;
     state.evidencePackage = null;
+    state.routingPlan = null;
     selectors.evidenceFiles.value = "";
     renderAttachmentList();
     await buildEvidencePackage();
@@ -1619,6 +1759,7 @@ function startNewMission() {
   state.selectedArtifactId = null;
   state.pendingAttachments = [];
   state.evidencePackage = null;
+  state.routingPlan = null;
   selectors.composer.classList.remove("is-hidden");
   selectors.emptyOverview.classList.remove("is-hidden");
   selectors.runWorkspace.classList.add("is-hidden");
@@ -1626,6 +1767,7 @@ function startNewMission() {
   selectors.missionForm.reset();
   renderAttachmentList();
   renderEvidenceBoard();
+  renderRoutingBoard();
   selectors.approvalCount.classList.add("is-hidden");
   selectors.artifactCount.classList.add("is-hidden");
   hideAlert();
@@ -1641,6 +1783,7 @@ selectors.missionForm.addEventListener("submit", createMission);
 selectors.evidenceFiles.addEventListener("change", handleEvidenceFiles);
 selectors.previewEvidence.addEventListener("click", previewEvidence);
 selectors.loadPocFixture.addEventListener("click", loadPocFixture);
+selectors.simulateRouteFallback.addEventListener("click", simulateRouteFallback);
 selectors.refreshRun.addEventListener("click", () => loadRun());
 selectors.refreshEvaluation.addEventListener("click", loadEvaluation);
 selectors.retryRun.addEventListener("click", retryRun);

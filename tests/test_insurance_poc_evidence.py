@@ -149,6 +149,18 @@ def test_insurance_poc_evidence_api_exposes_fixture_and_bounded_error(
         evidence = preview.json()["evidence_package"]["evidence"]
         assert len(evidence) == 10
 
+        routing = client.post(
+            "/api/insurance-poc/routing",
+            json={
+                "evidence_package": preview.json()["evidence_package"],
+                "unavailable_models": ["cofounder-step"],
+            },
+        )
+        assert routing.status_code == 200
+        assert len(routing.json()["decisions"]) == 8
+        assert routing.json()["live_model_calls"] == 0
+        assert any(decision["fallback_used"] for decision in routing.json()["decisions"])
+
         invalid = fixture["attachments"]
         invalid[1]["base64_content"] = base64.b64encode(b"\x89PNG\r\n\x1a\nunknown").decode("ascii")
         failed = client.post(

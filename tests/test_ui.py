@@ -27,6 +27,8 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
         assert 'id="evidence-files"' in response.text
         assert 'id="evidence-board"' in response.text
         assert 'id="load-poc-fixture"' in response.text
+        assert 'id="routing-board"' in response.text
+        assert 'id="simulate-route-fallback"' in response.text
 
         stylesheet = client.get("/ui/assets/app.css")
         script = client.get("/ui/assets/app.js")
@@ -70,6 +72,7 @@ def test_ui_uses_only_the_accepted_product_api_boundary() -> None:
         "/api/evaluation/summary",
         "/api/insurance-poc/evidence",
         "/api/insurance-poc/fixture",
+        "/api/insurance-poc/routing",
         "/api/runs",
         "/artifacts",
         "/events",
@@ -103,6 +106,10 @@ def test_insurance_poc_ui_labels_fixture_adapter_without_live_model_claim() -> N
     assert "Files are normalized locally before any model route" in html
     assert "source.adapter_mode" in script
     assert "EVIDENCE_PACKAGE_JSON" in script
+    assert "decision.excluded_models" in script
+    assert "decision.privacy_decision" in script
+    assert "decision.validation_requirement" in script
+    assert "no model call was claimed" in script
 
 
 def test_ui_static_root_contains_only_reviewable_source_assets() -> None:

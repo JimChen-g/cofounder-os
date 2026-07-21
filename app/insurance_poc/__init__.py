@@ -4,6 +4,7 @@ from app.insurance_poc.evidence import (
     EvidenceExtractionError,
     InsurancePOCEvidenceService,
 )
+from app.insurance_poc.routing import ExplainableInsuranceRouter
 from app.insurance_poc.models import (
     AttachmentUpload,
     EvidenceCategory,
@@ -12,8 +13,11 @@ from app.insurance_poc.models import (
     EvidencePreviewRequest,
     EvidencePreviewResponse,
     EvidenceSource,
+    ExplainableRouteDecision,
     FixtureResponse,
     PrivacyLevel,
+    RoutingPreviewRequest,
+    RoutingPreviewResponse,
     SourceModality,
 )
 
@@ -26,8 +30,12 @@ __all__ = [
     "EvidencePreviewRequest",
     "EvidencePreviewResponse",
     "EvidenceSource",
+    "ExplainableInsuranceRouter",
+    "ExplainableRouteDecision",
     "FixtureResponse",
     "InsurancePOCEvidenceService",
     "PrivacyLevel",
+    "RoutingPreviewRequest",
+    "RoutingPreviewResponse",
     "SourceModality",
 ]
