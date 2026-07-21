@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Co-founder OS Gateway v0.1 — unified API layer for co-founder AI tools"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Co-founder OS Team" }]
 
 dependencies = [
@@ -35,10 +35,11 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*", "tests*"]
+include = ["app*"]
 
 [tool.setuptools.package-data]
 "app.ui" = ["static/*.html", "static/*.css", "static/*.js"]
+"app.insurance_poc.fixtures" = ["*.json", "*.md", "*.pdf", "*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.evaluation import router as evaluation_router
 from app.api.insurance_poc import router as insurance_poc_router
@@ -31,6 +32,60 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("gateway")
+
+
+class RequestBodyLimitMiddleware:
+    """Bound D14 JSON bodies even when clients use chunked transfer encoding."""
+
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if not (
+            scope["type"] == "http"
+            and str(scope.get("path", "")).startswith("/api/insurance-poc/")
+            and str(scope.get("method", "")).upper() == "POST"
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        chunks: list[bytes] = []
+        total = 0
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            body = message.get("body", b"")
+            total += len(body)
+            if total > self.max_bytes:
+                response = JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": "request_too_large",
+                        "detail": f"Request body exceeds {self.max_bytes} bytes.",
+                    },
+                )
+                await response(scope, receive, send)
+                return
+            chunks.append(body)
+            more_body = bool(message.get("more_body", False))
+
+        delivered = False
+
+        async def replay() -> Message:
+            nonlocal delivered
+            if delivered:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            delivered = True
+            return {
+                "type": "http.request",
+                "body": b"".join(chunks),
+                "more_body": False,
+            }
+
+        await self.app(scope, replay, send)
 
 
 @asynccontextmanager
@@ -82,10 +137,14 @@ app = FastAPI(
 # CORS — permissive for development; tighten in production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+app.add_middleware(
+    RequestBodyLimitMiddleware,
+    max_bytes=settings.max_request_body_bytes,
 )
 
 

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import io
 from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from pypdf import PdfWriter
 
 from app.api.insurance_poc import router
 from app.insurance_poc import (
@@ -15,6 +17,7 @@ from app.insurance_poc import (
     EvidencePreviewRequest,
     InsurancePOCEvidenceService,
 )
+from app.main import RequestBodyLimitMiddleware
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -109,6 +112,45 @@ def test_corrupt_pdf_never_silently_becomes_empty_evidence(
     assert "Replace it and retry" in raised.value.detail
 
 
+def test_contract_accepts_one_pdf_and_one_image(
+    evidence_service: InsurancePOCEvidenceService,
+) -> None:
+    request = _request(evidence_service)
+    request.attachments = request.attachments[:2]
+
+    package = evidence_service.extract(request)
+
+    assert len(package.sources) == 4
+    assert any(item.modality == "image" for item in package.evidence)
+
+
+def test_upload_and_pdf_resource_limits_fail_recoverably(
+    evidence_service: InsurancePOCEvidenceService,
+) -> None:
+    request = _request(evidence_service)
+    oversized = request.attachments[1].model_copy(deep=True)
+    oversized.base64_content = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n" + b"x" * (4 * 1024 * 1024)
+    ).decode("ascii")
+    request.attachments = [request.attachments[0], oversized]
+    with pytest.raises(EvidenceExtractionError) as raised:
+        evidence_service.extract(request)
+    assert raised.value.code == "attachment_too_large"
+
+    writer = PdfWriter()
+    for _ in range(21):
+        writer.add_blank_page(width=100, height=100)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    request = _request(evidence_service)
+    pdf = request.attachments[0].model_copy(deep=True)
+    pdf.base64_content = base64.b64encode(buffer.getvalue()).decode("ascii")
+    request.attachments = [pdf, request.attachments[1]]
+    with pytest.raises(EvidenceExtractionError) as raised:
+        evidence_service.extract(request)
+    assert raised.value.code == "pdf_page_limit_exceeded"
+
+
 def test_attachment_contract_rejects_paths_and_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         AttachmentUpload(
@@ -153,11 +195,11 @@ def test_insurance_poc_evidence_api_exposes_fixture_and_bounded_error(
             "/api/insurance-poc/routing",
             json={
                 "evidence_package": preview.json()["evidence_package"],
-                "unavailable_models": ["cofounder-step"],
+                "unavailable_models": ["product-agent-local"],
             },
         )
         assert routing.status_code == 200
-        assert len(routing.json()["decisions"]) == 8
+        assert len(routing.json()["decisions"]) == 10
         assert routing.json()["live_model_calls"] == 0
         assert any(decision["fallback_used"] for decision in routing.json()["decisions"])
 
@@ -171,3 +213,47 @@ def test_insurance_poc_evidence_api_exposes_fixture_and_bounded_error(
         assert failed.json()["error"] == "evidence_extraction_failed"
         assert failed.json()["code"] == "unsupported_image_fixture"
         assert failed.json()["recoverable"] is True
+
+
+@pytest.mark.asyncio
+async def test_request_body_limit_rejects_chunked_d14_payload() -> None:
+    downstream_called = False
+
+    async def downstream(scope, receive, send) -> None:
+        nonlocal downstream_called
+        downstream_called = True
+
+    messages = iter(
+        [
+            {"type": "http.request", "body": b"1234", "more_body": True},
+            {"type": "http.request", "body": b"5678", "more_body": False},
+        ]
+    )
+    sent: list[dict[str, object]] = []
+
+    async def receive() -> dict[str, object]:
+        return next(messages)
+
+    async def send(message: dict[str, object]) -> None:
+        sent.append(message)
+
+    middleware = RequestBodyLimitMiddleware(downstream, max_bytes=6)
+    await middleware(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/insurance-poc/evidence",
+            "headers": [],
+            "query_string": b"",
+            "http_version": "1.1",
+            "scheme": "http",
+            "server": ("test", 80),
+            "client": ("test", 1),
+            "root_path": "",
+        },
+        receive,
+        send,
+    )
+
+    assert downstream_called is False
+    assert sent[0]["status"] == 413

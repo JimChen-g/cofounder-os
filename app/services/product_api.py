@@ -7,6 +7,8 @@ Store, Policy Gate, and Workflow Controller authorities.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +19,7 @@ from app.artifacts import FileArtifactStore
 from app.clients import GatewayClient, GatewayClientConfigurationError
 from app.config import Settings
 from app.domain import ApprovalStatus, Artifact, AuditEvent
+from app.insurance_poc.runtime import InsurancePOCTaskRuntime
 from app.orchestrators import (
     ExecutiveOrchestrator,
     ExecutivePlanningResult,
@@ -218,6 +221,7 @@ class ProductAPIService:
         decision: Literal["approved", "rejected"],
         decided_by: str,
         reason: str,
+        approval_capability: str | None = None,
         correlation_id: str | None,
         max_cycles: int,
     ) -> ProductApprovalResolution:
@@ -247,6 +251,19 @@ class ProductAPIService:
             raise ProductAPIApprovalError(
                 "The approval requires a different reviewer."
             )
+
+        run = self.orchestration.repository.get_run(run_id)
+        expected_capability = run.metadata.get("approval_capability_sha256")
+        capability_required = run.metadata.get("approval_capability_required") is True
+        if capability_required:
+            if not isinstance(expected_capability, str) or len(expected_capability) != 64:
+                raise ProductAPIApprovalError("Approval capability evidence is invalid.")
+            supplied = approval_capability or ""
+            supplied_digest = hashlib.sha256(supplied.encode("utf-8")).hexdigest()
+            if not hmac.compare_digest(supplied_digest, expected_capability):
+                raise ProductAPIApprovalError(
+                    "The authenticated Founder approval capability is missing or invalid."
+                )
 
         resolution = self.orchestration.resolve_approval(
             run_id,
@@ -417,6 +434,12 @@ def build_product_api_service(settings: Settings) -> ProductAPIService:
             orchestration,
         ),
         policy_gate=DeterministicPolicyGate(),
+    )
+    workflow_controller.register_task_adapter(
+        InsurancePOCTaskRuntime(
+            orchestration=orchestration,
+            artifact_store=artifact_store,
+        )
     )
     return ProductAPIService(
         executive=ExecutiveOrchestrator(gateway, orchestration),

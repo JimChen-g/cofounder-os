@@ -65,9 +65,22 @@ class Settings(BaseSettings):
         le=10_485_760,
         validation_alias="PRODUCT_MAX_ARTIFACT_BYTES",
     )
+    cors_allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://127.0.0.1:9000",
+            "http://localhost:9000",
+        ],
+        validation_alias="CORS_ALLOWED_ORIGINS",
+    )
 
     # ── Request limits ─────────────────────────────────────────────────────
     max_request_tokens: int = 128_000
+    max_request_body_bytes: int = Field(
+        default=12_582_912,
+        ge=1_048_576,
+        le=20_971_520,
+        validation_alias="MAX_REQUEST_BODY_BYTES",
+    )
     request_timeout_seconds: float = Field(
         default=300.0, validation_alias="REQUEST_TIMEOUT_SECONDS"
     )

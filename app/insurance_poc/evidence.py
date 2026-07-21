@@ -26,8 +26,10 @@ from app.insurance_poc.models import (
 )
 
 
-MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
-MAX_TOTAL_BYTES = 16 * 1024 * 1024
+MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
+MAX_TOTAL_BYTES = 10 * 1024 * 1024
+MAX_PDF_PAGES = 20
+MAX_PDF_TEXT_CHARS = 100_000
 PDF_MAGIC = b"%PDF-"
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -102,16 +104,16 @@ class InsurancePOCEvidenceService:
             if total_bytes > MAX_TOTAL_BYTES:
                 raise EvidenceExtractionError(
                     "total_upload_too_large",
-                    "The submitted evidence exceeds the 16 MiB demo boundary.",
+                    "The submitted evidence exceeds the 10 MiB demo boundary.",
                 )
             decoded.append((attachment, payload, hashlib.sha256(payload).hexdigest()))
 
         pdfs = [item for item in decoded if item[0].content_type == "application/pdf"]
         images = [item for item in decoded if item[0].content_type == "image/png"]
-        if len(pdfs) != 1 or len(images) < 2:
+        if len(pdfs) != 1 or not images:
             raise EvidenceExtractionError(
                 "required_modalities_missing",
-                "Submit exactly one PDF and at least two PNG accident images.",
+                "Submit exactly one PDF and at least one PNG accident image.",
             )
 
         pdf_attachment, pdf_payload, pdf_checksum = pdfs[0]
@@ -192,6 +194,7 @@ class InsurancePOCEvidenceService:
                         ],
                         adapter="sha256_bound_synthetic_fixture_adapter",
                         adapter_mode="deterministic_fixture",
+                        cloud_eligible=False,
                         source_checksum_sha256=checksum,
                     )
                 )
@@ -242,6 +245,7 @@ class InsurancePOCEvidenceService:
                 ],
                 adapter="mission_text_normalizer",
                 adapter_mode="local_parser",
+                cloud_eligible=True,
             ),
             EvidenceItem(
                 evidence_id="E-PDF-WINDOW-001",
@@ -255,6 +259,7 @@ class InsurancePOCEvidenceService:
                 used_by_agents=["product-agent", "engineering-agent", "finance-agent"],
                 adapter="local_pypdf_text_extractor",
                 adapter_mode="local_parser",
+                cloud_eligible=True,
                 source_checksum_sha256=pdf_checksum,
             ),
             EvidenceItem(
@@ -269,6 +274,7 @@ class InsurancePOCEvidenceService:
                 used_by_agents=["risk-agent", "verifier"],
                 adapter="local_pypdf_text_extractor",
                 adapter_mode="local_parser",
+                cloud_eligible=False,
                 source_checksum_sha256=pdf_checksum,
             ),
             EvidenceItem(
@@ -286,6 +292,7 @@ class InsurancePOCEvidenceService:
                 used_by_agents=["product-agent", "finance-agent", "executive-orchestrator"],
                 adapter="structured_fixture_parser",
                 adapter_mode="local_parser",
+                cloud_eligible=False,
             ),
             EvidenceItem(
                 evidence_id="E-TECH-001",
@@ -408,7 +415,7 @@ class InsurancePOCEvidenceService:
         if len(payload) > MAX_ATTACHMENT_BYTES:
             raise EvidenceExtractionError(
                 "attachment_too_large",
-                f"{attachment.filename} exceeds the 8 MiB per-file boundary.",
+                f"{attachment.filename} exceeds the 4 MiB per-file boundary.",
             )
         magic = PDF_MAGIC if attachment.content_type == "application/pdf" else PNG_MAGIC
         if not payload.startswith(magic):
@@ -422,7 +429,19 @@ class InsurancePOCEvidenceService:
     def _extract_pdf_text(filename: str, payload: bytes) -> str:
         try:
             reader = PdfReader(io.BytesIO(payload), strict=True)
+            if len(reader.pages) > MAX_PDF_PAGES:
+                raise EvidenceExtractionError(
+                    "pdf_page_limit_exceeded",
+                    f"{filename} exceeds the {MAX_PDF_PAGES}-page demo boundary.",
+                )
             text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+            if len(text) > MAX_PDF_TEXT_CHARS:
+                raise EvidenceExtractionError(
+                    "pdf_text_limit_exceeded",
+                    f"{filename} exceeds the extracted-text demo boundary.",
+                )
+        except EvidenceExtractionError:
+            raise
         except Exception as exc:
             raise EvidenceExtractionError(
                 "pdf_parse_failed",

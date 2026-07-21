@@ -12,6 +12,7 @@ const state = {
   pendingAttachments: [],
   evidencePackage: null,
   routingPlan: null,
+  unavailableModels: [],
   conflicts: [],
   selectedArtifactId: null,
   activeView: "mission",
@@ -212,8 +213,8 @@ async function fileToAttachment(file) {
   if (!["application/pdf", "image/png"].includes(file.type)) {
     throw new Error(`${file.name} must be a PDF or PNG file.`);
   }
-  if (file.size > 8 * 1024 * 1024) {
-    throw new Error(`${file.name} exceeds the 8 MiB demo boundary.`);
+  if (file.size > 4 * 1024 * 1024) {
+    throw new Error(`${file.name} exceeds the 4 MiB demo boundary.`);
   }
   return {
     filename: file.name,
@@ -254,13 +255,25 @@ function renderAttachmentList() {
     );
     selectors.attachmentList.append(item);
   });
-  selectors.previewEvidence.disabled = state.pendingAttachments.length < 3;
+  const pdfCount = state.pendingAttachments.filter(
+    (item) => item.content_type === "application/pdf",
+  ).length;
+  const imageCount = state.pendingAttachments.filter(
+    (item) => item.content_type === "image/png",
+  ).length;
+  selectors.previewEvidence.disabled = pdfCount !== 1 || imageCount < 1;
 }
 
 async function handleEvidenceFiles(event) {
   hideAlert();
   try {
     const files = [...(event.target.files || [])];
+    if (files.length > 4) {
+      throw new Error("Select no more than four evidence files.");
+    }
+    if (files.reduce((total, file) => total + file.size, 0) > 10 * 1024 * 1024) {
+      throw new Error("The evidence bundle exceeds the 10 MiB demo boundary.");
+    }
     state.pendingAttachments = await Promise.all(files.map(fileToAttachment));
     state.evidencePackage = null;
     state.routingPlan = null;
@@ -326,6 +339,7 @@ function renderRoutingBoard() {
       ["Context", `${decision.context_length} est. tokens`],
       ["Latency", `${decision.estimated_latency_ms} / ${decision.latency_budget_ms} ms`],
       ["Cost", `$${decision.estimated_cost_usd.toFixed(2)} / $${decision.cost_budget_usd.toFixed(2)}`],
+      ["Execution", labelize(decision.execution_status)],
       ["Verifier", decision.validation_required ? "Required" : "Not required"],
     ].forEach(([label, value]) => {
       const row = element("div");
@@ -364,8 +378,15 @@ function renderRoutingBoard() {
     );
     selectors.routingGrid.append(card);
   });
+  const hasExecution = plan.decisions.some(
+    (decision) => decision.execution_status === "executed",
+  );
   selectors.routingDisclosure.append(
-    element("strong", null, "Decision-only routing evidence"),
+    element(
+      "strong",
+      null,
+      hasExecution ? "Route bound to Agent execution" : "Routing decision preview",
+    ),
     element("p", null, plan.simulation_disclosure),
   );
 }
@@ -381,6 +402,7 @@ async function loadRoutingDecisions(unavailableModels = []) {
       unavailable_models: unavailableModels,
     }),
   });
+  state.unavailableModels = [...unavailableModels];
   state.routingPlan = plan;
   renderRoutingBoard();
   return plan;
@@ -390,12 +412,12 @@ async function simulateRouteFallback() {
   hideAlert();
   setButtonLoading(selectors.simulateRouteFallback, true);
   try {
-    const plan = await loadRoutingDecisions(["cofounder-step"]);
+    const plan = await loadRoutingDecisions(["product-agent-local"]);
     const fallbackCount = plan.decisions.filter(
       (decision) => decision.fallback_used,
     ).length;
     toast(
-      `${fallbackCount} Step routes moved to declared fallbacks; no model call was claimed.`,
+      `${fallbackCount} local route moved to its declared fallback; this condition will be submitted with the Run and no model call was claimed.`,
     );
   } catch (error) {
     showAlert("Fallback simulation could not run", error);
@@ -484,8 +506,14 @@ async function buildEvidencePackage({ quiet = false } = {}) {
   if (!mission) {
     throw new Error("Enter the Founder Mission before building evidence.");
   }
-  if (state.pendingAttachments.length < 3) {
-    throw new Error("Select one PDF and at least two PNG images.");
+  const pdfCount = state.pendingAttachments.filter(
+    (item) => item.content_type === "application/pdf",
+  ).length;
+  const imageCount = state.pendingAttachments.filter(
+    (item) => item.content_type === "image/png",
+  ).length;
+  if (pdfCount !== 1 || imageCount < 1) {
+    throw new Error("Select exactly one PDF and at least one PNG image.");
   }
   setButtonLoading(selectors.previewEvidence, true);
   try {
@@ -671,6 +699,7 @@ async function createMission(event) {
             : genericPayload.objective,
           attachments: state.pendingAttachments,
           owner: owner || "Founder",
+          unavailable_models: state.unavailableModels,
         }
       : genericPayload;
     const created = await apiRequest(endpoint, {
@@ -954,7 +983,7 @@ function renderRunSummary() {
   const noticeBody = document.querySelector("#notice-body");
   const noticeAction = document.querySelector("#notice-action");
   notice.classList.remove("is-hidden");
-  if (run.status === "waiting_approval") {
+  if (pendingApprovals.length) {
     noticeTitle.textContent = "Founder decision required";
     noticeBody.textContent =
       `${pendingApprovals.length} controlled action awaits review before execution can continue.`;
@@ -978,7 +1007,7 @@ function renderRunSummary() {
 
   selectors.retryRun.textContent =
     run.status === "completed" ? "Verify replay" : "Retry / recover";
-  selectors.retryRun.disabled = run.status === "waiting_approval";
+  selectors.retryRun.disabled = pendingApprovals.length > 0;
   selectors.viewResult.disabled = state.artifacts.length === 0;
 }
 
@@ -1072,7 +1101,32 @@ function hydrateInsuranceRunState() {
     state.evidencePackage = metadata.evidence_package;
   }
   if (metadata.routing_plan) {
-    state.routingPlan = metadata.routing_plan;
+    const actualRoutes = new Map(
+      (state.snapshot.route_decisions || []).map((route) => [
+        route.metadata?.task_key,
+        route,
+      ]),
+    );
+    state.routingPlan = {
+      ...metadata.routing_plan,
+      decisions: (metadata.routing_plan.decisions || []).map((decision) => {
+        const actual = actualRoutes.get(decision.task_key);
+        return actual
+          ? {
+              ...decision,
+              selected_model: actual.selected_model,
+              provider: actual.provider,
+              reason: actual.reason,
+              excluded_models: actual.excluded_models,
+              fallback_model: actual.fallback_model,
+              fallback_used: actual.fallback_used,
+              estimated_latency_ms: actual.estimated_latency_ms,
+              estimated_cost_usd: actual.estimated_cost_usd,
+              execution_status: actual.execution_status,
+            }
+          : decision;
+      }),
+    };
   }
   const resource = state.artifacts.find(
     (item) => item.artifact?.name === "conflict-resolution-log",
@@ -1683,14 +1737,28 @@ function renderInsuranceDemoEvaluation() {
   ].forEach(([title, metrics, className]) => {
     const card = element("article", `demo-strategy-card ${className}`);
     const rows = element("div", "demo-metric-rows");
+    if (metrics.measurement_status === "unavailable") {
+      append(
+        card,
+        element("span", "demo-strategy-label", "UNAVAILABLE"),
+        element("h3", null, title),
+        element(
+          "p",
+          "route-reason",
+          metrics.unavailability_reason || "This strategy was not measured.",
+        ),
+      );
+      selectors.demoStrategyGrid.append(card);
+      return;
+    }
     [
       ["Task completion", formatRate(metrics.task_completion_rate)],
       ["Routing accuracy", formatRate(metrics.routing_accuracy)],
-      ["Local Qwen share", formatRate(metrics.local_model_share)],
+      ["Local execution share", formatRate(metrics.local_model_share)],
       ["Tool success", formatRate(metrics.tool_success_rate)],
       ["Verifier corrections", String(metrics.verifier_correction_count)],
       ["Human interventions", String(metrics.human_intervention_count)],
-      ["Route latency estimate", `${metrics.average_latency_ms.toFixed(0)} ms`],
+      ["Measured route latency", `${metrics.average_latency_ms.toFixed(1)} ms`],
       ["Estimated cloud cost", `$${metrics.estimated_cloud_api_cost_usd.toFixed(2)}`],
     ].forEach(([label, value]) => {
       const row = element("div", "demo-metric-row");
@@ -1711,7 +1779,7 @@ function renderInsuranceDemoEvaluation() {
     element(
       "p",
       null,
-      "Latency and cost are persisted route estimates; the local harness runtime is measured separately. No billing or live-model inference is claimed.",
+      `Source: ${evaluation.source_dataset}. Latency is measured for the local Agent handler; no billing or live-model inference is claimed.`,
     ),
   );
 }

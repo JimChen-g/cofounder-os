@@ -33,15 +33,15 @@ def test_router_explains_distinct_private_planning_and_tool_routes() -> None:
 
     assert plan.package_id == package.package_id
     assert plan.live_model_calls == 0
-    assert len(plan.decisions) == 8
+    assert len(plan.decisions) == 10
     by_task = {decision.task_key: decision for decision in plan.decisions}
     assert by_task["evidence-extraction"].selected_model == ("insurance-evidence-adapter-chain")
-    assert by_task["product-analysis"].selected_model == "cofounder-step"
-    assert by_task["finance-analysis"].selected_model == "cofounder-qwen"
-    assert by_task["engineering-plan"].selected_model == ("engineering-execution-chain")
-    assert by_task["verification"].selected_model == "cofounder-qwen"
+    assert by_task["product-analysis"].selected_model == "product-agent-local"
+    assert by_task["finance-analysis"].selected_model == "finance-agent-local"
+    assert by_task["engineering-plan"].selected_model == "engineering-agent-local"
+    assert by_task["verification"].selected_model == "verifier-local"
     assert by_task["finance-analysis"].estimated_cost_usd == 0
-    assert by_task["product-analysis"].estimated_cost_usd > 0
+    assert by_task["product-analysis"].estimated_cost_usd == 0
     assert "cofounder-step" in by_task["finance-analysis"].excluded_models
     assert all(decision.validation_required for decision in plan.decisions)
     assert all(decision.execution_status == "decision_only" for decision in plan.decisions)
@@ -51,22 +51,25 @@ def test_router_records_simulated_fallback_without_claiming_model_execution() ->
     plan = ExplainableInsuranceRouter().route(
         RoutingPreviewRequest(
             evidence_package=_package(),
-            unavailable_models=["cofounder-step"],
+            unavailable_models=["product-agent-local"],
         )
     )
 
     affected = [
-        decision for decision in plan.decisions if decision.requested_model == "cofounder-step"
+        decision for decision in plan.decisions if decision.task_key == "product-analysis"
     ]
-    assert len(affected) == 3
-    assert all(decision.selected_model == "cofounder-qwen" for decision in affected)
+    assert len(affected) == 1
+    assert all(
+        decision.selected_model == "generic-deterministic-agent-local"
+        for decision in affected
+    )
     assert all(decision.fallback_used for decision in affected)
     assert all(
-        "Simulated unavailable" in decision.excluded_models["cofounder-step"]
+        "declared unavailable" in decision.excluded_models["product-agent-local"]
         for decision in affected
     )
     assert plan.live_model_calls == 0
-    assert "do not claim a model call" in plan.simulation_disclosure
+    assert "not model-call claims" in plan.simulation_disclosure
 
 
 def test_explainable_route_fields_persist_in_authoritative_run_state(

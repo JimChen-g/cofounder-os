@@ -360,7 +360,12 @@ class OrchestrationService:
 
             for dependency_id in task.dependency_ids:
                 dependency = transaction.get_task(dependency_id)
-                if TaskStatus(dependency.status) != TaskStatus.COMPLETED:
+                dependency_satisfied = TaskStatus(dependency.status) == TaskStatus.COMPLETED
+                expected_policy_denial = (
+                    TaskStatus(dependency.status) == TaskStatus.CANCELLED
+                    and dependency.metadata.get("expected_policy_disposition") == "deny"
+                )
+                if not (dependency_satisfied or expected_policy_denial):
                     incomplete_dependencies.append(dependency)
 
             if incomplete_dependencies:
@@ -657,6 +662,65 @@ class OrchestrationService:
 
         return decision, event
 
+    def mark_route_executed(
+        self,
+        run_id: UUID | str,
+        task_id: UUID | str,
+        *,
+        actor: str,
+        execution_backend: str,
+        correlation_id: str | None = None,
+        latency_ms: float | None = None,
+        fallback_used: bool | None = None,
+    ) -> tuple[RouteDecision, AuditEvent | None]:
+        """Bind a persisted routing decision to the execution that actually ran."""
+
+        normalized_actor = _required_text(actor, "actor")
+        normalized_backend = _required_text(execution_backend, "execution_backend")
+        task_uuid = UUID(str(task_id))
+        with self.repository.transaction(run_id) as transaction:
+            transaction.get_task(task_uuid)
+            matches = [
+                item
+                for item in transaction.list_route_decisions()
+                if item.task_id == task_uuid
+            ]
+            if len(matches) != 1:
+                raise OrchestrationError(
+                    f"Task {task_uuid} requires exactly one persisted route decision"
+                )
+            current = matches[0]
+            if current.execution_status == "executed":
+                return current, None
+
+            updated = current.model_copy(deep=True)
+            updated.execution_status = "executed"
+            updated.latency_ms = latency_ms
+            if fallback_used is not None:
+                updated.fallback_used = fallback_used
+            updated.metadata["execution_backend"] = normalized_backend
+            updated.metadata["executed_at"] = utc_now().isoformat()
+            transaction.save_route_decision(updated)
+            event = _event(
+                run_id=updated.run_id,
+                task_id=task_uuid,
+                event_type="route.executed",
+                actor=normalized_actor,
+                action="bind_execution",
+                target_type="route_decision",
+                target_id=str(updated.id),
+                correlation_id=correlation_id,
+                details={
+                    "selected_model": updated.selected_model,
+                    "provider": updated.provider,
+                    "execution_backend": normalized_backend,
+                    "fallback_used": updated.fallback_used,
+                    "latency_ms": updated.latency_ms,
+                },
+            )
+            transaction.append_event(event)
+        return updated, event
+
     def request_approval(
         self,
         run_id: UUID | str,
@@ -751,6 +815,14 @@ class OrchestrationService:
                     )
                 )
                 transitioned_run = None
+                if RunStatus(run.status) == RunStatus.RUNNING:
+                    transitioned_run, _ = self.state_machine.transition_run_in_transaction(
+                        transaction,
+                        RunStatus.WAITING_APPROVAL,
+                        actor=normalized_actor,
+                        reason=normalized_reason,
+                        correlation_id=correlation_id,
+                    )
             else:
                 transitioned_run, transition_event = (
                     self.state_machine.transition_run_in_transaction(
@@ -818,6 +890,20 @@ class OrchestrationService:
                     TASK_TRANSITIONS,
                     "task",
                 )
+                if RunStatus(run.status) == RunStatus.WAITING_APPROVAL:
+                    target_run_status = (
+                        RunStatus.RUNNING
+                        if decision_status == ApprovalStatus.APPROVED
+                        else RunStatus.FAILED
+                    )
+                    _ensure_transition_allowed(
+                        RunStatus(run.status),
+                        target_run_status,
+                        RUN_TRANSITIONS,
+                        "run",
+                    )
+                else:
+                    target_run_status = None
             else:
                 target_run_status = (
                     RunStatus.RUNNING
@@ -870,7 +956,17 @@ class OrchestrationService:
                     )
                 )
                 transitioned_run = None
+                if target_run_status is not None:
+                    transitioned_run, _ = self.state_machine.transition_run_in_transaction(
+                        transaction,
+                        target_run_status,
+                        actor=normalized_actor,
+                        reason=transition_reason,
+                        correlation_id=correlation_id,
+                    )
             else:
+                if target_run_status is None:
+                    raise ApprovalResolutionError("Run approval target status is missing")
                 transitioned_run, transition_event = (
                     self.state_machine.transition_run_in_transaction(
                         transaction,

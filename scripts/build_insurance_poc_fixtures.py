@@ -352,12 +352,23 @@ def verify(manifest: dict[str, object]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="Verify checked-in assets (the default; retained for explicit CI commands).",
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Explicitly regenerate and overwrite the checked-in PDF/PNG fixtures.",
+    )
     args = parser.parse_args()
-    if args.verify_only:
-        manifest = json.loads((FIXTURE_DIR / "asset-manifest.json").read_text(encoding="utf-8"))
-    else:
+    if args.verify_only and args.rebuild:
+        parser.error("--verify-only and --rebuild cannot be combined")
+    if args.rebuild:
         manifest = build()
+    else:
+        manifest = json.loads((FIXTURE_DIR / "asset-manifest.json").read_text(encoding="utf-8"))
     verify(manifest)
     print(json.dumps(manifest, indent=2, ensure_ascii=False))
 

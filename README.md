@@ -71,6 +71,8 @@ cp .env.example .env
 | `STEP_MODEL` | no | `step-3.7-flash` | StepFun model identifier. |
 | `GATEWAY_HOST` | no | `127.0.0.1` | Bind address. |
 | `GATEWAY_PORT` | no | `9000` | Listen port. |
+| `CORS_ALLOWED_ORIGINS` | no | local port 9000 origins | JSON list of allowed browser origins; wildcard credentials are not allowed. |
+| `MAX_REQUEST_BODY_BYTES` | no | `12582912` | Hard limit for D14 upload request bodies, including chunked requests. |
 | `REQUEST_TIMEOUT_SECONDS` | no | `300` | Upstream request timeout. |
 | `AUDIT_DIR` | no | `data/audit` | Directory for audit JSONL files. |
 
@@ -131,15 +133,15 @@ contract and verification procedure.
 The NVIDIA DGX Spark submission is frozen around one synthetic traffic-accident
 insurance POC mission. Stable PDF/image inputs, budget, privacy constraints,
 project status, and acceptance criteria live in `examples/insurance-poc/`.
-Regenerate and verify the binary fixtures, then start an isolated demo runtime:
+Verify the checked-in binary fixtures, then start an isolated demo runtime:
 
 ```bash
-python scripts/build_insurance_poc_fixtures.py
+python scripts/build_insurance_poc_fixtures.py --verify-only
 PRODUCT_DATA_DIR=/tmp/cofounder-os-insurance-demo/data GATEWAY_PORT=9100 bash scripts/run_gateway.sh
 ```
 
 Open `http://127.0.0.1:9100/ui`, click **Load stable demo**, and launch the
-Mission. The path produces the shared Evidence Package, eight explainable route
+Mission. The path produces the shared Evidence Package, ten explainable route
 decisions, fixed golden DAG, two structured conflict resolutions, six final
 deliverables, Verifier revisions, a real Policy Gate decision, and Founder
 Approval.
@@ -153,8 +155,9 @@ python scripts/run_insurance_poc_evaluation.py \
 ```
 
 The image fixture Adapter is deterministic and SHA-256-bound; arbitrary images
-fail recoverably. Model routes remain `decision_only` in the offline golden
-path, Engineering is plan-only, and no external write is executed. See
+fail recoverably. Executed local Agent routes are bound to their persisted execution records;
+unavailable live-model candidates remain disclosed rather than simulated. Engineering is
+plan-only, and no external write is executed. See
 [`docs/insurance-poc-demo.md`](docs/insurance-poc-demo.md) for architecture,
 startup, the four-minute backup-demo script, DGX Spark value, verification, and
 known limitations. See `tasks/D14_HACKATHON_SUBMISSION.md` for the P0-P6

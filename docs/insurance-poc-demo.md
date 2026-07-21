@@ -57,14 +57,14 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e ".[dev]"
-python scripts/build_insurance_poc_fixtures.py
+python scripts/build_insurance_poc_fixtures.py --verify-only
 PRODUCT_DATA_DIR=/tmp/cofounder-os-insurance-demo/data GATEWAY_PORT=9100 bash scripts/run_gateway.sh
 ```
 
 Open `http://127.0.0.1:9100/ui` and choose **Load stable demo**.
 
-The deterministic golden path works without a live model service and labels
-all routes `decision_only`. When the DGX Qwen and Step providers are healthy,
+The deterministic golden path works without a live model service and binds
+executed routes to separate local Agent adapters. When the DGX Qwen and Step providers are healthy,
 the existing Gateway remains their only access boundary; this fixture does not
 pretend that a routing decision performed a live call.
 
@@ -79,11 +79,10 @@ python scripts/run_insurance_poc_evaluation.py \
   --output examples/insurance-poc/demo-evaluation-results.json
 ```
 
-The result is explicitly labeled `demo evaluation`. The baseline is an
-executable capability-contract harness, not a live single-model quality test.
-CoFounder OS metrics come from persisted deterministic workflow records. Route
-latency and cost values are estimates, while the harness runtime is measured
-separately.
+The result is explicitly labeled `demo evaluation`. Because no approved live
+single-model service is configured, the baseline is marked `unavailable` and
+no comparative delta is claimed. CoFounder OS metrics come from persisted
+workflow records; local Agent latency and the harness runtime are measured.
 
 ## Four-minute backup demo script
 
@@ -101,11 +100,11 @@ separately.
 - Click **Build Evidence Package** or launch the Mission directly.
 - Show business, accident, technical, financial, and compliance evidence.
 - Point to source filename, modality, confidence, privacy level, and Agent use.
-- Show the eight routing decisions: local Adapter, Step planning, local Qwen,
-  Engineering chain, and independent Verifier.
-- Click **Simulate Step unavailable** before launch if the fallback branch is
-  part of the recording. Emphasize that the UI reports zero live calls during
-  routing.
+- Show the ten routing decisions and their capability, modality, privacy,
+  provider-health, context, latency, cost, fallback, and validation evidence.
+- Click **Simulate route fallback** before launch if the fallback branch is
+  part of the recording. Emphasize that this constraint is submitted with the
+  Run and the selected local fallback is bound to actual execution.
 
 ### 1:10-2:05 — Golden workflow and conflict resolution
 
@@ -115,7 +114,7 @@ separately.
   preserving the CNY 5,000 reserve.
 - Show Risk replacing autonomous liability language with “model recommendation
   plus human review.”
-- Point out that all eight tasks reference one Evidence Package.
+- Point out that all ten tasks reference one Evidence Package.
 
 ### 2:05-2:45 — Delivery package and verification
 
@@ -141,23 +140,24 @@ separately.
 ### 3:25-4:00 — Evaluation and DGX Spark value
 
 - Open **Evaluation**.
-- Show the six-sample baseline comparison and its non-statistical disclosure.
+- Show the six measured CoFounder OS samples, the source case, and the explicit
+  unavailable-baseline disclosure.
 - Show the completed Run's scenario-aware D13 score, Artifact integrity, Agent
   reliability, routing mix, and Audit trace.
 - Close with the DGX value: restricted material stays on the local product
-  plane, Qwen performs private review locally, local tools execute without data
-  export, and only sanitized high-value planning can be routed to Step.
+  plane, local Agents execute without data export, and live providers remain
+  candidates only after health and privacy eligibility are proven.
 
 ## DGX Spark value
 
 - Private insurer documents, accident evidence, budget rows, policy review, and
   complete verification packages remain on the local product plane.
-- Local Qwen is the planned route for Finance, Risk, and independent
-  verification, avoiding unnecessary cloud export.
+- Local deterministic Agent adapters execute this stable offline demo; the same
+  DGX boundary can host Qwen when provider health is explicitly confirmed.
 - The Artifact Store, policy rules, batch evaluation, and multi-Agent state run
   beside local inference.
-- Step is reserved for sanitized cross-functional planning where its expected
-  quality benefit justifies latency and estimated cost.
+- Step remains a candidate only for cloud-eligible sanitized context when its
+  health, latency, cost, and privacy constraints all pass.
 - Provider unavailability has an explicit local fallback or human-review path.
 
 ## Known limitations
@@ -170,8 +170,8 @@ separately.
 - The Engineering deliverable is a plan only. It exposes `code_diff=null` and
   `test_result=null` instead of fabricating execution.
 - No external insurer write, email, payment, or production integration occurs.
-- The six-task comparison is a demo acceptance evaluation, not statistical
-  model-quality evidence.
+- The six-task measurement is a demo acceptance evaluation, not statistical
+  model-quality evidence; the live single-model baseline is unavailable.
 - Single-process filesystem state is appropriate for the hackathon demo, not a
   multi-worker production deployment.
 

@@ -40,7 +40,7 @@ def main() -> int:
     )
     print(
         f"demo evaluation: {result.sample_size} samples; "
-        f"baseline completion={result.baseline.task_completion_rate:.1%}; "
+        f"baseline={result.baseline.measurement_status}; "
         f"CoFounder OS completion={result.cofounder_os.task_completion_rate:.1%}; "
         f"output={args.output}"
     )

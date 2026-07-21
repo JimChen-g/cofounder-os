@@ -21,9 +21,15 @@ def test_default_registry_contains_bounded_agent_set():
         "finance-agent",
         "legal-agent",
         "operations-agent",
+        "evidence-extractor",
+        "engineering-agent",
+        "risk-agent",
+        "artifact-synthesizer",
+        "verifier",
+        "release-agent",
     )
     assert registry.get(EXECUTIVE_AGENT_ID).can_plan is True
-    # Only executive-orchestrator, product-agent, and finance-agent are executable
+    # Only agents with a concrete Controller adapter are executable.
     executable = [
         definition.agent_id
         for definition in registry.list()
@@ -33,6 +39,12 @@ def test_default_registry_contains_bounded_agent_set():
         "executive-orchestrator",
         "product-agent",
         "finance-agent",
+        "evidence-extractor",
+        "engineering-agent",
+        "risk-agent",
+        "artifact-synthesizer",
+        "verifier",
+        "release-agent",
     ]
 
 

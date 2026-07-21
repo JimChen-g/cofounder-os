@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Optional, Protocol, Sequence
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +15,8 @@ from app.domain import (
     ApprovalStatus,
     Artifact,
     ArtifactSynthesisRequest,
+    AuditEvent,
+    AuditOutcome,
     DependencyArtifactSummary,
     FinanceAgentRequest,
     FinanceAgentResultV1,
@@ -67,6 +69,21 @@ class UnsupportedWorkflowTask(WorkflowControllerError):
     """Raised when a task has no implemented execution adapter."""
 
 
+class WorkflowTaskAdapter(Protocol):
+    """Bounded task-family adapter without lifecycle mutation authority."""
+
+    def supports(self, task: Task) -> bool: ...
+
+    def expected_outputs(self, task: Task) -> frozenset[str] | None: ...
+
+    async def dispatch(
+        self,
+        task: Task,
+        snapshot: RunSnapshot,
+        correlation_id: str | None,
+    ) -> None: ...
+
+
 class WorkflowRunResult(BaseModel):
     """Bounded controller outcome and replay evidence."""
 
@@ -98,6 +115,7 @@ class WorkflowController:
         finance_agent_service: FinanceAgentService,
         artifact_synthesizer: ArtifactSynthesizer,
         policy_gate: Optional[DeterministicPolicyGate] = None,
+        task_adapters: Sequence[WorkflowTaskAdapter] = (),
     ) -> None:
         if agent_execution.repository is not orchestration.repository:
             raise ValueError(
@@ -110,6 +128,13 @@ class WorkflowController:
         self.finance_agent_service = finance_agent_service
         self.artifact_synthesizer = artifact_synthesizer
         self.policy_gate = policy_gate or DeterministicPolicyGate()
+        self.task_adapters = list(task_adapters)
+
+    def register_task_adapter(self, adapter: WorkflowTaskAdapter) -> None:
+        """Register one composed adapter; the Controller keeps lifecycle authority."""
+
+        if adapter not in self.task_adapters:
+            self.task_adapters.append(adapter)
 
     async def run_until_terminal(
         self,
@@ -219,6 +244,7 @@ class WorkflowController:
                 try:
                     action = self._policy_action(task)
                     decision = self.policy_gate.evaluate(action)
+                    self._record_policy_event(task, action, decision, correlation_id)
                 except Exception as exc:
                     self._terminally_fail_ready_task(
                         run_uuid,
@@ -538,6 +564,10 @@ class WorkflowController:
         correlation_id: Optional[str],
     ) -> None:
         snapshot = self.orchestration.get_snapshot(task.run_id)
+        for adapter in self.task_adapters:
+            if adapter.supports(task):
+                await adapter.dispatch(task, snapshot, correlation_id)
+                return
         run = snapshot.run
         inputs = self._input_summaries(task, snapshot)
         constraints = self._string_list(run.metadata.get("constraints", []))
@@ -709,8 +739,12 @@ class WorkflowController:
         )
 
     def _verify_task_outputs(self, task: Task) -> bool:
-        if task.metadata.get("execution_mode") == "deterministic_acceptance_fixture":
-            return self._verify_declared_fixture_outputs(task)
+        for adapter in self.task_adapters:
+            if adapter.supports(task):
+                expected = adapter.expected_outputs(task)
+                if expected is None:
+                    return False
+                return self._verify_expected_outputs(task, expected)
         task_key = (
             SYNTHESIS_TASK_TYPE
             if task.metadata.get("task_type") == SYNTHESIS_TASK_TYPE
@@ -748,20 +782,11 @@ class WorkflowController:
         except Exception:
             return False
 
-    def _verify_declared_fixture_outputs(self, task: Task) -> bool:
-        """Verify a completed fixture task without dispatching an unimplemented Agent.
+    def _verify_expected_outputs(self, task: Task, expected: frozenset[str]) -> bool:
+        """Verify a code-owned adapter contract, never client-supplied names."""
 
-        This is an integrity-only replay path. It does not execute the declared
-        model route or turn fixture output into a live model claim.
-        """
-
-        expected = task.metadata.get("expected_output_names")
-        if (
-            not isinstance(expected, list)
-            or not expected
-            or not all(isinstance(name, str) and name for name in expected)
-        ):
-            return False
+        if not expected:
+            return not task.output_artifact_ids
         try:
             artifacts = [
                 self.orchestration.repository.get_artifact(task.run_id, artifact_id)
@@ -769,8 +794,8 @@ class WorkflowController:
             ]
             if len(artifacts) != len(expected):
                 return False
-            names = [artifact.name for artifact in artifacts]
-            if sorted(names) != sorted(expected):
+            names = {artifact.name for artifact in artifacts}
+            if names != expected:
                 return False
             for artifact in artifacts:
                 if (
@@ -829,7 +854,14 @@ class WorkflowController:
         by_id = {candidate.id: candidate for candidate in snapshot.tasks}
         return all(
             dependency_id in by_id
-            and TaskStatus(by_id[dependency_id].status) == TaskStatus.COMPLETED
+            and (
+                TaskStatus(by_id[dependency_id].status) == TaskStatus.COMPLETED
+                or (
+                    TaskStatus(by_id[dependency_id].status) == TaskStatus.CANCELLED
+                    and by_id[dependency_id].metadata.get("expected_policy_disposition")
+                    == "deny"
+                )
+            )
             for dependency_id in task.dependency_ids
         )
 
@@ -871,6 +903,44 @@ class WorkflowController:
             ensure_ascii=False,
         ).encode("utf-8")
         return hashlib.sha256(payload).hexdigest()
+
+    def _record_policy_event(
+        self,
+        task: Task,
+        action: PolicyAction,
+        decision: PolicyDecision,
+        correlation_id: str | None,
+    ) -> None:
+        disposition = decision.disposition.value
+        event_type = {
+            PolicyDisposition.ALLOW.value: "policy.allowed",
+            PolicyDisposition.DENY.value: "policy.denied",
+            PolicyDisposition.REQUIRE_APPROVAL.value: "policy.approval_required",
+        }[disposition]
+        outcome = AuditOutcome.SUCCESS
+        if decision.disposition == PolicyDisposition.DENY:
+            outcome = AuditOutcome.DENIED
+        elif decision.disposition == PolicyDisposition.REQUIRE_APPROVAL:
+            outcome = AuditOutcome.PENDING
+        self.orchestration.repository.append_event(
+            AuditEvent(
+                run_id=task.run_id,
+                task_id=task.id,
+                event_type=event_type,
+                actor=WORKFLOW_CONTROLLER_ID,
+                action="evaluate_policy",
+                target_type="task",
+                target_id=str(task.id),
+                outcome=outcome,
+                correlation_id=correlation_id,
+                details={
+                    "disposition": disposition,
+                    "rule_ids": decision.rule_ids,
+                    "action_sha256": self._policy_action_digest(action),
+                    "reviewer_required": decision.reviewer_required,
+                },
+            )
+        )
 
     @classmethod
     def _has_valid_approved_task(
@@ -932,6 +1002,15 @@ class WorkflowController:
             reason=reason,
             correlation_id=correlation_id,
         )
+        if task.metadata.get("expected_policy_disposition") == "deny":
+            self.orchestration.cancel_task(
+                run_id,
+                task.id,
+                actor=actor,
+                reason=f"Expected Policy Gate denial recorded: {reason}",
+                correlation_id=correlation_id,
+            )
+            return
         self.orchestration.fail_task(
             run_id,
             task.id,

@@ -93,6 +93,7 @@ class EvidenceItem(StrictModel):
     processing_status: ProcessingStatus = ProcessingStatus.COMPLETE
     adapter: str
     adapter_mode: Literal["live", "deterministic_fixture", "local_parser"]
+    cloud_eligible: bool = False
     source_checksum_sha256: str | None = Field(
         default=None,
         pattern=r"^[a-f0-9]{64}$",
@@ -117,7 +118,7 @@ class EvidencePackage(StrictModel):
 
 class EvidencePreviewRequest(StrictModel):
     mission: str = Field(min_length=1, max_length=2000)
-    attachments: list[AttachmentUpload] = Field(min_length=3, max_length=8)
+    attachments: list[AttachmentUpload] = Field(min_length=2, max_length=4)
 
 
 class EvidencePreviewResponse(StrictModel):
@@ -127,6 +128,9 @@ class EvidencePreviewResponse(StrictModel):
 class RoutingPreviewRequest(StrictModel):
     evidence_package: EvidencePackage
     unavailable_models: list[str] = Field(default_factory=list, max_length=8)
+    provider_health: dict[str, bool] = Field(default_factory=dict)
+    latency_budget_ms: float | None = Field(default=None, ge=0)
+    cost_budget_usd: float | None = Field(default=None, ge=0)
 
 
 class ExplainableRouteDecision(StrictModel):
@@ -154,7 +158,7 @@ class ExplainableRouteDecision(StrictModel):
     fallback_used: bool
     validation_required: bool
     validation_requirement: str
-    execution_status: Literal["decision_only"] = "decision_only"
+    execution_status: Literal["decision_only", "executed", "failed"] = "decision_only"
 
 
 class RoutingPreviewResponse(StrictModel):
@@ -204,6 +208,8 @@ class GoldenWorkflowResponse(StrictModel):
 class DemoEvaluationMetrics(StrictModel):
     """Aggregate metrics for one executable demo strategy."""
 
+    measurement_status: Literal["measured", "unavailable"] = "measured"
+    unavailability_reason: str | None = None
     task_completion_rate: float = Field(ge=0, le=1)
     routing_accuracy: float = Field(ge=0, le=1)
     local_model_share: float = Field(ge=0, le=1)
@@ -223,6 +229,8 @@ class DemoEvaluationResponse(StrictModel):
     generated_at: datetime
     sample_size: int = Field(ge=5, le=8)
     disclosure: str
+    source_dataset: str
+    source_case_ids: list[str] = Field(min_length=1)
     metric_sources: dict[str, str]
     baseline: DemoEvaluationMetrics
     cofounder_os: DemoEvaluationMetrics

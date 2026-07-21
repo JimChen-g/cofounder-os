@@ -34,6 +34,7 @@ class AgentDefinition(BaseModel):
     capabilities: tuple[str, ...] = Field(min_length=1)
     can_plan: bool = False
     can_execute: bool = True
+    planner_visible: bool = True
 
 
 DEFAULT_AGENTS: tuple[AgentDefinition, ...] = (
@@ -124,6 +125,48 @@ DEFAULT_AGENTS: tuple[AgentDefinition, ...] = (
         ),
         can_execute=False,
     ),
+    AgentDefinition(
+        agent_id="evidence-extractor",
+        display_name="Evidence Extraction Agent",
+        purpose="Validate bounded multimodal inputs and normalize source-linked evidence.",
+        capabilities=("document parsing", "image adapter execution", "evidence normalization"),
+        planner_visible=False,
+    ),
+    AgentDefinition(
+        agent_id="engineering-agent",
+        display_name="Engineering Agent",
+        purpose="Produce executable technical plans and preserve tool-result honesty boundaries.",
+        capabilities=("implementation planning", "repository execution", "test evidence"),
+        planner_visible=False,
+    ),
+    AgentDefinition(
+        agent_id="risk-agent",
+        display_name="Risk Agent",
+        purpose="Apply privacy, authority, policy, and human-review controls.",
+        capabilities=("privacy review", "policy analysis", "authority boundary enforcement"),
+        planner_visible=False,
+    ),
+    AgentDefinition(
+        agent_id="artifact-synthesizer",
+        display_name="Artifact Synthesizer",
+        purpose="Combine persisted specialist outputs into a traceable delivery draft.",
+        capabilities=("artifact synthesis", "lineage preservation", "delivery packaging"),
+        planner_visible=False,
+    ),
+    AgentDefinition(
+        agent_id="verifier",
+        display_name="Independent Verifier",
+        purpose="Independently validate persisted proposals and produce bounded corrections.",
+        capabilities=("consistency verification", "citation validation", "bounded correction"),
+        planner_visible=False,
+    ),
+    AgentDefinition(
+        agent_id="release-agent",
+        display_name="Governed Release Agent",
+        purpose="Record an approved sanitized release decision without performing an external write.",
+        capabilities=("approval verification", "release receipt", "external-write boundary"),
+        planner_visible=False,
+    ),
 )
 
 
@@ -190,5 +233,5 @@ class AgentRegistry:
                 "capabilities": list(definition.capabilities),
             }
             for definition in self._definitions
-            if definition.can_execute
+            if definition.can_execute and definition.planner_visible
         ]

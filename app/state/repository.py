@@ -230,6 +230,9 @@ class RunTransaction:
             RouteDecision,
         )
 
+    def save_route_decision(self, decision: RouteDecision) -> RouteDecision:
+        return self._save_child("route-decisions", decision)
+
     def list_route_decisions(self) -> List[RouteDecision]:
         return self._list_children("route-decisions", RouteDecision)
 
@@ -511,6 +514,10 @@ class FileStateRepository:
     ) -> RouteDecision:
         with self.transaction(run_id) as transaction:
             return transaction.get_route_decision(decision_id)
+
+    def save_route_decision(self, decision: RouteDecision) -> RouteDecision:
+        with self.transaction(decision.run_id) as transaction:
+            return transaction.save_route_decision(decision)
 
     def list_route_decisions(
         self,

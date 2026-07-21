@@ -301,6 +301,9 @@ async def resolve_run_approval(
             decision=body.decision,
             decided_by=body.decided_by,
             reason=body.reason,
+            approval_capability=request.cookies.get(
+                f"cofounder_approval_{run_id.hex}"
+            ),
             correlation_id=_request_id(request),
             max_cycles=body.max_cycles,
         )

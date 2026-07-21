@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import json
+import secrets
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.insurance_poc import (
@@ -24,13 +26,12 @@ from app.insurance_poc import (
 )
 from app.artifacts import FileArtifactStore
 from app.config import get_settings
-from app.policy import DeterministicPolicyGate
 from app.services.artifact_write import ArtifactRegistrationService
 from app.services.product_api import ProductAPIService, build_product_api_service
 
 
 router = APIRouter(prefix="/api/insurance-poc", tags=["insurance-poc"])
-FIXTURE_DIR = Path(__file__).resolve().parents[2] / "examples" / "insurance-poc"
+FIXTURE_DIR = Path(__file__).resolve().parents[1] / "insurance_poc" / "fixtures"
 EVALUATION_RESULTS = FIXTURE_DIR / "demo-evaluation-results.json"
 
 
@@ -67,7 +68,7 @@ def _workflow(request: Request) -> InsurancePOCGoldenWorkflow:
             artifact_store,
             product.orchestration,
         ),
-        policy_gate=DeterministicPolicyGate(),
+        workflow_controller=product.workflow_controller,
     )
     request.app.state.insurance_poc_workflow = created
     return created
@@ -129,17 +130,32 @@ async def preview_insurance_poc_routing(
 )
 async def create_insurance_poc_run(
     request: Request,
+    response: Response,
     body: GoldenWorkflowRequest,
 ) -> GoldenWorkflowResponse | JSONResponse:
     """Execute the fixed, shared-evidence golden DAG to human approval."""
 
     try:
         evidence = _service(request).extract(body)
-        return _workflow(request).execute(
+        capability = secrets.token_urlsafe(32)
+        result = await _workflow(request).execute(
             body,
             evidence,
             correlation_id=getattr(request.state, "request_id", None),
+            approval_capability_sha256=hashlib.sha256(
+                capability.encode("utf-8")
+            ).hexdigest(),
         )
+        response.set_cookie(
+            key=f"cofounder_approval_{result.run_id.hex}",
+            value=capability,
+            max_age=3600,
+            httponly=True,
+            samesite="strict",
+            secure=get_settings().environment != "development",
+            path="/api",
+        )
+        return result
     except EvidenceExtractionError as exc:
         return _error(request, exc)
 

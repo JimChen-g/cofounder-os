@@ -11,7 +11,7 @@ fi
 # Require virtual environment
 if [[ ! -d .venv ]]; then
     echo "ERROR: .venv not found." >&2
-    echo "Run: python3 -m venv .venv && source .venv/bin/activate && pip install -e '.[dev]]'" >&2
+    echo "Run: python3 -m venv .venv && source .venv/bin/activate && pip install -e '.[dev]'" >&2
     exit 1
 fi
 

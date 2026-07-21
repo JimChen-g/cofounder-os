@@ -112,8 +112,8 @@ editor or a new Agent framework.
 
 - Five to eight existing representative tasks are run as a clearly labeled
   demo evaluation.
-- Single-model/no-router baseline is compared with routed multi-Agent plus
-  Verifier execution using persisted run evidence.
+- A live single-model/no-router baseline is compared only when a provider is
+  actually configured; otherwise it is explicitly unavailable and no delta is claimed.
 - Results are reproducible and do not claim statistical significance.
 
 ### P6 - release gate
