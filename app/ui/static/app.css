@@ -1938,6 +1938,84 @@ p {
   color: var(--red);
 }
 
+.demo-comparison {
+  background: #f2f6ed;
+  border-color: #d7e4c8;
+  margin-bottom: 18px;
+  padding: 22px;
+}
+
+.demo-strategy-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.demo-strategy-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 17px;
+}
+
+.demo-strategy-card.cofounder {
+  border-color: #bcd492;
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.demo-strategy-label {
+  color: var(--ink-faint);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+}
+
+.demo-strategy-card h3 {
+  font-size: 15px;
+  margin: 6px 0 14px;
+}
+
+.demo-metric-rows {
+  display: grid;
+  gap: 7px;
+}
+
+.demo-metric-row {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  font-size: 9px;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 7px;
+}
+
+.demo-metric-row span {
+  color: var(--ink-soft);
+}
+
+.demo-metric-row strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.demo-evaluation-disclosure {
+  background: var(--amber-pale);
+  border-radius: 10px;
+  color: #75501c;
+  margin-top: 14px;
+  padding: 12px 14px;
+}
+
+.demo-evaluation-disclosure strong,
+.demo-evaluation-disclosure p {
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.demo-evaluation-disclosure p {
+  margin: 4px 0 0;
+}
+
 .evaluation-metrics {
   margin-bottom: 14px;
 }
@@ -2303,6 +2381,10 @@ p {
 
   .evaluation-layout,
   .evaluation-secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-strategy-grid {
     grid-template-columns: 1fr;
   }
 }

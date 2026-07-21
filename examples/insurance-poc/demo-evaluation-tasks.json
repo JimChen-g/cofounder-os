@@ -1,0 +1,61 @@
+{
+  "schema_version": "insurance-demo-evaluation-tasks-1.0",
+  "label": "demo evaluation",
+  "disclosure": "Six acceptance-focused Founder Tasks selected from the frozen insurance POC scenario and acceptance criteria. They are synthetic and do not establish statistical model quality.",
+  "tasks": [
+    {
+      "task_id": "FT-EVIDENCE-001",
+      "title": "Normalize restricted multimodal evidence",
+      "founder_task": "Build a source-linked Evidence Package from the insurer PDF and two accident images without sending raw restricted files to a cloud provider.",
+      "focus_task_key": "evidence-extraction",
+      "expected_selected_model": "insurance-evidence-adapter-chain",
+      "requires_tool": true,
+      "requires_verifier": false
+    },
+    {
+      "task_id": "FT-PLAN-001",
+      "title": "Decompose the two-week insurer POC",
+      "founder_task": "Turn the insurance POC mission into a bounded cross-functional execution plan using sanitized Evidence IDs.",
+      "focus_task_key": "executive-orchestration",
+      "expected_selected_model": "cofounder-step",
+      "requires_tool": false,
+      "requires_verifier": false
+    },
+    {
+      "task_id": "FT-BUDGET-001",
+      "title": "Protect the delivery budget and reserve",
+      "founder_task": "Resolve the Product scope against a CNY 50,000 total budget while preserving the CNY 5,000 reserve.",
+      "focus_task_key": "finance-analysis",
+      "expected_selected_model": "cofounder-qwen",
+      "requires_tool": false,
+      "requires_verifier": true
+    },
+    {
+      "task_id": "FT-ENGINEERING-001",
+      "title": "Plan only executable engineering work",
+      "founder_task": "Create a technical plan that reuses the accepted runtime and does not fabricate code diffs or test execution.",
+      "focus_task_key": "engineering-plan",
+      "expected_selected_model": "engineering-execution-chain",
+      "requires_tool": false,
+      "requires_verifier": true
+    },
+    {
+      "task_id": "FT-RISK-001",
+      "title": "Enforce the liability authority boundary",
+      "founder_task": "Replace autonomous liability language with a non-authoritative model recommendation plus mandatory human review.",
+      "focus_task_key": "risk-review",
+      "expected_selected_model": "cofounder-qwen",
+      "requires_tool": false,
+      "requires_verifier": true
+    },
+    {
+      "task_id": "FT-VERIFY-001",
+      "title": "Independently revise the delivery package",
+      "founder_task": "Verify budget, evidence citations, policy controls, and authority language before Founder approval.",
+      "focus_task_key": "verification",
+      "expected_selected_model": "cofounder-qwen",
+      "requires_tool": false,
+      "requires_verifier": true
+    }
+  ]
+}

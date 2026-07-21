@@ -1,0 +1,229 @@
+{
+  "schema_version": "insurance-demo-evaluation-1.0",
+  "label": "demo evaluation",
+  "generated_at": "2026-07-21T06:20:08.234875Z",
+  "sample_size": 6,
+  "disclosure": "Six acceptance-focused Founder Tasks selected from the frozen insurance POC scenario and acceptance criteria. They are synthetic and do not establish statistical model quality. The baseline is an executable capability-contract harness, not a live single-model quality run. CoFounder OS values come from persisted deterministic golden-workflow records; all model routes are decision-only.",
+  "metric_sources": {
+    "task_completion_rate": "persisted task status plus task-specific acceptance checks",
+    "routing_accuracy": "selected route compared with the frozen expected route",
+    "local_model_share": "focus tasks selecting cofounder-qwen only; local tools are excluded",
+    "tool_success_rate": "registered Evidence Extraction output for the one tool-required sample",
+    "verifier_correction_count": "persisted verification-report issues_found",
+    "human_intervention_count": "persisted Approval records",
+    "average_latency_ms": "persisted route latency estimate; not observed model latency",
+    "measured_harness_latency_ms": "local wall-clock deterministic harness runtime",
+    "estimated_cloud_api_cost_usd": "persisted focus-route estimate; no billing claim"
+  },
+  "baseline": {
+    "task_completion_rate": 0.16666666666666666,
+    "routing_accuracy": 0.16666666666666666,
+    "local_model_share": 0.0,
+    "tool_success_rate": 0.0,
+    "verifier_correction_count": 0,
+    "human_intervention_count": 0,
+    "average_latency_ms": 6000.0,
+    "measured_harness_latency_ms": 0.0014501674741040915,
+    "estimated_cloud_api_cost_usd": 0.24
+  },
+  "cofounder_os": {
+    "task_completion_rate": 1.0,
+    "routing_accuracy": 1.0,
+    "local_model_share": 0.5,
+    "tool_success_rate": 1.0,
+    "verifier_correction_count": 12,
+    "human_intervention_count": 6,
+    "average_latency_ms": 4325.0,
+    "measured_harness_latency_ms": 529.5590679985859,
+    "estimated_cloud_api_cost_usd": 0.04
+  },
+  "deltas": {
+    "task_completion_rate": 0.8333333333333334,
+    "routing_accuracy": 0.8333333333333334,
+    "local_model_share": 0.5,
+    "tool_success_rate": 1.0,
+    "estimated_cloud_api_cost_usd": -0.19999999999999998
+  },
+  "sample_results": [
+    {
+      "task_id": "FT-EVIDENCE-001",
+      "title": "Normalize restricted multimodal evidence",
+      "focus_task_key": "evidence-extraction",
+      "expected_selected_model": "insurance-evidence-adapter-chain",
+      "baseline": {
+        "strategy": "single_model_no_router_no_verifier",
+        "selected_model": "cofounder-step",
+        "task_completed": false,
+        "routing_correct": false,
+        "tool_success": false,
+        "verifier_available": false,
+        "external_policy_gate_available": false
+      },
+      "cofounder_os": {
+        "run_id": "0fe5aa1d-c4f3-4e66-9c25-8cecdafa6caa",
+        "route_decision_id": "eb0a5389-8013-4cf9-a628-a47b1541a910",
+        "selected_model": "insurance-evidence-adapter-chain",
+        "provider": "local-adapter-chain",
+        "route_execution_status": "decision_only",
+        "task_status": "completed",
+        "task_completed": true,
+        "routing_correct": true,
+        "tool_success": true,
+        "verifier_corrections": 2,
+        "human_interventions": 1,
+        "estimated_route_latency_ms": 450.0,
+        "estimated_cloud_api_cost_usd": 0.0
+      }
+    },
+    {
+      "task_id": "FT-PLAN-001",
+      "title": "Decompose the two-week insurer POC",
+      "focus_task_key": "executive-orchestration",
+      "expected_selected_model": "cofounder-step",
+      "baseline": {
+        "strategy": "single_model_no_router_no_verifier",
+        "selected_model": "cofounder-step",
+        "task_completed": true,
+        "routing_correct": true,
+        "tool_success": null,
+        "verifier_available": false,
+        "external_policy_gate_available": false
+      },
+      "cofounder_os": {
+        "run_id": "8b26905b-3a3e-42b4-a18d-97fe1ca71755",
+        "route_decision_id": "2eb2f069-1674-481d-9d9a-416163f71087",
+        "selected_model": "cofounder-step",
+        "provider": "step",
+        "route_execution_status": "decision_only",
+        "task_status": "completed",
+        "task_completed": true,
+        "routing_correct": true,
+        "tool_success": null,
+        "verifier_corrections": 2,
+        "human_interventions": 1,
+        "estimated_route_latency_ms": 6000.0,
+        "estimated_cloud_api_cost_usd": 0.04
+      }
+    },
+    {
+      "task_id": "FT-BUDGET-001",
+      "title": "Protect the delivery budget and reserve",
+      "focus_task_key": "finance-analysis",
+      "expected_selected_model": "cofounder-qwen",
+      "baseline": {
+        "strategy": "single_model_no_router_no_verifier",
+        "selected_model": "cofounder-step",
+        "task_completed": false,
+        "routing_correct": false,
+        "tool_success": null,
+        "verifier_available": false,
+        "external_policy_gate_available": false
+      },
+      "cofounder_os": {
+        "run_id": "d7cdf274-4e72-414d-92e3-15824e4261f7",
+        "route_decision_id": "4e5bdc33-2898-4b6c-8fb4-9c09c4caff3f",
+        "selected_model": "cofounder-qwen",
+        "provider": "qwen-local-dgx",
+        "route_execution_status": "decision_only",
+        "task_status": "completed",
+        "task_completed": true,
+        "routing_correct": true,
+        "tool_success": null,
+        "verifier_corrections": 2,
+        "human_interventions": 1,
+        "estimated_route_latency_ms": 2500.0,
+        "estimated_cloud_api_cost_usd": 0.0
+      }
+    },
+    {
+      "task_id": "FT-ENGINEERING-001",
+      "title": "Plan only executable engineering work",
+      "focus_task_key": "engineering-plan",
+      "expected_selected_model": "engineering-execution-chain",
+      "baseline": {
+        "strategy": "single_model_no_router_no_verifier",
+        "selected_model": "cofounder-step",
+        "task_completed": false,
+        "routing_correct": false,
+        "tool_success": null,
+        "verifier_available": false,
+        "external_policy_gate_available": false
+      },
+      "cofounder_os": {
+        "run_id": "8ab4d1cc-13c8-4527-a604-19dc6de15739",
+        "route_decision_id": "3257c21f-c8b1-43ee-ab09-c929dd20ed2b",
+        "selected_model": "engineering-execution-chain",
+        "provider": "engineering-toolchain",
+        "route_execution_status": "decision_only",
+        "task_status": "completed",
+        "task_completed": true,
+        "routing_correct": true,
+        "tool_success": null,
+        "verifier_corrections": 2,
+        "human_interventions": 1,
+        "estimated_route_latency_ms": 12000.0,
+        "estimated_cloud_api_cost_usd": 0.0
+      }
+    },
+    {
+      "task_id": "FT-RISK-001",
+      "title": "Enforce the liability authority boundary",
+      "focus_task_key": "risk-review",
+      "expected_selected_model": "cofounder-qwen",
+      "baseline": {
+        "strategy": "single_model_no_router_no_verifier",
+        "selected_model": "cofounder-step",
+        "task_completed": false,
+        "routing_correct": false,
+        "tool_success": null,
+        "verifier_available": false,
+        "external_policy_gate_available": false
+      },
+      "cofounder_os": {
+        "run_id": "33551632-e880-4f36-a968-0365fcc4047f",
+        "route_decision_id": "78b95b88-60e5-4307-96cc-a5938e60ea0d",
+        "selected_model": "cofounder-qwen",
+        "provider": "qwen-local-dgx",
+        "route_execution_status": "decision_only",
+        "task_status": "completed",
+        "task_completed": true,
+        "routing_correct": true,
+        "tool_success": null,
+        "verifier_corrections": 2,
+        "human_interventions": 1,
+        "estimated_route_latency_ms": 2500.0,
+        "estimated_cloud_api_cost_usd": 0.0
+      }
+    },
+    {
+      "task_id": "FT-VERIFY-001",
+      "title": "Independently revise the delivery package",
+      "focus_task_key": "verification",
+      "expected_selected_model": "cofounder-qwen",
+      "baseline": {
+        "strategy": "single_model_no_router_no_verifier",
+        "selected_model": "cofounder-step",
+        "task_completed": false,
+        "routing_correct": false,
+        "tool_success": null,
+        "verifier_available": false,
+        "external_policy_gate_available": false
+      },
+      "cofounder_os": {
+        "run_id": "7ec97ed2-6e3d-4f90-af36-e6fea7575f87",
+        "route_decision_id": "90d364d8-92db-4f2e-84b6-377b38ab751d",
+        "selected_model": "cofounder-qwen",
+        "provider": "qwen-local-dgx",
+        "route_execution_status": "decision_only",
+        "task_status": "completed",
+        "task_completed": true,
+        "routing_correct": true,
+        "tool_success": null,
+        "verifier_corrections": 2,
+        "human_interventions": 1,
+        "estimated_route_latency_ms": 2500.0,
+        "estimated_cloud_api_cost_usd": 0.0
+      }
+    }
+  ]
+}

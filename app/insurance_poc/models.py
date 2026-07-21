@@ -201,6 +201,35 @@ class GoldenWorkflowResponse(StrictModel):
     execution_disclosure: str
 
 
+class DemoEvaluationMetrics(StrictModel):
+    """Aggregate metrics for one executable demo strategy."""
+
+    task_completion_rate: float = Field(ge=0, le=1)
+    routing_accuracy: float = Field(ge=0, le=1)
+    local_model_share: float = Field(ge=0, le=1)
+    tool_success_rate: float = Field(ge=0, le=1)
+    verifier_correction_count: int = Field(ge=0)
+    human_intervention_count: int = Field(ge=0)
+    average_latency_ms: float = Field(ge=0)
+    measured_harness_latency_ms: float = Field(ge=0)
+    estimated_cloud_api_cost_usd: float = Field(ge=0)
+
+
+class DemoEvaluationResponse(StrictModel):
+    """Small, explicitly non-statistical baseline comparison."""
+
+    schema_version: Literal["insurance-demo-evaluation-1.0"]
+    label: Literal["demo evaluation"]
+    generated_at: datetime
+    sample_size: int = Field(ge=5, le=8)
+    disclosure: str
+    metric_sources: dict[str, str]
+    baseline: DemoEvaluationMetrics
+    cofounder_os: DemoEvaluationMetrics
+    deltas: dict[str, float]
+    sample_results: list[dict[str, object]] = Field(min_length=5, max_length=8)
+
+
 class FixtureResponse(StrictModel):
     scenario_id: str
     mission: str

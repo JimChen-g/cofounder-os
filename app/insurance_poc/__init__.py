@@ -7,6 +7,8 @@ from app.insurance_poc.evidence import (
 from app.insurance_poc.models import (
     AttachmentUpload,
     ConflictRecord,
+    DemoEvaluationMetrics,
+    DemoEvaluationResponse,
     EvidenceCategory,
     EvidenceItem,
     EvidencePackage,
@@ -28,6 +30,8 @@ from app.insurance_poc.workflow import InsurancePOCGoldenWorkflow
 __all__ = [
     "AttachmentUpload",
     "ConflictRecord",
+    "DemoEvaluationMetrics",
+    "DemoEvaluationResponse",
     "EvidenceCategory",
     "EvidenceExtractionError",
     "EvidenceItem",

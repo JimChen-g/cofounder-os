@@ -8,6 +8,7 @@ const state = {
   artifacts: [],
   events: [],
   evaluation: null,
+  insuranceEvaluation: null,
   pendingAttachments: [],
   evidencePackage: null,
   routingPlan: null,
@@ -98,6 +99,9 @@ const selectors = {
   evaluationLatest: document.querySelector("#evaluation-latest"),
   evaluationProviders: document.querySelector("#evaluation-providers"),
   evaluationRuns: document.querySelector("#evaluation-runs"),
+  demoEvaluationDisclosure: document.querySelector("#demo-evaluation-disclosure"),
+  demoEvaluationSample: document.querySelector("#demo-evaluation-sample"),
+  demoStrategyGrid: document.querySelector("#demo-strategy-grid"),
   evidenceBoard: document.querySelector("#evidence-board"),
   evidenceBoardGrid: document.querySelector("#evidence-board-grid"),
   evidenceBoardSummary: document.querySelector("#evidence-board-summary"),
@@ -1632,15 +1636,22 @@ async function loadEvaluation() {
   hideAlert();
   setButtonLoading(selectors.refreshEvaluation, true);
   try {
-    const summary = await apiRequest("/api/evaluation/summary?limit=50");
+    const [summary, insuranceEvaluation] = await Promise.all([
+      apiRequest("/api/evaluation/summary?limit=50"),
+      apiRequest("/api/insurance-poc/evaluation"),
+    ]);
     if (evaluationEpoch !== state.evaluationEpoch) {
       return;
     }
     state.evaluation = summary;
+    state.insuranceEvaluation = insuranceEvaluation;
+    renderInsuranceDemoEvaluation();
     renderEvaluation();
   } catch (error) {
     if (evaluationEpoch === state.evaluationEpoch) {
       showAlert("Evaluation evidence could not be loaded", error);
+      state.insuranceEvaluation = null;
+      renderInsuranceDemoEvaluation();
       renderEvaluationEmpty();
     }
   } finally {
@@ -1648,6 +1659,61 @@ async function loadEvaluation() {
       setButtonLoading(selectors.refreshEvaluation, false);
     }
   }
+}
+
+function formatRate(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${(number * 100).toFixed(1)}%` : "—";
+}
+
+function renderInsuranceDemoEvaluation() {
+  selectors.demoStrategyGrid.replaceChildren();
+  const evaluation = state.insuranceEvaluation;
+  if (!evaluation) {
+    selectors.demoEvaluationSample.textContent = "Demo evaluation unavailable";
+    selectors.demoEvaluationDisclosure.textContent =
+      "Run the reproducible insurance POC evaluation command to generate this comparison.";
+    return;
+  }
+  selectors.demoEvaluationSample.textContent =
+    `${evaluation.sample_size} synthetic Founder Tasks · ${evaluation.label}`;
+  [
+    ["Single model / no router", evaluation.baseline, "baseline"],
+    ["CoFounder OS", evaluation.cofounder_os, "cofounder"],
+  ].forEach(([title, metrics, className]) => {
+    const card = element("article", `demo-strategy-card ${className}`);
+    const rows = element("div", "demo-metric-rows");
+    [
+      ["Task completion", formatRate(metrics.task_completion_rate)],
+      ["Routing accuracy", formatRate(metrics.routing_accuracy)],
+      ["Local Qwen share", formatRate(metrics.local_model_share)],
+      ["Tool success", formatRate(metrics.tool_success_rate)],
+      ["Verifier corrections", String(metrics.verifier_correction_count)],
+      ["Human interventions", String(metrics.human_intervention_count)],
+      ["Route latency estimate", `${metrics.average_latency_ms.toFixed(0)} ms`],
+      ["Estimated cloud cost", `$${metrics.estimated_cloud_api_cost_usd.toFixed(2)}`],
+    ].forEach(([label, value]) => {
+      const row = element("div", "demo-metric-row");
+      append(row, element("span", null, label), element("strong", null, value));
+      rows.append(row);
+    });
+    append(
+      card,
+      element("span", "demo-strategy-label", className === "baseline" ? "BASELINE" : "ROUTED"),
+      element("h3", null, title),
+      rows,
+    );
+    selectors.demoStrategyGrid.append(card);
+  });
+  selectors.demoEvaluationDisclosure.replaceChildren(
+    element("strong", null, "Demo evaluation — not statistical model quality"),
+    element("p", null, evaluation.disclosure),
+    element(
+      "p",
+      null,
+      "Latency and cost are persisted route estimates; the local harness runtime is measured separately. No billing or live-model inference is claimed.",
+    ),
+  );
 }
 
 function renderEvaluationEmpty() {

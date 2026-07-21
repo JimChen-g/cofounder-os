@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.insurance_poc import (
     EvidenceExtractionError,
+    DemoEvaluationResponse,
     EvidencePreviewRequest,
     EvidencePreviewResponse,
     ExplainableInsuranceRouter,
@@ -29,6 +31,7 @@ from app.services.product_api import ProductAPIService, build_product_api_servic
 
 router = APIRouter(prefix="/api/insurance-poc", tags=["insurance-poc"])
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "examples" / "insurance-poc"
+EVALUATION_RESULTS = FIXTURE_DIR / "demo-evaluation-results.json"
 
 
 def _service(request: Request) -> InsurancePOCEvidenceService:
@@ -139,3 +142,11 @@ async def create_insurance_poc_run(
         )
     except EvidenceExtractionError as exc:
         return _error(request, exc)
+
+
+@router.get("/evaluation", response_model=DemoEvaluationResponse)
+async def get_insurance_poc_demo_evaluation() -> DemoEvaluationResponse:
+    """Return the committed, reproducible small-sample comparison."""
+
+    value = json.loads(EVALUATION_RESULTS.read_text(encoding="utf-8"))
+    return DemoEvaluationResponse.model_validate(value)
