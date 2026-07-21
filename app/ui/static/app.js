@@ -113,6 +113,11 @@ const selectors = {
   evidenceWarning: document.querySelector("#evidence-warning"),
   formHint: document.querySelector("#form-hint"),
   launchButton: document.querySelector("#launch-mission"),
+  liveExecutionBoard: document.querySelector("#live-execution-board"),
+  liveExecutionDisclosure: document.querySelector("#live-execution-disclosure"),
+  liveExecutionGrid: document.querySelector("#live-execution-grid"),
+  liveExecutionSummary: document.querySelector("#live-execution-summary"),
+  liveExecutionVerdict: document.querySelector("#live-execution-verdict"),
   loadPocFixture: document.querySelector("#load-poc-fixture"),
   missionForm: document.querySelector("#mission-form"),
   newMission: document.querySelector("#new-mission"),
@@ -280,6 +285,7 @@ async function handleEvidenceFiles(event) {
     state.routingPlan = null;
     selectors.evidenceBoard.classList.add("is-hidden");
     selectors.routingBoard.classList.add("is-hidden");
+    selectors.liveExecutionBoard.classList.add("is-hidden");
     renderAttachmentList();
   } catch (error) {
     state.pendingAttachments = [];
@@ -288,14 +294,160 @@ async function handleEvidenceFiles(event) {
   }
 }
 
+function formatExecutionLatency(value) {
+  const milliseconds = Number(value);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) {
+    return "—";
+  }
+  return milliseconds >= 1000
+    ? `${(milliseconds / 1000).toFixed(1)} s`
+    : `${milliseconds.toFixed(1)} ms`;
+}
+
+function liveExecutionState(decision) {
+  const execution = decision.execution_metadata || {};
+  const executed = decision.execution_status === "executed";
+  const live = execution.execution_backend === "gateway_llm_agent";
+  const failedLiveRoute = Boolean(execution.fallback_reason);
+  const livePlanned = ["qwen-local-dgx", "step-cloud"].includes(
+    decision.provider,
+  );
+  if (executed && live) {
+    return { className: "is-live", label: "LIVE LLM" };
+  }
+  if (executed && (failedLiveRoute || !live)) {
+    return { className: "is-fallback", label: "LOCAL FALLBACK" };
+  }
+  if (livePlanned) {
+    return { className: "is-planned", label: "LIVE LLM PLANNED" };
+  }
+  return { className: "is-fallback", label: "LOCAL FALLBACK PLANNED" };
+}
+
+function renderLiveExecutionBoard() {
+  selectors.liveExecutionGrid.replaceChildren();
+  const plan = state.routingPlan;
+  if (!plan) {
+    selectors.liveExecutionBoard.classList.add("is-hidden");
+    return;
+  }
+  const focusKeys = ["engineering-plan", "risk-review"];
+  const decisions = focusKeys
+    .map((key) => plan.decisions.find((decision) => decision.task_key === key))
+    .filter(Boolean);
+  if (!decisions.length) {
+    selectors.liveExecutionBoard.classList.add("is-hidden");
+    return;
+  }
+
+  selectors.liveExecutionBoard.classList.remove("is-hidden");
+  const states = decisions.map((decision) => liveExecutionState(decision));
+  const liveCount = states.filter((item) => item.label === "LIVE LLM").length;
+  const fallbackCount = states.filter(
+    (item) => item.label === "LOCAL FALLBACK",
+  ).length;
+  const plannedCount = states.filter((item) => item.label.includes("PLANNED")).length;
+  const health = Object.entries(plan.measured_provider_health || {})
+    .map(([model, status]) => `${labelize(model.replace("cofounder-", ""))} ${status}`)
+    .join(" · ");
+
+  if (liveCount === decisions.length) {
+    selectors.liveExecutionVerdict.className = "live-execution-verdict is-live";
+    selectors.liveExecutionVerdict.textContent = `${liveCount} / ${decisions.length} LIVE AGENTS VERIFIED`;
+  } else if (liveCount || fallbackCount) {
+    selectors.liveExecutionVerdict.className = "live-execution-verdict is-degraded";
+    selectors.liveExecutionVerdict.textContent = `DEGRADED · ${liveCount} LIVE · ${fallbackCount} FALLBACK`;
+  } else {
+    selectors.liveExecutionVerdict.className = "live-execution-verdict is-planned";
+    selectors.liveExecutionVerdict.textContent = `${plannedCount} LIVE ROUTES PLANNED`;
+  }
+  selectors.liveExecutionSummary.textContent =
+    `${liveCount} verified live · ${fallbackCount} executed fallback · ${plannedCount} awaiting execution${health ? ` · ${health}` : ""}`;
+  selectors.liveExecutionDisclosure.textContent =
+    "Only persisted Gateway metadata can mark an Agent LIVE. Planned routes, simulations, and deterministic controls do not count as model calls.";
+
+  decisions.forEach((decision) => {
+    const execution = decision.execution_metadata || {};
+    const executionState = liveExecutionState(decision);
+    const card = element("article", `live-execution-card ${executionState.className}`);
+    const heading = element("div", "live-execution-card-heading");
+    const copy = element("div");
+    append(
+      copy,
+      element("span", "live-agent-role", decision.task_key),
+      element("h3", null, decision.task_title),
+    );
+    append(
+      heading,
+      copy,
+      element("span", `live-execution-status ${executionState.className}`, executionState.label),
+    );
+
+    const route = element("div", "live-route-line");
+    append(
+      route,
+      element("span", null, "ROUTE"),
+      element("strong", null, decision.selected_model),
+      element(
+        "small",
+        null,
+        execution.selected_provider
+          ? `${execution.selected_provider} → ${execution.selected_upstream_model || "verified upstream"}`
+          : `${labelize(decision.provider)} · awaiting verified provider response`,
+      ),
+    );
+
+    const proof = element("div", "live-proof-grid");
+    const executedWithoutLiveCall =
+      decision.execution_status === "executed" &&
+      execution.execution_backend !== "gateway_llm_agent";
+    let fallbackValue = "Pending";
+    if (execution.fallback_reason) {
+      fallbackValue = execution.fallback_reason;
+    } else if (execution.fallback_used) {
+      fallbackValue = "Yes · Gateway provider fallback";
+    } else if (executedWithoutLiveCall) {
+      fallbackValue = "Yes · local deterministic Agent";
+    } else if (decision.execution_status === "executed") {
+      fallbackValue = "No";
+    } else if (decision.fallback_model) {
+      fallbackValue = `Standby · ${decision.fallback_model}`;
+    }
+    let repairValue = "Pending";
+    if (executedWithoutLiveCall) {
+      repairValue = "N/A · no live call";
+    } else if (decision.execution_status === "executed") {
+      repairValue = execution.repair_performed
+        ? `Yes · ${execution.call_count || 2} calls`
+        : `No · ${execution.call_count || 1} call`;
+    }
+    [
+      ["REQUEST ID", execution.request_id || "Awaiting verified call"],
+      ["TOKENS", execution.total_tokens ?? "—"],
+      ["LATENCY", formatExecutionLatency(execution.latency_ms)],
+      ["REPAIR", repairValue],
+      ["FALLBACK", fallbackValue],
+    ].forEach(([label, value]) => {
+      const metric = element("div", "live-proof-metric");
+      append(metric, element("span", null, label), element("strong", null, value));
+      proof.append(metric);
+    });
+
+    append(card, heading, route, proof);
+    selectors.liveExecutionGrid.append(card);
+  });
+}
+
 function renderRoutingBoard() {
   selectors.routingGrid.replaceChildren();
   selectors.routingDisclosure.replaceChildren();
   const plan = state.routingPlan;
   if (!plan) {
     selectors.routingBoard.classList.add("is-hidden");
+    renderLiveExecutionBoard();
     return;
   }
+  renderLiveExecutionBoard();
   selectors.routingBoard.classList.remove("is-hidden");
   const fallbackCount = plan.decisions.filter(
     (decision) => decision.fallback_used,

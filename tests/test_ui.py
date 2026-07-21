@@ -29,6 +29,9 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
         assert 'id="load-poc-fixture"' in response.text
         assert 'id="routing-board"' in response.text
         assert 'id="simulate-route-fallback"' in response.text
+        assert 'id="live-execution-board"' in response.text
+        assert 'id="live-execution-grid"' in response.text
+        assert 'id="live-execution-verdict"' in response.text
         assert 'id="conflict-section"' in response.text
         assert 'id="conflict-grid"' in response.text
         assert 'id="demo-strategy-grid"' in response.text
@@ -100,8 +103,8 @@ def test_ui_files_do_not_embed_external_assets_or_inline_code() -> None:
     assert "http://" not in html
     assert "<style" not in html
     assert "<script>" not in html
-    assert '<script src="/ui/assets/app.js?v=d15" defer></script>' in html
-    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d15">' in html
+    assert '<script src="/ui/assets/app.js?v=d15-live-proof" defer></script>' in html
+    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d15-live-proof">' in html
 
 
 def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> None:
@@ -133,6 +136,14 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
     assert "function tasksInStageOrder()" in script
     assert "function renderInsuranceDemoEvaluation()" in script
     assert "not statistical model quality" in script
+    assert "function renderLiveExecutionBoard()" in script
+    assert "Only persisted Gateway metadata can mark an Agent LIVE" in script
+    assert 'element("span", null, "REQUEST ID")' not in script
+    assert '["REQUEST ID", execution.request_id' in script
+    assert '["TOKENS", execution.total_tokens' in script
+    assert '["LATENCY", formatExecutionLatency' in script
+    assert '["REPAIR", repairValue]' in script
+    assert '["FALLBACK", fallbackValue]' in script
 
 
 def test_ui_static_root_contains_only_reviewable_source_assets() -> None:

@@ -8,8 +8,8 @@
       content="Founder Mission Control for CoFounder OS workflows, approvals, artifacts, and audit evidence."
     >
     <title>Founder Mission Control · CoFounder OS</title>
-    <link rel="stylesheet" href="/ui/assets/app.css?v=d15">
-    <script src="/ui/assets/app.js?v=d15" defer></script>
+    <link rel="stylesheet" href="/ui/assets/app.css?v=d15-live-proof">
+    <script src="/ui/assets/app.js?v=d15-live-proof" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -90,6 +90,29 @@
         </div>
 
         <section class="view is-active" id="mission-view" data-view="mission">
+          <section
+            class="live-execution-board is-hidden"
+            id="live-execution-board"
+            aria-labelledby="live-execution-title"
+          >
+            <div class="live-execution-heading">
+              <div>
+                <p class="eyebrow">D15 · VERIFIED MODEL EXECUTION</p>
+                <h2 id="live-execution-title">Live Agent Execution</h2>
+                <p id="live-execution-summary">
+                  Gateway evidence for the two LLM-backed specialist Agents.
+                </p>
+              </div>
+              <div class="live-execution-verdict" id="live-execution-verdict">
+                Awaiting execution
+              </div>
+            </div>
+            <div class="live-execution-grid" id="live-execution-grid"></div>
+            <p class="live-execution-disclosure" id="live-execution-disclosure">
+              Only persisted Gateway metadata can mark an Agent LIVE.
+            </p>
+          </section>
+
           <section class="composer" id="mission-composer" aria-labelledby="composer-title">
             <div class="composer-copy">
               <p class="eyebrow accent">NEW FOUNDER MISSION</p>
