@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import os
+import logging
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Header, Request
@@ -25,14 +26,15 @@ from app.router.selector import route_chat
 
 router = APIRouter()
 
-AUDIT_TOKEN = os.environ.get("GATEWAY_AUDIT_TOKEN", "")
+logger = logging.getLogger("gateway")
 
 
 def _check_auth(x_audit_token: Optional[str]) -> bool:
-    """Verify the audit endpoint bearer token."""
-    if not AUDIT_TOKEN:
-        return True  # no token configured, allow all
-    return x_audit_token == AUDIT_TOKEN
+    """Verify the audit endpoint token; deny access when none is configured."""
+    expected = get_settings().gateway_audit_token
+    if not expected or not x_audit_token:
+        return False
+    return secrets.compare_digest(x_audit_token.encode(), expected.encode())
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
@@ -117,12 +119,13 @@ async def chat_completions(
                 request_id=getattr(request.state, "request_id", None),
             ).model_dump(),
         )
-    except Exception as exc:
+    except Exception:
+        logger.exception("Unhandled chat completion error")
         return JSONResponse(
             status_code=500,
             content=ErrorResponse(
                 error="provider_error",
-                detail=str(exc),
+                detail="The gateway could not complete the request.",
                 request_id=getattr(request.state, "request_id", None),
             ).model_dump(),
         )

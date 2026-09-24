@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cofounder-os-gateway"
 version = "0.1.0"
-description = "Co-founder OS Gateway v0.1 — unified API layer for co-founder AI tools"
+description = "Co-founder OS — governed multi-agent mission control for solo founders"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [{ name = "Co-founder OS Team" }]
+authors = [{ name = "JimChen-g" }]
 
 dependencies = [
     "fastapi>=0.111.0",
@@ -28,7 +28,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",
     "httpx>=0.27.0",
-    "ruff>=0.5.0",
+    "ruff>=0.5.0,<0.6",
     "mypy>=1.10.0",
     "Pillow>=11.0.0",
     "reportlab>=4.2.0",

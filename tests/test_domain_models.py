@@ -26,7 +26,7 @@ from app.domain import (
 def json_payload(model):
     """Return a JSON-compatible payload on Pydantic v1 and v2."""
 
-    return json.loads(model.json())
+    return json.loads(model.model_dump_json())
 
 
 def test_run_defaults_are_valid_and_isolated():

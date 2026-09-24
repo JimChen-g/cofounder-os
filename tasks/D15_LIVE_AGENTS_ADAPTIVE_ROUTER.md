@@ -11,7 +11,7 @@ Deadline: 2026-07-22 18:00 Asia/Shanghai
 - Local verification: 455 tests pass; Ruff, Mypy (66 source files), frontend
   JavaScript syntax, and `git diff --check` pass.
 - DGX isolated verification: 17 focused D15 tests pass from a detached clone in
-  `/tmp`; the existing `/home/cofounder/cofounder-os` and port 9000 were not
+  `/tmp`; the existing deployment checkout and port 9000 were not
   modified.
 - Browser acceptance at `127.0.0.1:9100/ui`: the stable fixture produces five
   sources, ten evidence facts, sixteen artifacts, and one pending approval.

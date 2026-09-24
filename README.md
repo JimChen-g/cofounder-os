@@ -209,7 +209,7 @@ AI-generated proposals were treated as drafts. Acceptance required automated che
 ### Create the environment
 
 ```bash
-git clone https://github.com/JimchengChina/cofounder-os.git
+git clone https://github.com/JimChen-g/cofounder-os.git
 cd cofounder-os
 python3 -m venv .venv
 source .venv/bin/activate
@@ -238,7 +238,7 @@ Important variables:
 | `GATEWAY_HOST` / `GATEWAY_PORT` | Runtime bind address and port | `127.0.0.1` / `9000` |
 | `PRODUCT_DATA_DIR` | Run state and Artifact Store root | `data` |
 | `AUDIT_DIR` | Gateway request-audit directory | `data/audit` |
-| `GATEWAY_AUDIT_TOKEN` | Optional token for `GET /audit/recent` | unset |
+| `GATEWAY_AUDIT_TOKEN` | Token required by `GET /audit/recent`; the endpoint is disabled when unset | unset |
 
 Never commit a real `.env` file or provider credential.
 
@@ -371,7 +371,7 @@ tests/                   # Behavioral and regression test suite
 
 ## License and disclaimer
 
-The package metadata in `pyproject.toml` declares the project as **MIT**. A standalone `LICENSE` file is not currently included in the repository; add one before treating the repository as a complete license distribution.
+Co-founder OS is released under the [MIT License](LICENSE).
 
 Co-founder OS is experimental software. The insurance scenario, documents, images, companies, vehicles, and claim facts are synthetic. Outputs are demonstrations of workflow orchestration and are not legal, financial, insurance, compliance, or professional advice. Do not use the prototype to make real liability, coverage, payment, production, or other high-impact decisions without qualified human review and appropriate security controls.
 
