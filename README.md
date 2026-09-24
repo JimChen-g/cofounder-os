@@ -2,7 +2,7 @@
 
 > An AI operating system for solo founders that turns goals and evidence into auditable workflows, coordinating product, engineering, finance, and risk agents with human approval.
 
-Co-founder OS is an OpenAI Build Week project for turning a founder objective into a bounded, inspectable execution process. It combines structured planning, specialist agents, deterministic governance, durable artifacts, human approval, and replayable state in one local-first web application.
+Co-founder OS turns a founder objective into a bounded, inspectable execution process. It combines structured planning, specialist agents, deterministic governance, durable artifacts, human approval, and replayable state in one local-first web application.
 
 The project is deliberately more than a multi-agent chat. Tasks have explicit owners and dependencies; execution is claimed atomically; retries are bounded; artifacts are integrity-checked; high-risk actions stop at a policy gate; and every material transition is recorded for later inspection.
 
@@ -135,13 +135,8 @@ The insurance POC follows the same authorities while adding multimodal fixture e
 | Local inference target | Qwen through vLLM on NVIDIA DGX Spark |
 | Optional cloud provider | StepFun |
 | Quality gates | pytest, pytest-asyncio, Ruff, Mypy, Node syntax check, Python build |
-| Build Week development | OpenAI Codex and GPT-5.6 |
 
-## What was built during OpenAI Build Week
-
-The product concept and earlier hackathon planning predated this implementation sprint. The repository itself contains no pre-Build-Week implementation history: its first commit is dated July 15, after the July 13 Build Week opening. The code claims below are therefore tied to the repository's dated commits rather than to prior concept work.
-
-During Build Week, the repository progressed through these delivered stages:
+## Development milestones
 
 | Stage | Delivered work |
 | --- | --- |
@@ -153,49 +148,6 @@ During Build Week, the repository progressed through these delivered stages:
 | D15 | Gateway-backed Engineering Planning and Risk Review, bounded structured-output repair, adaptive provider scoring, verified call metadata, and truthful local fallback |
 
 The detailed acceptance history is recorded in [PROJECT_STATE.md](docs/project-control/PROJECT_STATE.md), the stage contracts under [`tasks/`](tasks/), and the Git commit history.
-
-## How Codex was used
-
-[OpenAI Codex](https://developers.openai.com/codex/) was the engineering execution partner for the Build Week implementation. Its use was concrete and repository-centered:
-
-- **Repository understanding:** traced request, state, artifact, approval, and recovery paths before changing a stage.
-- **Milestone decomposition:** converted architecture goals into D00-D15 tasks with explicit scope, non-goals, acceptance criteria, and exit checks.
-- **Implementation:** drafted and revised Python services, strict Pydantic contracts, FastAPI routes, frontend behavior, fixture tooling, and documentation.
-- **Test construction:** added behavioral tests for lifecycle transitions, wrong or competing claim tokens, artifact corruption, idempotent retries, partial writes, restart recovery, policy decisions, routing evidence, and fallback truthfulness.
-- **Debugging:** inspected failing tests and runtime evidence, then made narrow corrective changes such as output-budget fixes, long-running job polling, and live-call accounting hardening.
-- **Review and release discipline:** inspected diffs, ran the full verification matrix, checked for secret and path leakage, and kept feature, corrective, and acceptance commits separate.
-
-The Git history intentionally preserves corrective work instead of presenting a one-shot generation story. Examples include rejected or superseded execution foundations, artifact-integrity fixes, lifecycle recovery corrections, independent-review follow-ups, and D14/D15 truthfulness hardening.
-
-## How GPT-5.6 was used
-
-GPT-5.6 was used during development for higher-level reasoning and review, not as a runtime provider inside Co-founder OS. The runtime code in this repository routes to Qwen and StepFun; it does **not** call GPT-5.6.
-
-GPT-5.6 supported the human developer in areas where cross-cutting judgment mattered most:
-
-- defining authority boundaries among the Executive Orchestrator, specialist Agents, Workflow Controller, Policy Gate, and founder;
-- stress-testing task-claim, idempotency, retry, approval, terminal-failure, and replay semantics;
-- identifying hidden loops, ambiguous ownership, false-success paths, and ways model output could bypass deterministic control;
-- reviewing privacy, capability, health, cost, and fallback factors in the explainable routing policy;
-- designing representative founder-task and insurance-POC evaluation scenarios;
-- reconciling Product, Finance, Engineering, and Risk outputs into a coherent product experience;
-- improving Mission Control information hierarchy and the clarity of live-model, fallback, and deterministic-control labels.
-
-The practical lesson was that stronger reasoning was most valuable at system boundaries: deciding what an Agent may do, what evidence must be persisted, which failures are recoverable, and when the workflow must stop for a human.
-
-## Human decisions and review
-
-Codex and GPT-5.6 accelerated the work, but they were not given final authority over the product or repository. The founder retained responsibility for:
-
-- choosing the product problem, synthetic insurance scenario, and success criteria;
-- freezing the Mac/DGX/Gateway deployment boundary and supported providers;
-- deciding which roles may use a model and which controls must remain deterministic;
-- setting the privacy, budget, external-write, and human-approval rules;
-- accepting, rejecting, or correcting implementation stages;
-- reviewing generated code, tests, documentation, diffs, and release evidence;
-- making the final publication and submission decisions.
-
-AI-generated proposals were treated as drafts. Acceptance required automated checks plus human review of behavior, claims, security boundaries, and demo truthfulness. The product mirrors this development model: Agents can advance bounded work, but policy and high-impact decisions remain under explicit human control.
 
 ## Installation
 
@@ -375,6 +327,3 @@ Co-founder OS is released under the [MIT License](LICENSE).
 
 Co-founder OS is experimental software. The insurance scenario, documents, images, companies, vehicles, and claim facts are synthetic. Outputs are demonstrations of workflow orchestration and are not legal, financial, insurance, compliance, or professional advice. Do not use the prototype to make real liability, coverage, payment, production, or other high-impact decisions without qualified human review and appropriate security controls.
 
----
-
-Built by a solo founder during OpenAI Build Week with Codex and GPT-5.6 as development partners—and with final product, architecture, safety, and release decisions retained by the human builder.
