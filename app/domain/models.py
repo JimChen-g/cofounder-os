@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def utc_now() -> datetime:
@@ -94,10 +94,11 @@ class DomainRecord(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        extra = "forbid"
-        validate_assignment = True
-        use_enum_values = True
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        use_enum_values=True,
+    )
 
 
 class Run(DomainRecord):

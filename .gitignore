@@ -40,4 +40,5 @@ id_ed25519
 data/runs/
 data/.locks/
 
-.venv-vllm
+
+dist/

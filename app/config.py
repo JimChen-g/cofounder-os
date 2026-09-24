@@ -53,6 +53,9 @@ class Settings(BaseSettings):
 
     # ── Audit ──────────────────────────────────────────────────────────────
     audit_dir: str = Field(default="data/audit", validation_alias="AUDIT_DIR")
+    gateway_audit_token: Optional[str] = Field(
+        default=None, validation_alias="GATEWAY_AUDIT_TOKEN"
+    )
 
     # ── Product API ────────────────────────────────────────────────────────
     product_data_dir: str = Field(

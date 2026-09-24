@@ -608,6 +608,15 @@ class TestChatCompletionsEndpoint:
         resp = client.get("/audit/recent")
         assert resp.status_code == 401
 
+    def test_audit_recent_wrong_token(self, client):
+        resp = client.get("/audit/recent", headers={"X-Audit-Token": "wrong"})
+        assert resp.status_code == 401
+
+    def test_audit_recent_disabled_without_configured_token(self, client, monkeypatch):
+        monkeypatch.setattr(get_settings(), "gateway_audit_token", None)
+        resp = client.get("/audit/recent", headers={"X-Audit-Token": "anything"})
+        assert resp.status_code == 401
+
     # ── Audit canonical fields integration tests ────────────────────────────
 
     def test_audit_forced_qwen_fields(self, client):
