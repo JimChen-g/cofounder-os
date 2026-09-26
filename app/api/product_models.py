@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain import Approval, Artifact, AuditEvent, RunStatus
 from app.services import WorkflowRunResult
+from app.request_constraints import RequestPolicy
 
 
 class ProductRequestModel(BaseModel):
@@ -24,6 +25,7 @@ class ProductRequestModel(BaseModel):
 class CreateRunRequest(ProductRequestModel):
     """Founder objective submitted for bounded planning and execution."""
 
+    constraints: RequestPolicy = Field(default_factory=RequestPolicy)
     objective: str = Field(min_length=1, max_length=2000)
     context: str | None = Field(default=None, max_length=20_000)
     owner: str | None = Field(default=None, max_length=200)

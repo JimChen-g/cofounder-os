@@ -19,12 +19,7 @@ if TYPE_CHECKING:
     pass
 
 
-class ProviderError(Exception):
-    """Raised when a provider call fails."""
-
-    def __init__(self, message: str, provider: Provider | None = None) -> None:
-        super().__init__(message)
-        self.provider = provider
+from app.provider_errors import ProviderError as ProviderError
 
 
 class BaseProvider(ABC):

@@ -67,7 +67,7 @@ def test_committed_demo_evaluation_result_matches_contract() -> None:
 
 
 def test_demo_evaluation_api_exposes_small_sample_disclosure() -> None:
-    with TestClient(app) as client:
+    with TestClient(app, headers={"Authorization": "Bearer test-client-key"}) as client:
         response = client.get("/api/insurance-poc/evaluation")
 
     assert response.status_code == 200

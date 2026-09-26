@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.models import ChatMessage, Provider
+from app.request_constraints import RequestPolicy
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
 
@@ -99,6 +100,8 @@ class TestProviderRegistry:
             messages=[ChatMessage(role="user", content="Hi")],
             temperature=0.0,
             max_tokens=10,
+            policy=RequestPolicy(privacy="public", allowed_providers={"local", "step"},
+                                 permissions={"model:invoke", "cloud:invoke"}, cloud_call_budget=1),
         )
         assert used == Provider.STEP
         assert bad_qwen.call_count == 1

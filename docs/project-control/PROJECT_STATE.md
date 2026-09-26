@@ -134,3 +134,11 @@ Every future accepted stage must update this document in the same commit with:
 - Updated Current governance stage
 - Updated Next product stage
 - Updated recovery package path
+
+## September hackathon T07–T10 candidate
+
+The founder authorized T07–T10 against `40509e8` on 2026-09-26. Implementation
+and isolated Spark validation are documented in `docs/t07-t10.md`; current work
+uses `codex/t07-t10`. This supplements the July history without declaring
+T11–T18, independent review, or a public release accepted. The next implementation
+scope is T11–T14 and T16 only after the T07–T10 evidence handoff is checked.

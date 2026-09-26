@@ -357,6 +357,7 @@ def test_openapi_exposes_exact_d11_minimum_routes(tmp_path: Path) -> None:
     try:
         paths = set(client.get("/openapi.json").json()["paths"])
         assert paths == {
+        "/api/bridge/receipt",
             "/api/health",
             "/api/runs",
             "/api/runs/{run_id}",

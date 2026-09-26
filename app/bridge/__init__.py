@@ -1,0 +1,1 @@
+"""Single-instance Feishu transport."""

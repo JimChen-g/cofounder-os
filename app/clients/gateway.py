@@ -9,7 +9,9 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import ChatMessage
+from app.models import ChatMessage, Provider
+from app.request_constraints import RequestPolicy
+from app.policy.request_policy import active_budget
 
 
 class GatewayClientError(RuntimeError):
@@ -50,6 +52,7 @@ class GatewayClient:
         api_key: str | None = None,
         timeout_seconds: float = 120.0,
         transport: httpx.AsyncBaseTransport | None = None,
+        policy: RequestPolicy | None = None,
     ) -> None:
         normalized = base_url.strip().rstrip("/")
         if not normalized:
@@ -65,6 +68,7 @@ class GatewayClient:
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
         self.transport = transport
+        self.policy = policy or RequestPolicy()
 
     @classmethod
     def from_environment(cls) -> "GatewayClient":
@@ -90,6 +94,7 @@ class GatewayClient:
         model: str = "cofounder-auto",
         temperature: float = 0.1,
         max_tokens: int = 1800,
+        policy: RequestPolicy | None = None,
     ) -> GatewayCompletion:
         """Send one non-streaming Chat Completions request."""
 
@@ -100,6 +105,27 @@ class GatewayClient:
         if max_tokens <= 0:
             raise GatewayClientError("max_tokens must be positive")
 
+        effective = self.policy.intersect(policy) if policy is not None else self.policy
+        budget = active_budget.get()
+        if budget is not None:
+            effective = effective.intersect(budget.policy)
+        elif policy is None:
+            effective = effective.intersect(RequestPolicy())
+        if budget is not None:
+            # Reserve the whole possible Gateway attempt envelope before transport.
+            # This conservatively counts failed/ambiguous HTTP calls as spent.
+            remaining_attempts = effective.max_attempts - budget.attempts
+            if remaining_attempts <= 0:
+                raise GatewayClientError("request_budget_exhausted")
+            names = [p for p in (Provider.QWEN, Provider.STEP) if effective.allows(p)]
+            slots = min(remaining_attempts, len(names))
+            if slots == 0:
+                raise GatewayClientError("no_legal_provider")
+            tokens = sum(len((m.content or "").encode()) + 16 for m in messages) + max_tokens
+            remaining = effective.timeout_seconds
+            for name in names[:slots]:
+                remaining = min(remaining, budget.reserve(name, tokens, effective))
+            effective = effective.model_copy(update={"max_attempts": slots, "timeout_seconds": remaining})
         payload = {
             "model": model,
             "messages": [
@@ -109,6 +135,9 @@ class GatewayClient:
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
+            "privacy": effective.privacy,
+            "allowed_providers": sorted(effective.allowed_providers),
+            "policy": effective.model_dump(mode="json"),
         }
 
         headers = {"Content-Type": "application/json"}
@@ -118,7 +147,7 @@ class GatewayClient:
         try:
             async with httpx.AsyncClient(
                 base_url=self.base_url,
-                timeout=self.timeout_seconds,
+                timeout=min(self.timeout_seconds, effective.timeout_seconds),
                 transport=self.transport,
             ) as client:
                 response = await client.post(

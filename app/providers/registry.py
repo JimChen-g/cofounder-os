@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Sequence, TypedDict
+
+from app.policy.request_policy import InvocationBudget, PolicyDenied, active_budget
+from app.request_constraints import RequestPolicy
 
 from app.models import ChatMessage, ChatResponse, Provider
 from app.providers.base import BaseProvider, ProviderError
@@ -46,43 +50,33 @@ class ProviderRegistry:
         messages: list[ChatMessage],
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        policy: RequestPolicy | None = None,
     ) -> tuple[ChatResponse, Provider]:
-        """Try preferred provider first, fall back to others on failure."""
+        """Filter before every attempt; failures retain their budget reservation."""
+        policy = policy or RequestPolicy()
+        budget = active_budget.get() or InvocationBudget(policy)
+        policy = budget.policy.intersect(policy)
+        order = [preferred] + [p.name for p in self.all() if p.name != preferred]
+        candidates = [p for p in order if self.get(p) is not None and policy.allows(p)]
+        if not candidates:
+            raise PolicyDenied("no_legal_provider")
         tried: list[Provider] = []
-
-        # Try preferred first
-        provider = self.get(preferred)
-        if provider is not None:
+        # UTF-8 byte count + framing is a conservative text token bound.
+        tokens = sum(len((m.content or "").encode()) + 16 for m in messages) + max_tokens
+        for name in candidates:
+            provider = self.get(name)
+            assert provider is not None
+            remaining = budget.reserve(name, tokens, policy)
+            tried.append(name)
             try:
-                response = await provider.complete(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-                return response, provider.name
-            except ProviderError:
-                tried.append(preferred)
-
-        # Fall back to remaining providers
-        for p in self.all():
-            if p.name in tried:
+                response = await asyncio.wait_for(provider.complete(
+                    model=model if name == preferred else "",
+                    messages=messages, temperature=temperature, max_tokens=max_tokens,
+                ), timeout=remaining)
+                return response, name
+            except (ProviderError, asyncio.TimeoutError):
                 continue
-            try:
-                response = await p.complete(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-                return response, p.name
-            except ProviderError:
-                tried.append(p.name)
-                continue
-
-        raise ProviderError(
-            f"All providers failed after trying: {[t.value for t in tried]}"
-        )
+        raise ProviderError(f"All providers failed after trying: {[t.value for t in tried]}")
 
     async def health_status(self) -> list[ProviderHealthResult]:
         """Return health info for all registered providers."""

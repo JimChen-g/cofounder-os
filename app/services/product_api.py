@@ -413,6 +413,13 @@ def build_product_api_service(settings: Settings) -> ProductAPIService:
             api_key=settings.gateway_api_key,
             timeout_seconds=settings.request_timeout_seconds,
         )
+    from app.request_constraints import RequestPolicy
+    # Capability ceiling of this service. Every API operation supplies a narrower
+    # immutable scope; absent explicit caller grants, it remains local-only.
+    gateway.policy = RequestPolicy(privacy="public", allowed_providers=frozenset({"local", "step"}),
+                                  permissions=frozenset({"model:invoke", "cloud:invoke"}),
+                                  max_attempts=20, max_total_tokens=1_000_000,
+                                  timeout_seconds=3600, cloud_call_budget=20)
     product_agent = ProductAgentService(
         gateway,
         artifact_store,

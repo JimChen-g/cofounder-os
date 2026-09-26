@@ -42,3 +42,6 @@ data/.locks/
 
 
 dist/
+
+# T07-T10 durable runtime ledgers (never source or release assets)
+/data/*.sqlite3*
