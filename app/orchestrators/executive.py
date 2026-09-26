@@ -291,11 +291,17 @@ class ExecutiveOrchestrator:
         self._validate_agents(result.plan)
         ordered = result.plan.topological_tasks()
 
+        from app.policy.request_policy import active_budget
+        budget = active_budget.get()
+        budget_metadata = ({"request_budget_id": budget.key,
+                            "request_constraints": budget.policy.model_dump(mode="json")}
+                           if budget is not None else {})
         run, _ = self.service.create_run(
             objective=result.plan.objective,
             actor=actor,
             owner=owner,
             metadata={
+                **budget_metadata,
                 "executive_plan_summary": result.plan.summary,
                 "executive_plan_task_count": len(result.plan.tasks),
                 "executive_plan_approval_required": (

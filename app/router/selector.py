@@ -8,6 +8,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+from app.request_constraints import RequestPolicy
 from app.models import ChatRequest, ChatResponse, CofounderOSMetadata, Provider
 from app.providers.registry import get_registry
 from app.audit.logger import get_audit_logger
@@ -92,6 +93,23 @@ async def route_chat(
     translated to the appropriate upstream provider.  Upstream model names
     are never exposed to clients.
     """
+    policy = RequestPolicy.model_validate({
+        **request.policy,
+        "privacy": request.privacy,
+        "allowed_providers": request.allowed_providers,
+    })
+    if request.policy:
+        nested = RequestPolicy.model_validate({
+            "privacy": request.privacy, "allowed_providers": request.allowed_providers,
+            **request.policy,
+        })
+        policy = policy.intersect(nested)
+    if request.provider is not None:
+        explicit = "local" if request.provider == Provider.QWEN else "step"
+        policy = policy.model_copy(update={"allowed_providers": policy.allowed_providers & {explicit}})
+    if request.model in ("cofounder-qwen", "cofounder-step"):
+        explicit = "local" if request.model == "cofounder-qwen" else "step"
+        policy = policy.model_copy(update={"allowed_providers": policy.allowed_providers & {explicit}})
     registry = get_registry()
     audit = get_audit_logger()
 
@@ -135,6 +153,7 @@ async def route_chat(
             messages=request.messages,
             temperature=request.temperature,
             max_tokens=request.max_tokens or 1024,
+            policy=policy,
         )
         latency_ms = (time.perf_counter() - t0) * 1000
 

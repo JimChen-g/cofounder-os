@@ -228,6 +228,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-step",
+                "privacy": "public", "allowed_providers": ["step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hi"}],
             },
         )
@@ -261,21 +263,14 @@ class TestChatCompletionsEndpoint:
         )
         assert resp.status_code == 422  # Pydantic validation error
 
-    def test_chat_fallback_when_preferred_unavailable(self, client):
-        """When cofounder-qwen is not registered, fallback to cofounder-step."""
+    def test_explicit_local_unavailable_does_not_fallback(self, client):
+        """An explicit local request must never escape to cloud."""
         _setup_client_with(client, [FakeStep()])
-
-        resp = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": "cofounder-qwen",  # prefer qwen — not available
-                "messages": [{"role": "user", "content": "Hello"}],
-            },
-        )
-        assert resp.status_code == 200, f"Got: {resp.text}"
-        data = resp.json()
-        assert data["provider"] == "cofounder-step"
-        assert "Mocked Step" in data["choices"][0]["message"]["content"]
+        resp = client.post("/v1/chat/completions", json={
+            "model": "cofounder-qwen", "messages": [{"role": "user", "content": "Hello"}],
+        })
+        assert resp.status_code == 502
+        assert "no_legal_provider" in resp.text
 
     def test_chat_auto_routes_to_available_provider(self, client):
         """cofounder-auto selects Qwen when only Qwen is registered."""
@@ -285,6 +280,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-auto",
+                "privacy": "public", "allowed_providers": ["local", "step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hello"}],
             },
         )
@@ -300,6 +297,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-auto",
+                "privacy": "public", "allowed_providers": ["local", "step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hello"}],
             },
         )
@@ -359,6 +358,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-step",
+                "privacy": "public", "allowed_providers": ["step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hi"}],
             },
         )
@@ -438,6 +439,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-step",
+                "privacy": "public", "allowed_providers": ["step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hi"}],
             },
         )
@@ -461,6 +464,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-auto",
+                "privacy": "public", "allowed_providers": ["local", "step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hello"}],
             },
         )
@@ -482,6 +487,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-auto",
+                "privacy": "public", "allowed_providers": ["local", "step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hello"}],
             },
         )
@@ -559,6 +566,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-auto",
+                "privacy": "public", "allowed_providers": ["local", "step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hello"}],
             },
         )
@@ -648,6 +657,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-step",
+                "privacy": "public", "allowed_providers": ["step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hi"}],
             },
         )
@@ -668,6 +679,8 @@ class TestChatCompletionsEndpoint:
             "/v1/chat/completions",
             json={
                 "model": "cofounder-auto",
+                "privacy": "public", "allowed_providers": ["local", "step"],
+                "policy": {"permissions": ["model:invoke", "cloud:invoke"], "cloud_call_budget": 2},
                 "messages": [{"role": "user", "content": "Hello"}],
             },
         )

@@ -168,7 +168,7 @@ async def create_run(
         result = await _service(request).create_run(
             objective=body.objective,
             context=body.context,
-            owner=body.owner,
+            owner=getattr(request.state, "principal", body.owner),
             correlation_id=_request_id(request),
             max_cycles=body.max_cycles,
         )
@@ -299,7 +299,7 @@ async def resolve_run_approval(
             run_id,
             approval_id,
             decision=body.decision,
-            decided_by=body.decided_by,
+            decided_by=getattr(request.state, "principal", body.decided_by),
             reason=body.reason,
             approval_capability=request.cookies.get(
                 f"cofounder_approval_{run_id.hex}"
@@ -339,3 +339,33 @@ async def retry_run(
         )
     except Exception as exc:
         return _error_response(request, exc)
+
+
+@router.post('/bridge/receipt')
+async def bridge_receipt(request: Request) -> JSONResponse:
+    """Durably accept a transport receipt; no business lifecycle mutation."""
+    import hashlib
+    import sqlite3
+    from pathlib import Path
+    from app.bridge.inbox import now
+    body = await request.json()
+    message_id = body.get('message_id')
+    digest = body.get('body_sha256')
+    if (not isinstance(message_id, str) or not 1 <= len(message_id) <= 200
+            or not isinstance(digest, str) or len(digest) != 64
+            or any(c not in '0123456789abcdef' for c in digest)):
+        return JSONResponse({'error': 'invalid_receipt'}, status_code=422)
+    settings = get_settings()
+    key = hashlib.sha256(('/'.join([request.headers.get('x-feishu-tenant', ''),
+                                   request.headers.get('x-feishu-app', ''), message_id])).encode()).hexdigest()
+    root = Path(settings.product_data_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(root / 'bridge-receipts.sqlite3', timeout=1) as db:
+        db.execute('PRAGMA synchronous=FULL')
+        db.execute('CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, digest TEXT, received TEXT)')
+        db.execute('INSERT OR IGNORE INTO receipts VALUES(?,?,?)', (key, digest, now()))
+        row = db.execute('SELECT digest,received FROM receipts WHERE id=?', (key,)).fetchone()
+        assert row is not None
+        if row[0] != digest:
+            return JSONResponse({'error': 'idempotency_conflict'}, status_code=409)
+    return JSONResponse({'receipt_id': key, 'service_received_at': row[1], 'task_created': False})

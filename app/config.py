@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     )
 
     # ── Product API ────────────────────────────────────────────────────────
+    product_api_token: str | None = None
+    product_api_bridge_token: str | None = None
+    product_founder_id: str = "founder"
+    feishu_app_id: str | None = None
+    feishu_tenant_key: str | None = None
+    feishu_tenant_file: str | None = None
+    feishu_open_id: str | None = None
+
     product_data_dir: str = Field(
         default="data",
         validation_alias="PRODUCT_DATA_DIR",

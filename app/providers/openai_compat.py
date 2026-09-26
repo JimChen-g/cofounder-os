@@ -55,16 +55,24 @@ class OpenAICompatProvider(BaseProvider):
             "Content-Type": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(self._base_url, json=payload, headers=headers)
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(self._base_url, json=payload, headers=headers)
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"{self.name.value} transport failed", provider=self.name) from exc
 
         if resp.status_code != 200:
             raise ProviderError(
-                f"{self.name.value} returned {resp.status_code}: {resp.text}",
+                f"{self.name.value} returned HTTP {resp.status_code}",
                 provider=self.name,
             )
 
-        data: dict[str, Any] = resp.json()
+        try:
+            data: dict[str, Any] = resp.json()
+            if not isinstance(data, dict):
+                raise ValueError("response_not_object")
+        except ValueError as exc:
+            raise ProviderError("upstream_invalid_json", provider=self.name) from exc
 
         # Validate upstream response structure
         choices = data.get("choices")
@@ -75,6 +83,8 @@ class OpenAICompatProvider(BaseProvider):
             )
 
         choice = choices[0]
+        if not isinstance(choice, dict):
+            raise ProviderError("upstream_invalid_choice", provider=self.name)
         message = choice.get("message")
         if not message or not isinstance(message, dict):
             raise ProviderError(

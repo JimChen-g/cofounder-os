@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.api.auth import authenticate
 from app.api.evaluation import router as evaluation_router
 from app.api.insurance_poc import router as insurance_poc_router
 from app.api.product import router as product_router
@@ -188,6 +189,9 @@ async def global_exception_handler(
             "request_id": getattr(request.state, "request_id", None),
         },
     )
+
+
+app.middleware("http")(authenticate)
 
 
 # Include API routes at root — no /api prefix
