@@ -263,3 +263,17 @@ async def interrupt(request: Request, run_id: UUID, body: InterruptRun) -> Any:
         if task:
             task.cancel()
     return result
+
+
+@router.get('/notifications')
+async def notifications(request: Request) -> Any:
+    from datetime import datetime
+    from app.domain import utc_now
+    product = _service(request)
+    items = []
+    for run in product.orchestration.repository.list_runs():
+        d = run.metadata.get('delivery', {})
+        if (run.owner == request.state.principal and run.status == 'waiting_approval'
+                and d.get('state') == 'pending' and datetime.fromisoformat(d['expires_at']) > utc_now()):
+            items.append({'run_id': str(run.id), 'delivery': d})
+    return {'items': items}

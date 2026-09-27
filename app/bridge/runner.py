@@ -40,6 +40,10 @@ def validate_event(data: Any, config: dict[str, Any]) -> dict[str, str] | None:
 
 
 def business_reply(payload: dict[str, str], config: dict[str, Any], client: httpx.Client, headers: dict[str, str]) -> str:
+    from app.bridge.delivery import command
+    delivery_reply = command(payload, config, client, headers)
+    if delivery_reply is not None:
+        return delivery_reply
     text = payload['text'].strip()
     if text == '创建 材料检查':
         request_id = hashlib.sha256(('/'.join(payload[k] for k in ('tenant', 'app', 'message_id'))).encode()).hexdigest()
@@ -59,7 +63,7 @@ def business_reply(payload: dict[str, str], config: dict[str, Any], client: http
         response.raise_for_status()
         result = response.json()
         return 'Run ID: ' + run_id + '。Controller 状态：' + str(result['snapshot']['run']['status']) + '；执行状态：' + str(result['dispatch_status']) + '。检查完成不代表交付已批准。'
-    return '仅支持：创建 材料检查；查询 <Run UUID>。此入口不执行审批或其他任务。'
+    return '仅支持：创建 材料检查；查询 <Run UUID>。详情/导出 <Run UUID>；批准/驳回/取消 <Run UUID> <Approval UUID>。'
 
 
 def process_one(inbox: Inbox, config: dict[str, Any], client: httpx.Client) -> bool:
@@ -149,11 +153,18 @@ def run(config: dict[str, Any]) -> None:
                last_callback_ms=(time.monotonic()-start)*1000,
                last_message_fingerprint=hashlib.sha256(payload['message_id'].encode()).hexdigest()[:16])
 
+    from app.bridge.delivery import Notifications
+    notifications = Notifications(root / 'notifications.sqlite3')
+
     def worker() -> None:
+        next_notification = 0.0
         with httpx.Client(timeout=20, follow_redirects=False) as client:
             while not stopped.is_set():
                 try:
                     process_one(inbox, config, client)
+                    if time.monotonic() >= next_notification:
+                        next_notification = time.monotonic() + 10
+                        notifications.send_pending(config, client)
                 except Exception as exc:
                     record(worker_error=type(exc).__name__)
                 stopped.wait(0.2)

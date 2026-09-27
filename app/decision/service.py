@@ -5,7 +5,7 @@ import hashlib
 import json
 import time
 import uuid
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -52,6 +52,7 @@ class DecisionResponse(BaseModel):
     request_sha256: str
     output_sha256: str | None = None
     usage: dict[str, int] | None = None
+    shadow: dict[str, Any] | None = None
 
 
 def legal_candidates(request: DecisionRequest) -> list[Action]:
@@ -106,5 +107,14 @@ async def decide(request: DecisionRequest, registry: ProviderRegistry,
             result.refusal_reason = "request_policy_or_budget_denied"
         except ProviderError:
             result.refusal_reason = "local_provider_failed"
+    import os
+    from pathlib import Path
+    model_path = os.environ.get('COFOUNDER_SHADOW_MODEL', str(Path(__file__).with_name('quality-model.json')))
+    if model_path:
+        try:
+            from app.decision.learning import shadow
+            result.shadow = shadow(request.task, json.loads(Path(model_path).read_text()), list(map(str, legal)))
+        except (OSError, ValueError, KeyError, TypeError):
+            result.shadow = {'mode': 'unavailable', 'executed_action_changed': False}
     result.latency_ms = round((time.perf_counter() - started) * 1000, 3)
     return result

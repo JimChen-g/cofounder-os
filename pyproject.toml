@@ -43,6 +43,7 @@ where = ["."]
 include = ["app*"]
 
 [tool.setuptools.package-data]
+"app.decision" = ["*.json"]
 "app.ui" = ["static/*.html", "static/*.css", "static/*.js"]
 "app.insurance_poc.fixtures" = ["*.json", "*.md", "*.pdf", "*.png"]
 

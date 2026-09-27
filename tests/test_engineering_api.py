@@ -75,7 +75,7 @@ def test_unsupported_bridge_command_never_calls_api():
     class NoNetwork:
         def post(self, *args, **kwargs):
             pytest.fail('Unsupported command caused a request')
-    assert '不执行审批' in business_reply({'text':'批准 全部'}, {}, NoNetwork(), {})
+    assert '格式' in business_reply({'text':'批准 全部'}, {}, NoNetwork(), {})
     assert '格式无效' in business_reply({'text':'查询 not-a-uuid'}, {}, NoNetwork(), {})
 
 
