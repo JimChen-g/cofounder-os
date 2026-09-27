@@ -35,6 +35,7 @@ class OpenAICompatProvider(BaseProvider):
         messages: list[ChatMessage],
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        response_format: dict[str, Any] | None = None,
     ) -> ChatResponse:
         api_key = self._api_key
         if not api_key:
@@ -49,6 +50,9 @@ class OpenAICompatProvider(BaseProvider):
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+
+        if response_format is not None:
+            payload["response_format"] = response_format
 
         headers = {
             "Authorization": f"Bearer {api_key}",

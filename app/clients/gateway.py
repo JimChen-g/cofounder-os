@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -95,6 +95,7 @@ class GatewayClient:
         temperature: float = 0.1,
         max_tokens: int = 1800,
         policy: RequestPolicy | None = None,
+        response_schema: Literal["engineering_review_v1"] | None = None,
     ) -> GatewayCompletion:
         """Send one non-streaming Chat Completions request."""
 
@@ -139,6 +140,11 @@ class GatewayClient:
             "allowed_providers": sorted(effective.allowed_providers),
             "policy": effective.model_dump(mode="json"),
         }
+
+        if response_schema is not None:
+            from app.response_schemas import response_format
+            response_format(response_schema)  # Reject unknown names before transport.
+            payload["response_schema"] = response_schema
 
         headers = {"Content-Type": "application/json"}
         if self.api_key:

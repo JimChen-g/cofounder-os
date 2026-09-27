@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.clients import GatewayClient
 from app.domain import Task
@@ -90,9 +90,9 @@ class Finding(BaseModel):
     model_config = ConfigDict(extra='forbid')
     path: str
     line: int = Field(ge=1)
-    trigger: str = Field(min_length=1)
-    impact: str = Field(min_length=1)
-    evidence: str = Field(min_length=1)
+    trigger: str = Field(min_length=1, max_length=180)
+    impact: str = Field(min_length=1, max_length=180)
+    evidence: str = Field(min_length=1, max_length=180)
     severity: Literal['blocking', 'warning', 'info']
 
 
@@ -270,13 +270,20 @@ class EngineeringService:
                     ChatMessage(role=Role.USER, content=json.dumps(review_input))]
         workspace.save('reviewer-request.json', {'session_id': review_id,
                         'messages': [m.model_dump(mode='json') for m in messages]})
-        completion = await self.gateway.complete(messages, max_tokens=1500,
+        completion = await self.gateway.complete(messages, max_tokens=3000,
+                          response_schema="engineering_review_v1",
                           policy=RequestPolicy(max_attempts=4, max_total_tokens=100000, timeout_seconds=600))
         result['reviewer'] = {'session_id': review_id, **completion.model_dump(mode='json')}
         workspace.save('reviewer-response.json', result['reviewer'])
         review_text, changes = normalize_envelope(completion.content)
         result['reviewer_format_normalization'] = changes
-        review = Review.model_validate_json(review_text)
+        try:
+            review = Review.model_validate_json(review_text)
+        except ValidationError:
+            result['review'] = {'patch_sha': result['patch_sha'],
+                                'conclusion': 'inconclusive', 'findings': []}
+            result['review_status_source'] = 'adapter_invalid_model_output'
+            raise
         result['review'] = review.model_dump(mode='json')
         for finding in review.findings:
             if finding.path not in ALLOWED or finding.line > len((workspace.path / finding.path).read_text().splitlines()):

@@ -74,7 +74,7 @@ def test_review_requires_evidence_and_severity():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode,expected', [('blocking','failed'), ('stale','failed'), ('passed','completed')])
+@pytest.mark.parametrize('mode,expected', [('blocking','failed'), ('stale','failed'), ('malformed','failed'), ('passed','completed')])
 async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, mode, expected):
     """Synthetic governance unit test; never represented as live Agent evidence."""
     import json
@@ -94,6 +94,8 @@ async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, m
                     'conclusion': 'passed', 'findings': [] if mode != 'blocking' else [{
                     'path':ALLOWED[0], 'line':1, 'trigger':'synthetic invalid behavior',
                     'impact':'wrong result', 'evidence':'injected unit-test finding', 'severity':'blocking'}]})
+            if mode == 'malformed' and 'implementation Agent' not in system:
+                content = '{invalid review'
             return GatewayCompletion(content=content,requested_model='synthetic')
 
     product = build_product_api_service(Settings(PRODUCT_DATA_DIR=str(tmp_path/'data')))
