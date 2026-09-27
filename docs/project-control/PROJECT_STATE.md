@@ -161,3 +161,12 @@ Branch `feat/t17-t22`; implementation boundary is in `docs/t17-t22.md`.
 Acceptance follows the current stage's actual evidence; T23+ remain pending.
 The September source checkout and deploy-by-fixed-commit workflow supersede the
 historical July paths for this authorized stage, without modifying infrastructure.
+
+### T17–T22 engineering acceptance correction
+
+The founder requested diagnosis, correction, normal PR merge and production
+deployment on 2026-09-27. The original failed real Runs are preserved. The
+correction uses immutable-candidate edits for failed-check retries and retains
+the original Task limit of two total attempts. Production acceptance remains
+conditional on real initial/feedback/review evidence, CI and restore validation;
+actual commit IDs and outcomes are in the current stage's output handoff.

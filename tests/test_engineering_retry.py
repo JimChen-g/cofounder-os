@@ -1,0 +1,134 @@
+"""Synthetic governance checks; the candidate code is never executed on the host."""
+import json
+
+import pytest
+
+from app.clients.gateway import GatewayClient, GatewayCompletion
+from app.config import Settings
+from app.engineering.service import EngineeringService
+from app.engineering.workspace import ALLOWED, Workspace, git
+from app.services.product_api import build_product_api_service
+from tests.test_engineering_execution import repo as engineering_repo_fixture
+
+repo = engineering_repo_fixture
+
+
+class RetryGateway(GatewayClient):
+    def __init__(self, path, invalid_edit=None):
+        super().__init__('http://invalid')
+        self.path = path
+        self.invalid_edit = invalid_edit
+        self.calls = []
+
+    async def complete(self, messages, **kwargs):
+        self.calls.append((messages, kwargs))
+        if 'repairing failed checks' in messages[0].content:
+            content = {'edits': [self.invalid_edit or {
+                'path': self.path, 'old': '# broken\n', 'new': '# repaired\n'}]}
+        elif 'implementation Agent' in messages[0].content:
+            content = {'implementation': '# broken\n' if self.path == ALLOWED[0] else '# preserve implementation\n',
+                       'tests': '# broken\n' if self.path == ALLOWED[1] else '# preserve tests\n'}
+        else:
+            content = {'patch_sha': json.loads(messages[1].content)['patch_sha'],
+                       'conclusion': 'passed', 'findings': []}
+        return GatewayCompletion(content=json.dumps(content), requested_model='synthetic')
+
+
+def environment(repo, tmp_path, monkeypatch, path, invalid_edit=None):
+    product = build_product_api_service(Settings(PRODUCT_DATA_DIR=str(tmp_path / 'data')))
+    service = EngineeringService(product, repo, tmp_path / 'tasks')
+    service.gateway = RetryGateway(path, invalid_edit)
+    gates = []
+
+    def test(workspace, argv, image):
+        gates.append((workspace.id, argv))
+        gate_targets_file = path == ALLOWED[0] or ALLOWED[1] in argv
+        failed = gate_targets_file and '# broken' in (workspace.path / path).read_text()
+        return {'exit_code': int(failed), 'timed_out': False,
+                'patch_sha': workspace.verify(), 'log': 'synthetic fixture failure' if failed else 'synthetic pass',
+                'gate': {'passed': not failed}, 'argv': argv,
+                'cwd': 'synthetic-sandbox', 'duration_seconds': 0.001}
+
+    monkeypatch.setattr(Workspace, 'test', test)
+    return product, service, gates
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('path', ALLOWED)
+async def test_failed_check_retry_preserves_other_file_and_reruns_all_gates(repo, tmp_path, monkeypatch, path):
+    product, service, gates = environment(repo, tmp_path, monkeypatch, path)
+    run = service.create('founder', 'synthetic-bounded-retry').run
+    result = await service.execute(run.id)
+    assert result.status == 'waiting_approval'
+    assert result.snapshot.tasks[0].attempt_count == 2
+    records = sorted((json.loads(p.read_text()) for p in service.root.glob('*-evidence/result.json')),
+                     key=lambda value: value['attempt'])
+    failed, repaired = records
+    assert failed['state'] == 'failed'
+    assert repaired['retry_of']['candidate_commit'] == failed['candidate_commit']
+    assert repaired['retry_of']['patch_sha'] == failed['patch_sha']
+    assert repaired['patch_sha'] != failed['patch_sha']
+    assert repaired['base_sha'] == failed['base_sha'] == run.metadata['base_sha']
+    assert git(repo, 'rev-parse', repaired['candidate_commit'] + '^').strip() == repaired['base_sha']
+    other = next(value for value in ALLOWED if value != path)
+    assert git(repo, 'show', repaired['candidate_commit'] + ':' + other) == git(repo, 'show', failed['candidate_commit'] + ':' + other)
+    assert git(repo, 'show', repaired['candidate_commit'] + ':' + path) == '# repaired\n'
+    assert len([workspace for workspace, _ in gates if workspace == repaired['workspace_id']]) == 3
+    assert repaired['executor']['session_id'] != repaired['reviewer']['session_id']
+    assert len(service.gateway.calls) == 3
+    assert [kwargs['max_tokens'] for _, kwargs in service.gateway.calls] == [5500, 1600, 1500]
+    assert 'synthetic fixture failure' in service.gateway.calls[1][0][1].content
+    assert not product.get_run(run.id).run.metadata['delivery_approved']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('edit', [
+    {'path': '../outside.py', 'old': '# broken\n', 'new': '# repaired\n'},
+    {'path': ALLOWED[0], 'old': '', 'new': '# repaired\n'},
+    {'path': ALLOWED[0], 'old': '# missing\n', 'new': '# repaired\n'},
+    {'path': ALLOWED[0], 'old': '# broken\n', 'new': '# repaired\n', 'command': 'ignored'},
+])
+async def test_invalid_retry_edit_fails_closed_without_more_checks_or_attempts(repo, tmp_path, monkeypatch, edit):
+    product, service, gates = environment(repo, tmp_path, monkeypatch, ALLOWED[0], edit)
+    run = service.create('founder', 'synthetic-invalid-retry').run
+    result = await service.execute(run.id)
+    assert result.status == 'failed'
+    assert result.snapshot.tasks[0].attempt_count == 2
+    assert len(service.gateway.calls) == 2
+    assert len(gates) == 1
+    assert 'delivery' not in product.get_run(run.id).run.metadata
+    assert not (repo / 'outside.py').exists()
+
+
+@pytest.mark.asyncio
+async def test_reviewer_counterexample_is_bound_to_retry_and_independently_reviewed(repo, tmp_path, monkeypatch):
+    product, service, _ = environment(repo, tmp_path, monkeypatch, ALLOWED[0])
+    original_complete = service.gateway.complete
+    reviews = []
+
+    async def complete(messages, **kwargs):
+        response = await original_complete(messages, **kwargs)
+        if 'independent code Reviewer' in messages[0].content:
+            reviews.append(json.loads(messages[1].content)['patch_sha'])
+            if len(reviews) == 1:
+                response.content = json.dumps({'patch_sha': reviews[-1], 'conclusion': 'changes_requested',
+                    'findings': [{'path': ALLOWED[0], 'line': 1, 'severity': 'blocking',
+                                  'trigger': 'synthetic counterexample', 'impact': 'wrong result',
+                                  'evidence': 'synthetic exact actual versus required result'}]})
+        return response
+
+    service.gateway.complete = complete
+    monkeypatch.setattr(Workspace, 'test', lambda workspace, argv, image: {
+        'exit_code': 0, 'timed_out': False, 'patch_sha': workspace.verify(), 'argv': argv,
+        'log': 'synthetic pass', 'gate': {'passed': True}, 'cwd': 'synthetic-sandbox',
+        'duration_seconds': 0.001})
+    run = service.create('founder', 'synthetic-review-retry').run
+    result = await service.execute(run.id)
+    assert result.status == 'waiting_approval'
+    assert result.snapshot.tasks[0].attempt_count == 2
+    assert len(reviews) == 2 and reviews[0] != reviews[1]
+    repair_request = service.gateway.calls[2][0]
+    assert 'repairing failed checks' in repair_request[0].content
+    assert 'synthetic counterexample' in repair_request[1].content
+    assert reviews[0] in repair_request[1].content
+    assert not product.get_run(run.id).run.metadata['delivery_approved']
