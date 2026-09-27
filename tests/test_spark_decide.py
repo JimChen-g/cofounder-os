@@ -80,3 +80,20 @@ async def test_authorized_step_selection_is_not_cloud_invocation():
     result = await decide(DecisionRequest(task="public", candidates=["step"], policy=policy),
                           registry, "fixture")
     assert result.action == "step" and provider.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_enclosing_run_constraints_filter_candidates_before_decoding():
+    from app.policy.request_policy import InvocationBudget, active_budget
+    registry = ProviderRegistry()
+    provider = FakeProvider(output='step')
+    registry.register(provider)
+    public = RequestPolicy(privacy='public', allowed_providers=frozenset({'local','step'}),
+                           permissions=frozenset({'model:invoke','cloud:invoke'}), cloud_call_budget=1)
+    scope = active_budget.set(InvocationBudget(RequestPolicy()))
+    try:
+        result = await decide(DecisionRequest(task='restricted by enclosing Run', candidates=['step'], policy=public), registry, 'fixture')
+    finally:
+        active_budget.reset(scope)
+    assert result.refusal_reason == 'no_legal_candidate'
+    assert provider.calls == 0

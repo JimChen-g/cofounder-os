@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models import ChatMessage, Provider, Role
-from app.policy.request_policy import PolicyDenied
+from app.policy.request_policy import PolicyDenied, active_budget
 from app.providers.base import ProviderError
 from app.providers.registry import ProviderRegistry
 from app.request_constraints import RequestPolicy
@@ -63,7 +63,9 @@ def legal_candidates(request: DecisionRequest) -> list[Action]:
 async def decide(request: DecisionRequest, registry: ProviderRegistry,
                  model: str) -> DecisionResponse:
     started = time.perf_counter()
-    legal = legal_candidates(request)
+    budget = active_budget.get()
+    effective = request.policy.intersect(budget.policy) if budget is not None else request.policy
+    legal = legal_candidates(request.model_copy(update={'policy': effective}))
     digest = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
     result = DecisionResponse(
         decision_id=str(uuid.uuid4()), action="refuse", legal_candidates=legal,
@@ -71,7 +73,7 @@ async def decide(request: DecisionRequest, registry: ProviderRegistry,
         evidence_ids=request.evidence_ids, request_sha256=digest,
     )
     # Decision inference itself stays local even when the selected action may be Step.
-    local_policy = request.policy.intersect(RequestPolicy(
+    local_policy = effective.intersect(RequestPolicy(
         max_attempts=1, max_total_tokens=20000, timeout_seconds=60,
     ))
     if not legal:

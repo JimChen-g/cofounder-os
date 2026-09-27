@@ -200,3 +200,35 @@ class EngineeringDeliveryController:
                 raise DeliveryConflict('delivery_not_approved')
             result = self._result(tx, d)
             return {'run_id': str(run.id), 'approval': d, 'result': result}
+
+    def interrupt(self, run_id: Any, actor: str, request_id: str,
+                  base_sha: str, revision: int) -> dict[str, Any]:
+        """Cancel a queued/in-flight version before a candidate exists, with CAS."""
+        with self.repository.transaction(run_id) as tx:
+            run = tx.get_run()
+            if run.owner != actor or not run.metadata.get('engineering'):
+                raise DeliveryConflict('not_found')
+            receipts = run.metadata.setdefault('cancel_receipts', {})
+            digest = hashlib.sha256(json.dumps([base_sha, revision]).encode()).hexdigest()
+            if request_id in receipts:
+                if receipts[request_id] != digest:
+                    raise DeliveryConflict('idempotency_conflict')
+                return {'cancelled': True, 'duplicate': True}
+            if (run.status not in ('queued', 'running', 'waiting_approval')
+                or run.metadata['base_sha'] != base_sha
+                or run.metadata.get('delivery', {}).get('revision', 0) != revision):
+                raise DeliveryConflict('stale_or_terminal')
+            run.status = RunStatus.CANCELLED.value
+            run.metadata['delivery_approved'] = False
+            run.metadata['termination_reason'] = 'cancelled'
+            if 'delivery' in run.metadata:
+                run.metadata['delivery']['state'] = 'cancelled'
+            receipts[request_id] = digest
+            for task in tx.list_tasks():
+                if task.status not in ('completed', 'failed', 'cancelled'):
+                    task.status = TaskStatus.CANCELLED.value
+                    tx.save_task(task)
+            run.updated_at = utc_now()
+            tx.save_run(run)
+            self._event(tx, run, actor, 'cancelled')
+            return {'cancelled': True, 'duplicate': False}

@@ -248,3 +248,137 @@ async def test_active_repair_cancel_preserves_cancelled_state(env):
     assert not p.get_run(rid).run.metadata['delivery_approved']
     with pytest.raises(DeliveryConflict):
         c.export(rid, 'founder')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure,expected_reason', [
+    ('model_timeout', 'timeout'), ('budget_exhausted', 'budget_or_policy_denied'),
+    ('test_timeout', 'timeout'),
+])
+async def test_feedback_failure_has_visible_terminal_reason(env, monkeypatch, failure, expected_reason):
+    """Fault injection after a passed initial synthetic version, before any approval."""
+    import httpx
+    p, s, c = env
+    rid = await ready(env)
+    old = p.get_run(rid).run.metadata['delivery'].copy()
+    c.act(rid, 'founder', 'feedback', feedback(p, rid))
+    if failure == 'model_timeout':
+        def timed_out(request):
+            raise httpx.ReadTimeout('synthetic upstream timeout', request=request)
+        s.gateway = GatewayClient('http://synthetic.invalid', transport=httpx.MockTransport(timed_out))
+    elif failure == 'budget_exhausted':
+        key = p.get_run(rid).run.metadata['engineering_budget_id']
+        with s.budgets.connect() as db:
+            db.execute('UPDATE budgets SET attempts=999 WHERE id=?', (key,))
+        def forbidden_transport(request):
+            pytest.fail('exhausted budget must stop before transport')
+        s.gateway = GatewayClient('http://synthetic.invalid', transport=httpx.MockTransport(forbidden_transport))
+    else:
+        monkeypatch.setattr(Workspace, 'test', lambda self, argv, image: {
+            'exit_code': 124, 'timed_out': True, 'patch_sha': self.verify(),
+            'log': 'synthetic sandbox timeout', 'argv': argv,
+            'cwd': 'synthetic-sandbox', 'duration_seconds': 0.001})
+    assert (await s.execute(rid)).status == 'failed'
+    run = p.get_run(rid).run
+    assert run.metadata['termination_reason'] == expected_reason
+    assert run.metadata['delivery']['revision'] == old['revision']
+    assert not run.metadata['delivery_approved']
+    assert all(t.attempt_count <= 2 for t in p.get_run(rid).tasks)
+    with pytest.raises(DeliveryConflict):
+        c.export(rid, 'founder')
+
+
+@pytest.mark.asyncio
+async def test_restart_receipt_replay_does_not_requeue_or_approve(env, tmp_path):
+    from app.services.engineering_delivery import EngineeringDeliveryController
+    p, s, c = env
+    rid = await ready(env)
+    body = feedback(p, rid)
+    c.act(rid, 'founder', 'feedback', body)
+    p.orchestration.fail_run(rid, actor='workflow-controller', reason='synthetic_restart')
+    restarted = build_product_api_service(Settings(PRODUCT_DATA_DIR=str(tmp_path / 'data')))
+    restored_controller = EngineeringDeliveryController(restarted)
+    result = restored_controller.act(rid, 'founder', 'feedback', body)
+    assert result['duplicate']
+    assert restarted.get_run(rid).run.status == 'failed'
+    assert restarted.get_run(rid).run.metadata['delivery']['repair_rounds'] == 1
+    with pytest.raises(DeliveryConflict):
+        restored_controller.act(rid, 'founder', 'approve', action(restarted, rid))
+
+
+@pytest.mark.asyncio
+async def test_late_model_result_after_cancel_never_publishes_candidate(env):
+    """Cancellation races a model result; the model returns after cancellation commits."""
+    import asyncio
+    p, s, c = env
+    rid = await ready(env)
+    old_artifacts = {a.id for a in p.get_run(rid).artifacts if a.name.startswith('engineering-result')}
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = s.gateway.complete
+    async def late_completion(messages, **kwargs):
+        if 'implementation Agent' in messages[0].content:
+            entered.set()
+            await release.wait()
+        return await original(messages, **kwargs)
+    s.gateway.complete = late_completion
+    c.act(rid, 'founder', 'feedback', feedback(p, rid))
+    execution = asyncio.create_task(s.execute(rid))
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    c.act(rid, 'founder', 'cancel', action(p, rid))
+    release.set()
+    await asyncio.gather(execution, return_exceptions=True)
+    current = p.get_run(rid)
+    assert current.run.status == 'cancelled'
+    assert not current.run.metadata['delivery_approved']
+    assert {a.id for a in current.artifacts if a.name.startswith('engineering-result')} == old_artifacts
+    with pytest.raises(DeliveryConflict):
+        c.export(rid, 'founder')
+
+
+def test_initial_interrupt_owner_cas_and_idempotency(env):
+    p, s, c = env
+    snapshot = s.create('founder', str(uuid4()))
+    rid, base = snapshot.run.id, snapshot.run.metadata['base_sha']
+    request_id = str(uuid4())
+    with pytest.raises(DeliveryConflict, match='not_found'):
+        c.interrupt(rid, 'stranger', request_id, base, 0)
+    with pytest.raises(DeliveryConflict, match='stale_or_terminal'):
+        c.interrupt(rid, 'founder', request_id, '0' * 40, 0)
+    with pytest.raises(DeliveryConflict, match='stale_or_terminal'):
+        c.interrupt(rid, 'founder', request_id, base, 1)
+    assert not c.interrupt(rid, 'founder', request_id, base, 0)['duplicate']
+    assert c.interrupt(rid, 'founder', request_id, base, 0)['duplicate']
+    with pytest.raises(DeliveryConflict, match='idempotency_conflict'):
+        c.interrupt(rid, 'founder', request_id, base, 1)
+    with pytest.raises(DeliveryConflict, match='stale_or_terminal'):
+        c.interrupt(rid, 'founder', str(uuid4()), base, 0)
+    assert p.get_run(rid).run.status == 'cancelled'
+    assert all(t.status == 'cancelled' for t in p.get_run(rid).tasks)
+
+
+@pytest.mark.asyncio
+async def test_initial_running_interrupt_cancels_active_api_task(env):
+    import asyncio
+    from types import SimpleNamespace
+    from app.api.engineering import InterruptRun, interrupt
+    p, s, c = env
+    snapshot = s.create('founder', str(uuid4()))
+    rid = snapshot.run.id
+    entered = asyncio.Event()
+    async def blocked_completion(messages, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+    s.gateway.complete = blocked_completion
+    execution = asyncio.create_task(s.execute(rid))
+    state = SimpleNamespace(engineering_runtime=(None, s, p, {execution}, asyncio.Lock()),
+                            engineering_active={str(rid): execution})
+    request = SimpleNamespace(app=SimpleNamespace(state=state), state=SimpleNamespace(principal='founder'))
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    response = await interrupt(request, rid, InterruptRun(request_id=str(uuid4()),
+        base_sha=snapshot.run.metadata['base_sha'], revision=0))
+    assert response['cancelled']
+    await asyncio.gather(execution, return_exceptions=True)
+    current = p.get_run(rid)
+    assert current.run.status == 'cancelled'
+    assert current.run.metadata['termination_reason'] == 'cancelled'
+    assert not any(a.name.startswith('engineering-result') for a in current.artifacts)

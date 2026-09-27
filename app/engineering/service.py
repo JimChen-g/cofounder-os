@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import os
+import httpx
 from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
@@ -190,14 +191,15 @@ class EngineeringService:
                 'cancelled.json', result, 'engineering-agent', relation='run')
             raise
         except Exception as exc:
-            if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+            timed_out = isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or isinstance(exc.__cause__, httpx.TimeoutException)
+            if timed_out:
                 try:
                     await asyncio.to_thread(workspace.cancel)
                 except Exception as cleanup_error:
                     result['cleanup_error'] = type(cleanup_error).__name__
-            result['state'] = 'timeout' if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) else 'failed'
+            result['state'] = 'timeout' if timed_out else 'failed'
             result['error'] = type(exc).__name__
-            result['termination_reason'] = ('timeout' if result['state'] == 'timeout' else 'budget_or_policy_denied' if type(exc).__name__ in {'PolicyDenied','BudgetExceeded'} else str(exc) if str(exc) in {'test_gate_blocked','independent_review_gate_blocked','review_location_not_in_patch'} else 'invalid_model_output_or_execution_failed')
+            result['termination_reason'] = ('timeout' if result['state'] == 'timeout' else 'budget_or_policy_denied' if type(exc).__name__ in {'PolicyDenied','BudgetExceeded'} or str(exc) in {'request_budget_exhausted','no_legal_provider'} else str(exc) if str(exc) in {'test_gate_blocked','independent_review_gate_blocked','review_location_not_in_patch'} else 'invalid_model_output_or_execution_failed')
             self._publish_envelopes(task, snapshot, workspace, result, correlation_id)
             # Retain failed evidence as a run artifact, never a successful task output.
             self.writer.write_json(task.run_id, 'engineering-failure-' + workspace.id,
@@ -259,7 +261,9 @@ class EngineeringService:
             tests.append(evidence)
             result['tests'] = tests
             workspace.save('tests.json', tests)
-            if evidence['exit_code'] != 0 or evidence['timed_out']:
+            if evidence['timed_out']:
+                raise TimeoutError('test_timeout')
+            if evidence['exit_code'] != 0:
                 raise RuntimeError('test_gate_blocked')
         review_id = str(uuid4())
         result['reviewer'] = {'session_id': review_id}

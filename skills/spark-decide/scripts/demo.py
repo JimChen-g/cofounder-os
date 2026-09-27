@@ -15,7 +15,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         assert self.headers.get("Authorization") == "Bearer fixture-only"
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         assert request["candidates"] == ["human"]
-        body = json.dumps({"action": "human", "legal_candidates": ["human"],
+        body = json.dumps({"decision_id":"fixture-only", "refusal_reason":None, "model_version":"fixture-no-model", "policy_version":"fixture-only", "latency_ms":0, "evidence_ids":[], "request_sha256":"0"*64, "action": "human", "legal_candidates": ["human"],
                            "scores": None, "score_kind": "unavailable",
                            "disclosure": "synthetic wiring fixture; no model call"}).encode()
         self.send_response(200)

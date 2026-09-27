@@ -22,3 +22,13 @@ The complete batch has 6 trials, at most 12 agent-model calls plus 6 decision-to
 Each trial records complete system/task prompts, raw model outputs, request IDs, selected model/provider, fallback status, usage, actual tool stdout/receipt, elapsed time, final JSON and deterministic checks. Tool stderr content is omitted because diagnostics might contain endpoint details. Individual first-step/receipt evidence is persisted before the next inference. `summary.json` retains usage for agent and decision calls separately; unknown costs stay null. A changed/missing model identity across trials invalidates the common-model comparison even if individual cases passed. Endpoint model/policy revisions, source commit, and host environment provenance must also accompany the stage's real run evidence.
 
 A three-case result establishes only small-sample wiring. It does not establish general Skill Lift, probability calibration, official Tier3 PASS, complete security scanning, final signature, or T28 completion.
+
+## Protocol clarification after first development batch
+
+The first live batch used `cases-v1.json` and `freeze-v1.json`. Both arms scored
+0/3 under the original strict final-envelope protocol: real tool receipts were
+valid and the negative case used no tool, but all final responses omitted the
+`final` wrapper. Case prompts ambiguously asked to finish with the inner object.
+Those outputs and original scores remain unchanged. The current freeze explicitly
+requests the wrapper. A subsequent batch is a protocol-corrected development
+validation, not an independent generalization test or evidence of Skill lift.

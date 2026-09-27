@@ -39,6 +39,11 @@ def main():
                 return None
         with urllib.request.build_opener(NoRedirect).open(req, timeout=65) as response:
             result = json.load(response)
+        if not isinstance(result, dict):
+            raise ValueError("receipt_must_be_object")
+        required = {"decision_id", "action", "legal_candidates", "refusal_reason", "scores", "score_kind", "model_version", "policy_version", "latency_ms", "evidence_ids", "request_sha256"}
+        if not required.issubset(result) or not isinstance(result.get("decision_id"), str) or not result["decision_id"]:
+            raise ValueError("incomplete_receipt")
         if result.get("score_kind") != "unavailable" or result.get("scores") is not None:
             raise ValueError("unsupported_score_contract")
         if result.get("action") not in {"local", "step", "human", "refuse"}:

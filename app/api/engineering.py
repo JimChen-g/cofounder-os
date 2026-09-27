@@ -133,6 +133,10 @@ async def create(request: Request, body: CreateEngineeringRun) -> Any:
     task = asyncio.create_task(serialized())
     tasks.add(task)
     task.add_done_callback(tasks.discard)
+    active = getattr(request.app.state, 'engineering_active', {})
+    request.app.state.engineering_active = active
+    active[run_id] = task
+    task.add_done_callback(lambda finished: active.pop(run_id, None))
     return JSONResponse({'run_id': run_id, 'dispatch_status': 'queued', 'duplicate': False}, status_code=202)
 
 
@@ -237,3 +241,25 @@ async def candidate(request: Request, run_id: UUID) -> Any:
             return {'result': result, 'files': files}
     except (ValueError, LookupError):
         return JSONResponse({'error': 'candidate_unavailable'}, status_code=409)
+
+
+class InterruptRun(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: str = Field(min_length=1, max_length=200)
+    base_sha: str = Field(pattern=r'^[a-f0-9]{40}$')
+    revision: int = Field(ge=0)
+
+
+@router.post('/runs/{run_id}/interrupt')
+async def interrupt(request: Request, run_id: UUID, body: InterruptRun) -> Any:
+    store, service, product, tasks, lock = _runtime(request)
+    try:
+        result = product.workflow_controller.engineering_delivery.interrupt(
+            run_id, request.state.principal, body.request_id, body.base_sha, body.revision)
+    except (ValueError, LookupError):
+        return JSONResponse({'error': 'stale_or_terminal'}, status_code=409)
+    for name in ('engineering_active', 'engineering_repairs'):
+        task = getattr(request.app.state, name, {}).get(str(run_id))
+        if task:
+            task.cancel()
+    return result
