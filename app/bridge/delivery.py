@@ -39,7 +39,7 @@ def command(payload: dict[str, str], config: dict[str, Any], client: httpx.Clien
             return '无法导出：仅本人已批准的当前版本可导出。'
         response.raise_for_status()
         result = response.json()
-        return f"已导出 Run: {rid}\n版本: {result['approval']['revision']}\nPatch: {result['result']['patch_sha']}\n候选提交: {result['result']['candidate_commit']}\n可在任务页面下载完整产物。"
+        return f"已导出 Run: {rid}\n版本: {result['approval']['revision']}\nPatch: {result['result']['patch_sha']}\n候选提交: {result['result']['candidate_commit']}\n完整 JSON 将作为文件回复；请以附件实际收到为准。"
     response = client.get(base + '/delivery', headers=headers)
     if response.status_code in {403, 404}:
         return '未找到本人可操作的任务。'
@@ -104,3 +104,40 @@ class Notifications:
                 raise RuntimeError('notification_platform_rejected')
             with sqlite3.connect(self.path) as db:
                 db.execute('UPDATE notifications SET state=?,message_id=? WHERE approval=?', ('platform_accepted', result['data']['message_id'], d['approval_id']))
+
+
+def send_export_attachment(payload: dict[str, str], config: dict[str, Any],
+                           client: httpx.Client, headers: dict[str, str], token: str) -> str | None:
+    """Send the actual approved JSON, never just a metadata-only export receipt."""
+    parts = payload['text'].strip().split()
+    if len(parts) != 2 or parts[0] != '导出':
+        return None
+    try:
+        rid = str(uuid.UUID(parts[1]))
+    except ValueError:
+        return None
+    response = client.get(config['product_url'] + '/api/engineering/runs/' + rid + '/export', headers=headers)
+    if response.status_code in {403, 404, 409}:
+        return None
+    response.raise_for_status()
+    raw = json.dumps(response.json(), ensure_ascii=False, indent=2).encode()
+    if len(raw) > 8_000_000:
+        raise ValueError('export_attachment_too_large')
+    auth = {'Authorization': 'Bearer ' + token}
+    upload = client.post('https://open.feishu.cn/open-apis/im/v1/files', headers=auth,
+                         data={'file_type': 'stream', 'file_name': 'approved-' + rid + '.json'},
+                         files={'file': ('approved-' + rid + '.json', raw, 'application/json')})
+    upload.raise_for_status()
+    data = upload.json()
+    if data.get('code') != 0:
+        raise RuntimeError('export_upload_rejected')
+    key = '/'.join(payload[k] for k in ('tenant', 'app', 'message_id'))
+    sent = client.post('https://open.feishu.cn/open-apis/im/v1/messages/' + payload['message_id'] + '/reply',
+                       headers=auth, json={'msg_type': 'file',
+                       'content': json.dumps({'file_key': data['data']['file_key']}),
+                       'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, key + '/approved-export'))})
+    sent.raise_for_status()
+    result = sent.json()
+    if result.get('code') != 0:
+        raise RuntimeError('export_file_reply_rejected')
+    return str(result['data']['message_id'])

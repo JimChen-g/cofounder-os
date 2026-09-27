@@ -57,3 +57,23 @@ def test_notifications_only_paired_user_and_persisted_dedup(tmp_path):
         Notifications(tmp_path/'n.db').send_pending(CONFIG, c)
     assert len(sent) == 1 and sent[0]['receive_id'] == 'u'
     assert AID in sent[0]['content']
+
+
+def test_export_sends_actual_approved_artifact_and_never_unapproved():
+    from app.bridge.delivery import send_export_attachment
+    sent = []
+    approved = {'approval': {'revision': 2}, 'result': {'code_diff': 'actual-approved-patch'}}
+    def handle(req):
+        if req.method == 'GET':
+            return httpx.Response(200, json=approved)
+        sent.append(req)
+        if req.url.path.endswith('/files'):
+            assert b'actual-approved-patch' in req.content
+            return httpx.Response(200, json={'code':0,'data':{'file_key':'f'}})
+        assert json.loads(req.content)['msg_type'] == 'file'
+        return httpx.Response(200, json={'code':0,'data':{'message_id':'attachment'}})
+    with httpx.Client(transport=httpx.MockTransport(handle)) as c:
+        assert send_export_attachment(payload(f'导出 {RID}'), CONFIG, c, {}, 'fixture') == 'attachment'
+    assert len(sent) == 2
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(409))) as c:
+        assert send_export_attachment(payload(f'导出 {RID}'), CONFIG, c, {}, 'fixture') is None

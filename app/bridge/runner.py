@@ -86,6 +86,10 @@ def process_one(inbox: Inbox, config: dict[str, Any], client: httpx.Client) -> b
                            json={'app_id': config['app_id'], 'app_secret': config['app_secret']})
         auth.raise_for_status()
         token = auth.json()['tenant_access_token']
+        from app.bridge.delivery import send_export_attachment
+        attachment_id = send_export_attachment(payload, config, client, headers, token)
+        if attachment_id:
+            inbox.record(key, export_message_id=attachment_id)
         body = {'msg_type': 'text', 'content': json.dumps({'text': reply}, ensure_ascii=False),
                 'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, key))}
         # Stable UUID on bounded transport retry; never replay the business consumer.
