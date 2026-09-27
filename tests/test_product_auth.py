@@ -71,3 +71,14 @@ def test_cross_run_owner_is_hidden(auth_client):
             del app.state.product_api_service
         else:
             app.state.product_api_service = old
+
+
+def test_phone_actions_require_paired_identity_and_exact_route(auth_client):
+    from uuid import uuid4
+    rid = str(uuid4())
+    for suffix in ('approve', 'reject', 'cancel'):
+        url = f'/api/engineering/runs/{rid}/{suffix}'
+        assert auth_client.post(url, headers=bridge_headers('other'), json={}).status_code == 403
+        assert auth_client.post(url, headers=bridge_headers(), json={}).status_code == 422
+    assert auth_client.post(f'/api/engineering/runs/{rid}/feedback', headers=bridge_headers(), json={}).status_code == 403
+    assert auth_client.get('/api/engineering/notifications', headers=bridge_headers('other')).status_code == 403

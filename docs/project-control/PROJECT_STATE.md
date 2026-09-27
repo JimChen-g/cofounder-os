@@ -208,3 +208,13 @@ in the task output package at
 Production/recovery outcomes are recorded separately in the receipts above.
 Production Gateway credential rotation remains separately unauthorized; this
 application release does not imply rotation, Qwen restart or a second bridge.
+
+## September T23–T27 candidate
+
+The founder authorized T23–T27 against accepted production merge 560666a7.
+Independent checkout `codex/t23-t27` implements phone text delivery commands,
+paired notifications and conservative shadow quality prediction. See
+`docs/t23-t27.md`. Real phone acceptance, CI/merge, deployment and recovery remain
+pending the current stage output receipts. The original expired/unapproved Run
+and its exhausted attempt count are preserved. This stage follows the September
+PR-first/fixed-commit release authorization rather than the historical July order.

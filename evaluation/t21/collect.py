@@ -107,7 +107,7 @@ async def collect(args):
         finally:
             active_budget.reset(token)
         passing = {r['candidate'] for r in records if r['error'] is None and r['checks']['passed']}
-        label = ('incomplete' if len(records) != 2 else 'both' if len(passing)==2 else next(iter(passing), 'neither'))
+        label = ('incomplete' if len(records) != 2 or any(r['error'] for r in records) else 'both' if len(passing)==2 else next(iter(passing), 'neither'))
         result = {'case_id':case['case_id'], 'family_id':case['family_id'], 'split':case['split'],
                   'dataset_version':manifest['dataset_version'], 'source_kind':'synthetic',
                   'prompt':case['prompt'], 'oracle':case['expected'], 'scorer_version':SCORER,

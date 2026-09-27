@@ -1,0 +1,44 @@
+{
+  "schema": "quality-logistic-v1",
+  "feature_version": "precall-numeric-v1",
+  "features": [
+    "bias",
+    "utf8_bytes_4096",
+    "digits_100",
+    "lines_20",
+    "json_terms_10"
+  ],
+  "seed": 0,
+  "iterations": 500,
+  "learning_rate": 0.2,
+  "l2": 0.05,
+  "mode": "shadow_only",
+  "scores_are_calibrated": false,
+  "models": {
+    "local": {
+      "status": "fitted",
+      "weights": [
+        0.06574572919228128,
+        0.04315327852055731,
+        -0.03558903734407603,
+        0.00012456920949342024,
+        -0.7905293213450714
+      ],
+      "n": 12,
+      "positives": 6
+    },
+    "step": {
+      "status": "fitted",
+      "weights": [
+        2.3998754931805686,
+        0.01472266294109126,
+        -0.04305640052873166,
+        0.0016227660900015649,
+        -0.024690666542059946
+      ],
+      "n": 12,
+      "positives": 11
+    }
+  },
+  "training_sha256": "9530ca4929821591fc8d3f08b1cd851cd1545a3bbdec9202e24013e70e35220a"
+}

@@ -43,6 +43,10 @@ async def authenticate(request: Request, call_next: Callable[[Request], Awaitabl
                 and same(request.headers.get('x-feishu-user'), settings.feishu_open_id)):
             return JSONResponse({'error': 'identity_not_paired'}, status_code=403)
         engineering_allowed = (request.method == 'POST' and path == '/api/engineering/runs') or (request.method == 'GET' and path.startswith('/api/engineering/runs/') and len(path.split('/')) == 5)
+        segments = path.split('/')
+        engineering_allowed = engineering_allowed or (request.method == 'GET' and path == '/api/engineering/notifications')
+        if len(segments) == 6 and segments[1:4] == ['api', 'engineering', 'runs']:
+            engineering_allowed = (request.method == 'GET' and segments[5] in {'delivery', 'export', 'candidate'}) or (request.method == 'POST' and segments[5] in {'approve', 'reject', 'cancel'})
         if path not in ('/api/bridge/receipt', '/api/health') and not engineering_allowed:
             return JSONResponse({'error': 'bridge_business_actions_not_enabled'}, status_code=403)
     request.state.principal = settings.product_founder_id
