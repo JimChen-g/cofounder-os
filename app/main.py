@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.decision.routes import router as decision_router
 from app.api.auth import authenticate
 from app.api.evaluation import router as evaluation_router
 from app.api.engineering import router as engineering_router
@@ -214,6 +215,7 @@ app.include_router(api_router)
 app.include_router(product_router)
 app.include_router(evaluation_router)
 app.include_router(engineering_router)
+app.include_router(decision_router)
 app.include_router(insurance_poc_router)
 app.include_router(ui_router)
 app.mount(

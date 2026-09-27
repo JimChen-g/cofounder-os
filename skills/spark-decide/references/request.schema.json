@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "RequestPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "privacy": {
+          "default": "restricted",
+          "enum": [
+            "public",
+            "internal",
+            "restricted"
+          ],
+          "title": "Privacy",
+          "type": "string"
+        },
+        "allowed_providers": {
+          "default": [
+            "local"
+          ],
+          "items": {
+            "enum": [
+              "local",
+              "step"
+            ],
+            "type": "string"
+          },
+          "title": "Allowed Providers",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "permissions": {
+          "default": [
+            "model:invoke"
+          ],
+          "items": {
+            "enum": [
+              "model:invoke",
+              "cloud:invoke"
+            ],
+            "type": "string"
+          },
+          "title": "Permissions",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "max_attempts": {
+          "default": 2,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "max_total_tokens": {
+          "default": 32768,
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Max Total Tokens",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 300,
+          "maximum": 3600,
+          "minimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "cloud_call_budget": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Cloud Call Budget",
+          "type": "integer"
+        }
+      },
+      "title": "RequestPolicy",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "task": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Task",
+      "type": "string"
+    },
+    "candidates": {
+      "default": [
+        "local",
+        "human"
+      ],
+      "items": {
+        "enum": [
+          "local",
+          "step",
+          "human",
+          "refuse"
+        ],
+        "type": "string"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "policy": {
+      "$ref": "#/$defs/RequestPolicy"
+    },
+    "evidence_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Evidence Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "task"
+  ],
+  "title": "DecisionRequest",
+  "type": "object"
+}

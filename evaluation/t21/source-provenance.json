@@ -1,0 +1,56 @@
+{
+  "schema_version": "t21-sources-1",
+  "frozen_dataset": "t21-atomic-v1",
+  "new_instance_source": "explicit synthetic authoring, no copied private business tasks",
+  "new_candidate_results": "none at freeze; must be collected with actual usage and checks",
+  "prior_sources": [
+    {
+      "stage": "T11-T16",
+      "artifact": "sampling.md",
+      "sha256": "4270460ee4826551832f30b1225f5f91ef57eb0003cfab0d0f820efe0c8ea841",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    },
+    {
+      "stage": "T11-T16",
+      "artifact": "evidence/sampling-verification.json",
+      "sha256": "a19ef0b63f13a815fae95fcad7d1f3ac8b3ac0b0acbf1991eb3415a6fc45acd8",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    },
+    {
+      "stage": "T11-T16",
+      "artifact": "evidence/validation/sampling/materials-smoke-1-local.record.json",
+      "sha256": "79c4fe5d99eb0b8136ac52a01fbbdcb3883184995b86802c4ee1107be66764fb",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    },
+    {
+      "stage": "T11-T16",
+      "artifact": "evidence/validation/sampling/materials-smoke-1-step.record.json",
+      "sha256": "c241585b9c3854bbc36f2a3dcfe3170cc3274aabcaa26e697b21e613c8793e52",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    },
+    {
+      "stage": "T11-T16",
+      "artifact": "evidence/validation/sampling/materials-smoke-1.json",
+      "sha256": "65d970f4054b730eec08255be7c3a2c94cf50c2253204839665d3717d2954e8a",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    },
+    {
+      "stage": "T11-T16",
+      "artifact": "evidence/validation/sampling/materials-smoke-2-local.record.json",
+      "sha256": "de13cc35f26b9232bf39b12a085025948fbaa52e9bcc29ae7536449109f88790",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    },
+    {
+      "stage": "T11-T16",
+      "artifact": "evidence/validation/sampling/materials-smoke-2-step.record.json",
+      "sha256": "950b649b07a98d7040849b579da79e02a0a4c1f4ff7ced3f5765634365906bbf",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    },
+    {
+      "stage": "T11-T16",
+      "artifact": "evidence/validation/sampling/materials-smoke-2.json",
+      "sha256": "7e34ef7499f1497af2bd79722845d07dc8b0f58033f19de65b4f009b1b98ff3c",
+      "usage": "source provenance; smoke only; excluded from frozen train/calibration/test"
+    }
+  ]
+}

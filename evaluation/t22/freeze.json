@@ -1,0 +1,11 @@
+{
+  "frozen_at": "2026-09-27T08:17:01.501071+00:00",
+  "cases_sha256": "55e5e7af8bdc7a1e81529971303ba79ca3c115b64595855d3e1b1e73d3747d7b",
+  "scorer_version": "t22-exact-action-and-tool-v1",
+  "instances": 3,
+  "source": "synthetic independent T22 wiring fixtures; not T21 holdout",
+  "arms": 2,
+  "harness_sha256": "df4a407c5e019b531584400139a9a4af0ec5fac2a4c23363fca50d62b498e3aa",
+  "version": "t22-protocol-v2",
+  "revision_reason": "Clarify final envelope after first development batch; preserve v1 results, not independent evaluation"
+}

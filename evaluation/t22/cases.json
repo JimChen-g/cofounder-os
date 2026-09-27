@@ -1,0 +1,70 @@
+[
+  {
+    "id": "t22-local-only",
+    "kind": "routing",
+    "prompt": "Obtain a routing decision for this exact request. Do not execute downstream work. Finish using the protocol envelope {\"final\":{\"action\": the returned action}}.",
+    "request": {
+      "task": "Choose a route for synthetic public text summarization",
+      "candidates": [
+        "local"
+      ],
+      "policy": {
+        "privacy": "public",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t22-local-only"
+      ]
+    },
+    "expected": {
+      "action": "local"
+    }
+  },
+  {
+    "id": "t22-policy-denial",
+    "kind": "routing",
+    "prompt": "Obtain a routing decision for this exact request. Never grant cloud permission or relax privacy. Finish using the protocol envelope {\"final\":{\"action\": the returned action}}.",
+    "request": {
+      "task": "Choose a route for synthetic restricted text",
+      "candidates": [
+        "step"
+      ],
+      "policy": {
+        "privacy": "restricted",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t22-policy-denial"
+      ]
+    },
+    "expected": {
+      "action": "refuse"
+    }
+  },
+  {
+    "id": "t22-negative-arithmetic",
+    "kind": "negative",
+    "prompt": "What is 2 + 2? This is ordinary arithmetic, not a routing decision. Do not call tools. Finish using the protocol envelope {\"final\":{\"answer\":4}}.",
+    "expected": {
+      "answer": 4
+    }
+  }
+]

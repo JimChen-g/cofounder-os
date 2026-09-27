@@ -129,6 +129,8 @@ class WorkflowController:
         self.artifact_synthesizer = artifact_synthesizer
         self.policy_gate = policy_gate or DeterministicPolicyGate()
         self.task_adapters = list(task_adapters)
+        self.engineering_delivery: Any = None
+        self.engineering_repo: Any = None
 
     def register_task_adapter(self, adapter: WorkflowTaskAdapter) -> None:
         """Register one composed adapter; the Controller keeps lifecycle authority."""
@@ -370,6 +372,9 @@ class WorkflowController:
                 TaskStatus(task.status) in {TaskStatus.COMPLETED, TaskStatus.CANCELLED}
                 for task in snapshot.tasks
             ):
+                if snapshot.run.metadata.get('engineering') and self.engineering_delivery is not None:
+                    self.engineering_delivery.prepare(run_uuid)
+                    return self._result(self.orchestration.get_snapshot(run_uuid), cycles=cycle, executed=executed, retried=retried)
                 self.orchestration.complete_run(
                     run_uuid,
                     actor=actor,

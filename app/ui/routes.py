@@ -12,6 +12,11 @@ STATIC_ROOT = Path(__file__).resolve().parent / "static"
 router = APIRouter(tags=["ui"], include_in_schema=False)
 
 
+@router.get("/ui/engineering", response_class=FileResponse)
+async def engineering_review() -> FileResponse:
+    return FileResponse(STATIC_ROOT / "engineering.html", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
 @router.get("/ui", response_class=FileResponse)
 @router.get("/ui/", response_class=FileResponse)
 async def mission_control() -> FileResponse:

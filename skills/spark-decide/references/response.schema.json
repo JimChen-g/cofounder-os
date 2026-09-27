@@ -1,0 +1,123 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "action": {
+      "enum": [
+        "local",
+        "step",
+        "human",
+        "refuse"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "legal_candidates": {
+      "items": {
+        "enum": [
+          "local",
+          "step",
+          "human",
+          "refuse"
+        ],
+        "type": "string"
+      },
+      "title": "Legal Candidates",
+      "type": "array"
+    },
+    "refusal_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Refusal Reason"
+    },
+    "scores": {
+      "default": null,
+      "title": "Scores",
+      "type": "null"
+    },
+    "score_kind": {
+      "const": "unavailable",
+      "default": "unavailable",
+      "title": "Score Kind",
+      "type": "string"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "policy_version": {
+      "default": "spark-decide-enum-v1",
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "decoding": {
+      "const": "validated_short_enum",
+      "default": "validated_short_enum",
+      "title": "Decoding",
+      "type": "string"
+    },
+    "latency_ms": {
+      "title": "Latency Ms",
+      "type": "number"
+    },
+    "evidence_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "request_sha256": {
+      "title": "Request Sha256",
+      "type": "string"
+    },
+    "output_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output Sha256"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Usage"
+    }
+  },
+  "required": [
+    "decision_id",
+    "action",
+    "legal_candidates",
+    "refusal_reason",
+    "model_version",
+    "latency_ms",
+    "evidence_ids",
+    "request_sha256"
+  ],
+  "title": "DecisionResponse",
+  "type": "object"
+}

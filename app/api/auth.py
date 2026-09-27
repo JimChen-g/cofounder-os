@@ -56,6 +56,8 @@ async def authenticate(request: Request, call_next: Callable[[Request], Awaitabl
             return JSONResponse({'error': 'not_found'}, status_code=404)
         except Exception:
             return JSONResponse({'error': 'not_found'}, status_code=404)
+        if run.metadata.get('engineering') and request.method != 'GET':
+            return JSONResponse({'error': 'use_version_bound_engineering_actions'}, status_code=409)
         if run.owner != settings.product_founder_id:
             return JSONResponse({'error': 'not_found'}, status_code=404)
     if request.method == 'POST' and path.startswith('/api/runs'):

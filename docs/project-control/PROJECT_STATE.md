@@ -30,6 +30,7 @@ This document must be updated in the same commit as every accepted stage.
 | D12 | Founder Mission Control UI | b96b557 |
 | D13 | Evaluation Dashboard | 5feb555 |
 | G01 | Project delivery unification | g01-accepted (annotated tag) |
+| T17–T22 (September) | Accepted implementation and isolated Spark engineering/feedback chain; component and evaluation limits disclosed; production release/recovery pending receipts | 5229238181b56a593ea5969c31885cc100c9f446 |
 
 ## Release Candidates
 
@@ -81,29 +82,55 @@ contracts.
 | 6c7de61 | D11 independent-review corrections and privacy-safe release | Corrective: runtime token budgets, runtime lock isolation, public release hygiene |
 | b96b557 | D12 Qwen output-budget correction | Corrective: Product brief completion budget and regression evidence |
 | 290fb31 | Close D13 independent-review findings | Corrective: Run isolation, malformed artifact handling, scoring semantics, provider denominator |
+| 8c3409e | Preserve immutable candidates during bounded failed-check retries | September T17/T18; original failed Runs retained |
+| 0fe1ffb | Collect completed gate failures and stop on execution/cleanup faults | September T17/T18; no extra Task attempts |
+| a2facebf | Present immutable numbered source to the independent reviewer | September T17/T18; original review gate retained |
+| 5229238 | Bind six strict review checks to exact source evidence and preserve truncation diagnostics | Accepted September implementation; real initial/feedback checks passed |
 
 ## Current State
 
-- **Current accepted product reference**: D13 implementation commit `5feb555`
-- **Resolve accepted product commit with**: `git rev-parse 5feb555`
+- **Current accepted implementation HEAD**: `5229238181b56a593ea5969c31885cc100c9f446`
+- **Resolve accepted implementation with**: `git rev-parse 5229238181b56a593ea5969c31885cc100c9f446`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`
-- **Current governance stage**: G01 — accepted
-- **Current product stage**: D13 — Evaluation Dashboard — accepted
-- **Current release worktree**: `main`
+- **Current governance stage**: September T17–T22 implementation acceptance;
+  normal PR #4 merge, production deployment and recovery require their receipts
+- **Current product stage**: T17/T18 real version-bound engineering feedback
+  accepted; T19–T22 component/evaluation limits in `docs/t17-t22.md`
+- **Current release worktree**: `feat/t17-t22`; authoritative September Mac
+  checkout and fixed Spark application target from the stage handoff
+- **Accepted real Run / Task**: `95e51ba9-37e7-49a5-b5c4-49626523378f` /
+  `5ec673ee-2fa5-4f9d-8889-d8eaf000efd1`; initial and Web-feedback revisions
+  each passed fixed 14, generated 20, regression 19 and independent v2 review
+- **Business delivery status**: revision 2 remains pending and unapproved;
+  12 isolated fixture checks are explicitly not actual user approval
+- **Current verification**: 631 local tests passed; implementation CI passed
+  Python 3.10/3.12. Release receipt records the later docs/merge commit and CI
+- **Release receipt**: `outputs/t17-t22/status.json` in the task output package;
+  production deployment is not claimed by this pre-deployment source record
+- **Recovery receipt / private package path**:
+  `outputs/t17-t22/evidence/production-recovery.json` in the task output package
+  is planned; its actual private package path and checks must be recorded after
+  execution. Earlier July packages below are historical
+- **Next acceptance action**: normal PR merge, fixed-commit application deploy,
+  three-end verification and new recovery validation; preserve live state
+- **Next product stage**: T23–T24 under the September plan; T26 phone approvals,
+  broader Skill evaluation and submission materials remain separate pending work
+- **Historical July product reference**: D13 implementation `5feb555`; its
+  accepted scope and recovery records below do not replace September receipts
 - **Independent D13 reference**: `codex/d13-evaluation-dashboard`
 - **Independent D12 reference**: `codex/d12-founder-mission-control`
 - **Independent D11 reference**: `codex/d11-product-api`
 - **Independent D07-D10 reference**: `codex/d07-d10`
-- **Current release scope**: D13 — deterministic evaluation service and API,
+- **Historical D13 release scope**: deterministic evaluation service and API,
   Evaluation UI, D12 presentation corrective, 418-test quality gates,
   independent review, publication, deployment, three-plane verification, and
   recovery packaging passed
-- **Next product stage**: D14 — Insurance POC golden demo and Hackathon
+- **Historical July next-stage record**: D14 — Insurance POC golden demo and Hackathon
   submission package — release candidate pending independent acceptance
-- **Current implementation candidate**: `codex/d14-insurance-poc`, based on
+- **Historical July implementation candidate**: `codex/d14-insurance-poc`, based on
   `8276561`; P0-P6 acceptance is defined in
   `tasks/D14_HACKATHON_SUBMISSION.md`
-- **Next acceptance action**: run independent D14 review, publish the approved
+- **Historical July acceptance action**: run independent D14 review, publish the approved
   candidate, verify it on DGX Spark, and create the accepted recovery package
 - **D06-C recovery package directory**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/`
 - **D06-C recovery package**: `$HOME/Documents/CoFounderOS/stage-backups/D06-C/20260719-115447Z/`
@@ -152,3 +179,32 @@ Acceptance is evidence-driven in the current task's T11–T16 output package;
 T17 onward, mobile approvals and formal training/holdout evaluation remain pending.
 The authoritative Mac checkout is the September T07–T10 workspace supplied by the
 founder; the old Projects checkout remains untouched. July history is retained.
+
+## September T17–T22 implementation candidate
+
+Founder authorized version-bound delivery, bounded feedback repair, spark-decide,
+portable Skill and frozen small-data/paired evaluation work against `0dbf5e1`.
+Branch `feat/t17-t22`; implementation boundary is in `docs/t17-t22.md`.
+Acceptance follows the current stage's actual evidence; T23+ remain pending.
+The September source checkout and deploy-by-fixed-commit workflow supersede the
+historical July paths for this authorized stage, without modifying infrastructure.
+
+### T17–T22 engineering acceptance correction
+
+The founder requested diagnosis, correction, normal PR merge and production
+deployment on 2026-09-27. The original failed real Runs are preserved. The
+correction uses immutable-candidate edits for failed-check retries and retains
+the original Task limit of two total attempts. Real initial/feedback/review
+acceptance passed on implementation `5229238`: the same Run/Task advanced from
+revision 1 / attempt 1 to revision 2 / attempt 2, with a changed patch, artifact
+and approval nonce, fresh tests and independent review. The business Run remains
+pending/unapproved. Five earlier failed Runs and their ten attempts are retained.
+Production deployment and recovery remain pending their actual receipts in this
+pre-deployment source record.
+
+Acceptance evidence is `outputs/t17-t22/evidence/engineering-acceptance-final.md`
+in the task output package at
+`/Users/jimcheng/Documents/Codex/2026-09-27/cofounder-os-t17-t22/`.
+Production/recovery outcomes are recorded separately in the receipts above.
+Production Gateway credential rotation remains separately unauthorized; this
+application release does not imply rotation, Qwen restart or a second bridge.
