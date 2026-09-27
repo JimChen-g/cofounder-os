@@ -43,6 +43,7 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(default=1024, ge=1, le=128_000)
     stream: bool = False
+    response_schema: Literal["engineering_review_v1"] | None = None
     privacy: Literal["public", "internal", "restricted"] = "restricted"
     allowed_providers: tuple[Literal["local", "step"], ...] = ("local",)
     policy: dict[str, Any] = Field(default_factory=dict)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Sequence, TypedDict
+from typing import Any, Sequence, TypedDict
 
 from app.policy.request_policy import InvocationBudget, PolicyDenied, active_budget
 from app.request_constraints import RequestPolicy
@@ -51,6 +51,7 @@ class ProviderRegistry:
         temperature: float = 0.7,
         max_tokens: int = 1024,
         policy: RequestPolicy | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> tuple[ChatResponse, Provider]:
         """Filter before every attempt; failures retain their budget reservation."""
         policy = policy or RequestPolicy()
@@ -69,9 +70,12 @@ class ProviderRegistry:
             remaining = budget.reserve(name, tokens, policy)
             tried.append(name)
             try:
+                extra: dict[str, Any] = {}
+                if response_format is not None:
+                    extra["response_format"] = response_format
                 response = await asyncio.wait_for(provider.complete(
                     model=model if name == preferred else "",
-                    messages=messages, temperature=temperature, max_tokens=max_tokens,
+                    messages=messages, temperature=temperature, max_tokens=max_tokens, **extra,
                 ), timeout=remaining)
                 return response, name
             except (ProviderError, asyncio.TimeoutError):

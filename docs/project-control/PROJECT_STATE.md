@@ -142,3 +142,13 @@ and isolated Spark validation are documented in `docs/t07-t10.md`; current work
 uses `codex/t07-t10`. This supplements the July history without declaring
 T11–T18, independent review, or a public release accepted. The next implementation
 scope is T11–T14 and T16 only after the T07–T10 evidence handoff is checked.
+
+## September T11–T16 implementation candidate
+
+Founder authorized T11–T16 on 2026-09-27 against `b53e58c`. Branch
+`codex/t11-t16` adds the bounded engineering executor, independent code review,
+small candidate sampling and paired Feishu task entry. See `docs/t11-t16.md`.
+Acceptance is evidence-driven in the current task's T11–T16 output package;
+T17 onward, mobile approvals and formal training/holdout evaluation remain pending.
+The authoritative Mac checkout is the September T07–T10 workspace supplied by the
+founder; the old Projects checkout remains untouched. July history is retained.

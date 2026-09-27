@@ -147,6 +147,10 @@ async def route_chat(
 
     t0 = time.perf_counter()
     try:
+        schema_options = {}
+        if request.response_schema is not None:
+            from app.response_schemas import response_format
+            schema_options["response_format"] = response_format(request.response_schema)
         response, used_provider = await registry.complete_with_fallback(
             preferred=preferred,
             model=resolved_upstream_model,
@@ -154,6 +158,7 @@ async def route_chat(
             temperature=request.temperature,
             max_tokens=request.max_tokens or 1024,
             policy=policy,
+            **schema_options,
         )
         latency_ms = (time.perf_counter() - t0) * 1000
 

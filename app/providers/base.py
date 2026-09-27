@@ -38,6 +38,7 @@ class BaseProvider(ABC):
         messages: list[ChatMessage],
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        response_format: dict[str, Any] | None = None,
     ) -> ChatResponse:
         """Send a chat completion request and return a normalised response."""
 

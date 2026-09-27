@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "insurance-materials-input-0.1"
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "material_id": {
+            "enum": [
+              "requirement_document",
+              "accident_scene_image",
+              "accident_damage_image"
+            ]
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^(?!\\.{1,2}$)(?!\\s)(?!.*\\s$)[^/\\\\\\u0000]+$"
+          },
+          "content_type": {
+            "enum": [
+              "application/pdf",
+              "image/png"
+            ]
+          }
+        },
+        "required": [
+          "material_id",
+          "filename",
+          "content_type"
+        ]
+      },
+      "maxItems": 3
+    }
+  },
+  "required": [
+    "schema_version",
+    "materials"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed manifest-only input; not an existing Product API request"
+}

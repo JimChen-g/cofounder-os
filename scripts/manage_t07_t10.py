@@ -47,6 +47,10 @@ if action in {'start', 'restart'}:
                QWEN_BASE_URL='http://127.0.0.1:8000/v1', STEP_API_KEY=c['step_key'],
                STEP_BASE_URL='https://api.stepfun.com/step_plan/v1', STEP_MODEL='step-3.7-flash',
                COFOUNDER_BRIDGE_CONFIG=str(config))
+    if (root/'engineering-base.git').exists():
+        env.update(ENGINEERING_REPO=str(root/'engineering-base.git'),
+                   ENGINEERING_WORKSPACE_ROOT=str(root/'engineering-workspaces'),
+                   ENGINEERING_TEST_IMAGE=json.loads((root/'engineering-image.json').read_text())['image_id'])
     for name, args in [('product', ['uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '9000']),
                        ('bridge', ['app.bridge.runner'])]:
         pidfile = root/(name+'.pid')
