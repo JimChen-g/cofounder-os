@@ -5,7 +5,7 @@ import pytest
 
 from app.clients.gateway import GatewayClient, GatewayCompletion
 from app.config import Settings
-from app.engineering.service import EngineeringService
+from app.engineering.service import EngineeringService, numbered_source
 from app.engineering.workspace import ALLOWED, Workspace, git
 from app.services.product_api import build_product_api_service
 from tests.test_engineering_execution import repo as engineering_repo_fixture
@@ -223,4 +223,45 @@ async def test_infrastructure_failure_stops_gate_collection_without_overwriting_
         with pytest.raises(ValueError, match='workspace_not_owned_or_active'):
             workspace.cleanup()
     assert 'delivery' not in product.get_run(run.id).run.metadata
+    assert not product.get_run(run.id).run.metadata['delivery_approved']
+
+
+def test_numbered_source_preserves_escapes_blank_lines_and_original_line_numbers():
+    source = 'def check(filename):\n\n    return "\\\\" in filename or "\\t" in filename\n# final line'
+    formatted = numbered_source(ALLOWED[0], source)
+    assert formatted.startswith('FILE app/insurance_poc/materials.py\n1 | def check(filename):\n2 | \n')
+    assert '3 |     return "\\\\" in filename or "\\t" in filename\n' in formatted
+    assert formatted.endswith('4 | # final line\nEND FILE\n')
+    assert 'filename):\\n' not in formatted
+
+
+@pytest.mark.asyncio
+async def test_reviewer_receives_plain_numbered_immutable_sources_separate_from_metadata(repo, tmp_path, monkeypatch):
+    product, service, _ = environment(repo, tmp_path, monkeypatch, ALLOWED[0])
+    implementation = 'def check(filename):\n    if not filename.strip() or "/" in filename or "\\\\" in filename:\n        raise ValueError("invalid filename")\n'
+    tests = '# synthetic fixture containing a literal \\t sequence\n'
+    original_complete = service.gateway.complete
+
+    async def complete(messages, **kwargs):
+        response = await original_complete(messages, **kwargs)
+        if 'implementation Agent' in messages[0].content:
+            response.content = json.dumps({'implementation': implementation, 'tests': tests})
+        return response
+
+    service.gateway.complete = complete
+    run = service.create('founder', 'synthetic-review-source-format').run
+    result = await service.execute(run.id)
+    assert result.status == 'waiting_approval'
+    assert len(service.gateway.calls) == 2
+    review_messages = service.gateway.calls[1][0]
+    metadata = json.loads(review_messages[1].content)
+    assert 'diff' not in metadata
+    assert len(metadata['tests']) == 3
+    assert all(gate['exit_code'] == 0 for gate in metadata['tests'])
+    assert len(review_messages) == 3
+    assert review_messages[2].content == numbered_source(ALLOWED[0], implementation) + '\n' + numbered_source(ALLOWED[1], tests)
+    record = json.loads(next(service.root.glob('*-evidence/result.json')).read_text())
+    assert git(repo, 'show', record['candidate_commit'] + ':' + ALLOWED[0]) == implementation
+    assert record['executor']['session_id'] != record['reviewer']['session_id']
+    assert metadata['patch_sha'] == record['patch_sha'] == record['review']['patch_sha']
     assert not product.get_run(run.id).run.metadata['delivery_approved']
