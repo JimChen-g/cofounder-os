@@ -1,0 +1,28 @@
+{
+  "restricted_request": {
+    "task": "Choose a route for private contract analysis",
+    "candidates": [
+      "local",
+      "human"
+    ],
+    "policy": {
+      "privacy": "restricted",
+      "allowed_providers": [
+        "local"
+      ]
+    }
+  },
+  "invalid_label_refusal": {
+    "action": "refuse",
+    "refusal_reason": "invalid_or_truncated_label",
+    "scores": null,
+    "score_kind": "unavailable"
+  },
+  "budget_refusal": {
+    "action": "refuse",
+    "refusal_reason": "request_policy_or_budget_denied",
+    "scores": null,
+    "score_kind": "unavailable"
+  },
+  "disclosure": "Response examples show relevant fields, not complete evidence receipts."
+}

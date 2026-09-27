@@ -74,7 +74,7 @@ def test_review_requires_evidence_and_severity():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode,expected', [('blocking','failed'), ('stale','failed'), ('malformed','failed'), ('passed','completed')])
+@pytest.mark.parametrize('mode,expected', [('blocking','failed'), ('stale','failed'), ('malformed','failed'), ('passed','waiting_approval')])
 async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, mode, expected):
     """Synthetic governance unit test; never represented as live Agent evidence."""
     import json
@@ -107,7 +107,7 @@ async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, m
     snapshot = service.create('founder','unit-'+mode)
     result = await service.execute(snapshot.run.id)
     assert result.status == expected
-    outputs = [a for a in result.snapshot.artifacts if a.name == 'engineering-result']
+    outputs = [a for a in result.snapshot.artifacts if a.name.startswith('engineering-result')]
     assert bool(outputs) == (mode == 'passed')
     assert all(t.attempt_count <= 2 for t in result.snapshot.tasks)
     from app.engineering.envelopes import validate_envelope

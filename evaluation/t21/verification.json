@@ -1,0 +1,14 @@
+{
+  "cpu_only": true,
+  "model_calls": 0,
+  "checks": {
+    "frozen_counts": true,
+    "train_only": true,
+    "exact_accepts": true,
+    "bool_not_int": true,
+    "extra_key_rejected": true,
+    "markdown_rejected": true,
+    "order_checked": true,
+    "wrong_value_rejected": true
+  }
+}

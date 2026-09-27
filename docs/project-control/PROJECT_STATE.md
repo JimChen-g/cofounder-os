@@ -152,3 +152,12 @@ Acceptance is evidence-driven in the current task's T11–T16 output package;
 T17 onward, mobile approvals and formal training/holdout evaluation remain pending.
 The authoritative Mac checkout is the September T07–T10 workspace supplied by the
 founder; the old Projects checkout remains untouched. July history is retained.
+
+## September T17–T22 implementation candidate
+
+Founder authorized version-bound delivery, bounded feedback repair, spark-decide,
+portable Skill and frozen small-data/paired evaluation work against `0dbf5e1`.
+Branch `feat/t17-t22`; implementation boundary is in `docs/t17-t22.md`.
+Acceptance follows the current stage's actual evidence; T23+ remain pending.
+The September source checkout and deploy-by-fixed-commit workflow supersede the
+historical July paths for this authorized stage, without modifying infrastructure.

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.product import _service
 from app.config import get_settings
+from app.services.engineering_delivery import DeliveryConflict, VersionAction, Feedback
 
 router = APIRouter(prefix='/api/engineering', tags=['engineering'])
 
@@ -71,6 +72,11 @@ def _runtime(request: Request) -> Any:
     root = Path(get_settings().product_data_dir)
     store = DispatchStore(root)
     store.interrupt(product)
+    # Repair acceptance is durable; never silently replay after a process restart.
+    for run in product.orchestration.repository.list_runs():
+        if run.metadata.get('delivery', {}).get('state') == 'repair_queued' and run.status == 'running':
+            product.orchestration.update_run_metadata(run.id, {'termination_reason': 'repair_interrupted_restart'}, actor='workflow-controller')
+            product.orchestration.fail_run(run.id, actor='workflow-controller', reason='repair_interrupted_restart')
     service = EngineeringService(product, Path(os.environ.get('ENGINEERING_REPO', str(Path(__file__).resolve().parents[2]))), Path(os.environ.get('ENGINEERING_WORKSPACE_ROOT', str(root / 'engineering-workspaces'))))
     existing = (store, service, product, set(), asyncio.Lock())
     request.app.state.engineering_runtime = existing
@@ -141,3 +147,93 @@ async def status(request: Request, run_id: UUID) -> Any:
     if snapshot.run.owner != request.state.principal:
         return JSONResponse({'error': 'not_found'}, status_code=404)
     return {'run_id': str(run_id), 'dispatch_status': row['state'], 'dispatch_error': row['error'], 'snapshot': snapshot.model_dump(mode='json')}
+
+
+
+
+@router.get('/runs/{run_id}/delivery')
+async def delivery(request: Request, run_id: UUID) -> Any:
+    store, service, product, tasks, lock = _runtime(request)
+    try:
+        snapshot = product.get_run(run_id)
+        if snapshot.run.owner != request.state.principal:
+            raise DeliveryConflict('not_found')
+        return {'run_id': str(run_id), 'delivery': snapshot.run.metadata.get('delivery'),
+                'termination_reason': snapshot.run.metadata.get('termination_reason')}
+    except (LookupError, DeliveryConflict):
+        return JSONResponse({'error': 'not_found'}, status_code=404)
+
+
+async def _act(request: Request, run_id: UUID, action: str, body: VersionAction) -> Any:
+    store, service, product, tasks, lock = _runtime(request)
+    controller = product.workflow_controller.engineering_delivery
+    try:
+        result = controller.act(run_id, request.state.principal, action, body)
+    except (ValueError, LookupError) as exc:
+        return JSONResponse({'error': str(exc) if isinstance(exc, DeliveryConflict) else 'not_found'}, status_code=409)
+    active = getattr(request.app.state, 'engineering_repairs', {})
+    request.app.state.engineering_repairs = active
+    if action == 'cancel' and str(run_id) in active:
+        active[str(run_id)].cancel()
+    if action == 'feedback' and result['action'] == 'feedback' and not result['duplicate']:
+        async def repair() -> None:
+            async with lock:
+                try:
+                    await service.execute(run_id)
+                except Exception as exc:
+                    product.orchestration.update_run_metadata(run_id, {'termination_reason': type(exc).__name__}, actor='workflow-controller')
+                    current = product.get_run(run_id).run
+                    if current.status == 'running':
+                        product.orchestration.fail_run(run_id, actor='workflow-controller', reason='repair_interrupted')
+        task = asyncio.create_task(repair())
+        tasks.add(task)
+        active[str(run_id)] = task
+        task.add_done_callback(tasks.discard)
+        task.add_done_callback(lambda finished: active.pop(str(run_id), None))
+    return result
+
+
+@router.post('/runs/{run_id}/approve')
+async def approve(request: Request, run_id: UUID, body: VersionAction) -> Any:
+    return await _act(request, run_id, 'approve', body)
+
+
+@router.post('/runs/{run_id}/reject')
+async def reject(request: Request, run_id: UUID, body: VersionAction) -> Any:
+    return await _act(request, run_id, 'reject', body)
+
+
+@router.post('/runs/{run_id}/cancel')
+async def cancel(request: Request, run_id: UUID, body: VersionAction) -> Any:
+    return await _act(request, run_id, 'cancel', body)
+
+
+@router.post('/runs/{run_id}/feedback')
+async def feedback(request: Request, run_id: UUID, body: Feedback) -> Any:
+    return await _act(request, run_id, 'feedback', body)
+
+
+@router.get('/runs/{run_id}/export')
+async def export(request: Request, run_id: UUID) -> Any:
+    store, service, product, tasks, lock = _runtime(request)
+    try:
+        return product.workflow_controller.engineering_delivery.export(run_id, request.state.principal)
+    except (ValueError, LookupError):
+        return JSONResponse({'error': 'delivery_not_approved'}, status_code=409)
+
+
+@router.get('/runs/{run_id}/candidate')
+async def candidate(request: Request, run_id: UUID) -> Any:
+    store, service, product, tasks, lock = _runtime(request)
+    controller = product.workflow_controller.engineering_delivery
+    try:
+        with controller.repository.transaction(run_id) as tx:
+            run = tx.get_run()
+            if run.owner != request.state.principal:
+                raise DeliveryConflict('not_found')
+            result = controller._result(tx, run.metadata['delivery'])
+            from app.engineering.workspace import git, ALLOWED
+            files = {path: git(service.repo, 'show', result['candidate_commit'] + ':' + path) for path in ALLOWED}
+            return {'result': result, 'files': files}
+    except (ValueError, LookupError):
+        return JSONResponse({'error': 'candidate_unavailable'}, status_code=409)

@@ -154,6 +154,7 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
 def test_ui_static_root_contains_only_reviewable_source_assets() -> None:
     assert {path.relative_to(STATIC_ROOT) for path in STATIC_ROOT.iterdir() if path.is_file()} == {
         Path("index.html"),
+        Path("engineering.html"), Path("engineering.css"), Path("engineering.js"),
         Path("app.css"),
         Path("app.js"),
     }

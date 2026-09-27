@@ -1,0 +1,327 @@
+[
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "typed-field-extraction-01",
+    "expected": {
+      "count": 0,
+      "name": "项目甲"
+    },
+    "family_id": "typed-field-extraction",
+    "privacy": "public",
+    "prompt": "从这条记录提取name和count，保留JSON类型，仅返回这两个键：{\"name\":\"项目甲\",\"count\":0,\"unused\":true}",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "typed-field-extraction-02",
+    "expected": {
+      "count": "03",
+      "name": "null"
+    },
+    "family_id": "typed-field-extraction",
+    "privacy": "public",
+    "prompt": "从这条记录提取name和count，保留JSON类型，仅返回这两个键：{\"name\":\"null\",\"count\":\"03\"}",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "typed-field-extraction-03",
+    "expected": {
+      "count": null,
+      "name": null
+    },
+    "family_id": "typed-field-extraction",
+    "privacy": "public",
+    "prompt": "从这条记录提取name和count，保留JSON类型，缺失字段用null：{\"name\":null}",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "integer-invoice-01",
+    "expected": {
+      "total_cents": 395
+    },
+    "family_id": "integer-invoice",
+    "privacy": "public",
+    "prompt": "仅返回JSON {\"total_cents\":整数}。单价125分，数量3，运费20分。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "integer-invoice-02",
+    "expected": {
+      "total_cents": 0
+    },
+    "family_id": "integer-invoice",
+    "privacy": "public",
+    "prompt": "仅返回JSON {\"total_cents\":整数}。单价250分，数量0，无运费。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "integer-invoice-03",
+    "expected": {
+      "total_cents": 900
+    },
+    "family_id": "integer-invoice",
+    "privacy": "public",
+    "prompt": "仅返回JSON {\"total_cents\":整数}。两项金额分别599分和401分，优惠100分。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "priority-triage-01",
+    "expected": {
+      "priority": "P0"
+    },
+    "family_id": "priority-triage",
+    "privacy": "public",
+    "prompt": "按规则分类：生产全站不可用=P0，部分功能不可用=P1，其余=P2。输入：生产全站无法登录且首页不可用。仅返回{\"priority\":\"标签\"}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "priority-triage-02",
+    "expected": {
+      "priority": "P1"
+    },
+    "family_id": "priority-triage",
+    "privacy": "public",
+    "prompt": "按规则分类：生产全站不可用=P0，部分功能不可用=P1，其余=P2。输入：生产搜索不可用，首页正常。仅返回{\"priority\":\"标签\"}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "priority-triage-03",
+    "expected": {
+      "priority": "P2"
+    },
+    "family_id": "priority-triage",
+    "privacy": "public",
+    "prompt": "按规则分类：生产全站不可用=P0，部分功能不可用=P1，其余=P2。输入：请求调整按钮配色，无功能异常。仅返回{\"priority\":\"标签\"}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "finite-code-result-01",
+    "expected": {
+      "result": [
+        1,
+        3,
+        5
+      ]
+    },
+    "family_id": "finite-code-result",
+    "privacy": "public",
+    "prompt": "不执行代码，推导Python表达式 list(range(1,6,2))。仅返回{\"result\":结果}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "finite-code-result-02",
+    "expected": {
+      "result": [
+        9
+      ]
+    },
+    "family_id": "finite-code-result",
+    "privacy": "public",
+    "prompt": "不执行代码，推导Python表达式 [x*x for x in [-2,0,3] if x > 0]。仅返回{\"result\":结果}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "finite-code-result-03",
+    "expected": {
+      "result": ""
+    },
+    "family_id": "finite-code-result",
+    "privacy": "public",
+    "prompt": "不执行代码，推导Python表达式 \"abc\"[1:1]。仅返回{\"result\":结果}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "train"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "dependency-readiness-01",
+    "expected": {
+      "ready": [
+        "A"
+      ]
+    },
+    "family_id": "dependency-readiness",
+    "privacy": "public",
+    "prompt": "任务A无依赖，B依赖A，C依赖B。完成集合为空。返回未完成且依赖全完成的任务，按字母排序：{\"ready\":数组}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "calibration"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "dependency-readiness-02",
+    "expected": {
+      "ready": [
+        "B"
+      ]
+    },
+    "family_id": "dependency-readiness",
+    "privacy": "public",
+    "prompt": "任务A无依赖，B依赖A，C依赖B。完成集合为A。返回未完成且依赖全完成的任务，按字母排序：{\"ready\":数组}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "calibration"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "dependency-readiness-03",
+    "expected": {
+      "ready": []
+    },
+    "family_id": "dependency-readiness",
+    "privacy": "public",
+    "prompt": "任务A依赖B，B依赖A。完成集合为空。返回未完成且依赖全完成的任务，按字母排序：{\"ready\":数组}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "calibration"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "duplicate-key-events-01",
+    "expected": {
+      "values": [
+        1,
+        3
+      ]
+    },
+    "family_id": "duplicate-key-events",
+    "privacy": "public",
+    "prompt": "按event_id去重，保留首次值和出现顺序。输入[{\"event_id\":\"a\",\"v\":1},{\"event_id\":\"a\",\"v\":2},{\"event_id\":\"b\",\"v\":3}]。仅返回{\"values\":值数组}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "calibration"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "duplicate-key-events-02",
+    "expected": {
+      "values": []
+    },
+    "family_id": "duplicate-key-events",
+    "privacy": "public",
+    "prompt": "按event_id去重，保留首次值和出现顺序。输入[]。仅返回{\"values\":值数组}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "calibration"
+  },
+  {
+    "allowed_providers": [
+      "local",
+      "step"
+    ],
+    "case_id": "duplicate-key-events-03",
+    "expected": {
+      "values": [
+        0,
+        0
+      ]
+    },
+    "family_id": "duplicate-key-events",
+    "privacy": "public",
+    "prompt": "按event_id去重，保留首次值和出现顺序。输入[{\"event_id\":\"b\",\"v\":0},{\"event_id\":\"a\",\"v\":0}]。仅返回{\"values\":值数组}。",
+    "scorer_version": "json-exact-types-v1",
+    "source_kind": "synthetic",
+    "source_ref": "t21-authored-fixtures-v1",
+    "split": "calibration"
+  }
+]
