@@ -28,7 +28,7 @@ class SyntheticGateway(GatewayClient):
         if 'implementation Agent' in messages[0].content:
             self.implementations += 1
             revision = 1 if self.same_patch else self.implementations
-            content = {'implementation': f'# synthetic revision {revision}\n', 'tests': '# fixture\n'}
+            content = ({'old': '# synthetic revision 1', 'new': f'# synthetic revision {revision}'} if 'bounded repair' in messages[0].content else {'implementation': f'# synthetic revision {revision}\n', 'tests': '# fixture\n'})
         else:
             self.reviews += 1
             content = {'patch_sha': json.loads(messages[1].content)['patch_sha'],
@@ -382,3 +382,66 @@ async def test_initial_running_interrupt_cancels_active_api_task(env):
     assert current.run.status == 'cancelled'
     assert current.run.metadata['termination_reason'] == 'cancelled'
     assert not any(a.name.startswith('engineering-result') for a in current.artifacts)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('edit', [
+    {'old': 'absent anchor', 'new': 'replacement'},
+    {'old': 'i', 'new': 'replacement'},
+    {'old': '', 'new': 'replacement'},
+    {'old': '# synthetic revision 1', 'new': 'replacement', 'path': '../secret'},
+])
+async def test_repair_invalid_anchor_or_extra_scope_fails_closed(env, edit):
+    p, s, c = env
+    rid = await ready(env)
+    original = p.get_run(rid).run.metadata['delivery'].copy()
+    async def invalid_edit(messages, **kwargs):
+        return GatewayCompletion(content=json.dumps(edit), requested_model='synthetic')
+    s.gateway.complete = invalid_edit
+    c.act(rid, 'founder', 'feedback', feedback(p, rid))
+    assert (await s.execute(rid)).status == 'failed'
+    current = p.get_run(rid)
+    assert current.run.metadata['delivery']['patch_sha'] == original['patch_sha']
+    assert current.run.metadata['delivery']['revision'] == original['revision']
+    assert sum(a.name.startswith('engineering-result') for a in current.artifacts) == 1
+    assert s.gateway.reviews == 1
+    assert all(t.attempt_count <= 2 for t in current.tasks)
+    with pytest.raises(DeliveryConflict):
+        c.export(rid, 'founder')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('target_index', [0, 1])
+async def test_bounded_repair_preserves_untargeted_file_and_constraints(env, target_index):
+    from app.engineering.workspace import git
+    p, s, c = env
+    rid = await ready(env)
+    before = p.get_run(rid).run.metadata['delivery'].copy()
+    initial_files = {path: git(s.repo, 'show', before['candidate_commit'] + ':' + path) for path in ALLOWED}
+    target = ALLOWED[target_index]
+    original_complete = s.gateway.complete
+    async def minimal_edit(messages, **kwargs):
+        policy = kwargs['policy']
+        assert policy.max_attempts == 4 and policy.max_total_tokens == 100000
+        assert policy.timeout_seconds == 600
+        if 'bounded repair' in messages[0].content:
+            assert kwargs['max_tokens'] == 1200
+            return GatewayCompletion(content=json.dumps({'old': initial_files[target],
+                'new': initial_files[target] + '# bounded synthetic change\n'}), requested_model='synthetic')
+        assert kwargs['max_tokens'] == 1500
+        return await original_complete(messages, **kwargs)
+    s.gateway.complete = minimal_edit
+    c.act(rid, 'founder', 'feedback', feedback(p, rid, path=target))
+    assert (await s.execute(rid)).status == 'waiting_approval'
+    current = p.get_run(rid).run
+    after = current.metadata['delivery']
+    assert after['base_sha'] == before['base_sha']
+    assert after['patch_sha'] != before['patch_sha']
+    assert after['revision'] == before['revision'] + 1
+    assert not current.metadata['delivery_approved']
+    other = ALLOWED[1 - target_index]
+    assert git(s.repo, 'show', after['candidate_commit'] + ':' + other) == initial_files[other]
+    assert git(s.repo, 'show', after['candidate_commit'] + ':' + target) == initial_files[target] + '# bounded synthetic change\n'
+    assert s.gateway.reviews == 2
+    with pytest.raises(DeliveryConflict):
+        c.export(rid, 'founder')
