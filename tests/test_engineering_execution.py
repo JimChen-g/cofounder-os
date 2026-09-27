@@ -2,6 +2,8 @@ import subprocess
 
 import pytest
 
+from tests.engineering_review_helpers import REVIEW_KEYS, synthetic_review_checks
+
 from app.engineering.workspace import ALLOWED, Workspace, git
 from app.engineering.service import Review
 
@@ -69,7 +71,7 @@ def test_shell_command_rejected(repo, tmp_path):
 
 def test_review_requires_evidence_and_severity():
     with pytest.raises(ValueError):
-        Review.model_validate({'patch_sha': 'a', 'conclusion': 'passed',
+        Review.model_validate({'patch_sha': 'a', 'checks': {key: {'path': ALLOWED[0], 'line': 1, 'evidence': '# fixture', 'satisfied': True} for key in REVIEW_KEYS}, 'conclusion': 'passed',
                               'findings': [{'path': 'x', 'line': 1}]})
 
 
@@ -91,7 +93,7 @@ async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, m
             else:
                 payload = json.loads(messages[1].content)
                 content = json.dumps({'patch_sha': 'stale' if mode == 'stale' else payload['patch_sha'],
-                    'conclusion': 'passed', 'findings': [] if mode != 'blocking' else [{
+                    'checks': synthetic_review_checks(messages), 'conclusion': 'passed', 'findings': [] if mode != 'blocking' else [{
                     'path':ALLOWED[0], 'line':1, 'trigger':'synthetic invalid behavior',
                     'impact':'wrong result', 'evidence':'injected unit-test finding', 'severity':'blocking'}]})
             if mode == 'malformed' and 'implementation Agent' not in system:

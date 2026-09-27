@@ -5,10 +5,11 @@ import pytest
 
 from app.clients.gateway import GatewayClient, GatewayCompletion
 from app.config import Settings
-from app.engineering.service import EngineeringService, numbered_source
+from app.engineering.service import EngineeringService, TEST_FIXTURE_HELPER, numbered_source
 from app.engineering.workspace import ALLOWED, Workspace, git
 from app.services.product_api import build_product_api_service
 from tests.test_engineering_execution import repo as engineering_repo_fixture
+from tests.engineering_review_helpers import synthetic_review_checks
 
 repo = engineering_repo_fixture
 
@@ -29,7 +30,8 @@ class RetryGateway(GatewayClient):
             content = {'implementation': '# broken\n' if self.path == ALLOWED[0] else '# preserve implementation\n',
                        'tests': '# broken\n' if self.path == ALLOWED[1] else '# preserve tests\n'}
         else:
-            content = {'patch_sha': json.loads(messages[1].content)['patch_sha'],
+            content = {'checks': synthetic_review_checks(messages),
+                       'patch_sha': json.loads(messages[1].content)['patch_sha'],
                        'conclusion': 'passed', 'findings': []}
         return GatewayCompletion(content=json.dumps(content), requested_model='synthetic')
 
@@ -76,7 +78,7 @@ async def test_failed_check_retry_preserves_other_file_and_reruns_all_gates(repo
     assert len([workspace for workspace, _ in gates if workspace == repaired['workspace_id']]) == 3
     assert repaired['executor']['session_id'] != repaired['reviewer']['session_id']
     assert len(service.gateway.calls) == 3
-    assert [kwargs['max_tokens'] for _, kwargs in service.gateway.calls] == [5500, 1600, 1500]
+    assert [kwargs['max_tokens'] for _, kwargs in service.gateway.calls] == [5500, 1600, 3000]
     assert 'synthetic fixture failure' in service.gateway.calls[1][0][1].content
     assert not product.get_run(run.id).run.metadata['delivery_approved']
 
@@ -111,7 +113,8 @@ async def test_reviewer_counterexample_is_bound_to_retry_and_independently_revie
         if 'independent code Reviewer' in messages[0].content:
             reviews.append(json.loads(messages[1].content)['patch_sha'])
             if len(reviews) == 1:
-                response.content = json.dumps({'patch_sha': reviews[-1], 'conclusion': 'changes_requested',
+                response.content = json.dumps({'checks': synthetic_review_checks(messages),
+                    'patch_sha': reviews[-1], 'conclusion': 'changes_requested',
                     'findings': [{'path': ALLOWED[0], 'line': 1, 'severity': 'blocking',
                                   'trigger': 'synthetic counterexample', 'impact': 'wrong result',
                                   'evidence': 'synthetic exact actual versus required result'}]})
@@ -151,7 +154,8 @@ async def test_one_retry_sees_and_repairs_independent_failures_from_all_gates(re
         elif 'implementation Agent' in messages[0].content:
             content = {'implementation': '# input order\n', 'tests': '# same filename\n'}
         else:
-            content = {'patch_sha': json.loads(messages[1].content)['patch_sha'],
+            content = {'checks': synthetic_review_checks(messages),
+                       'patch_sha': json.loads(messages[1].content)['patch_sha'],
                        'conclusion': 'passed', 'findings': []}
         return GatewayCompletion(content=json.dumps(content), requested_model='synthetic')
 
@@ -265,3 +269,94 @@ async def test_reviewer_receives_plain_numbered_immutable_sources_separate_from_
     assert record['executor']['session_id'] != record['reviewer']['session_id']
     assert metadata['patch_sha'] == record['patch_sha'] == record['review']['patch_sha']
     assert not product.get_run(run.id).run.metadata['delivery_approved']
+
+
+def test_public_spec_fixture_helper_has_valid_distinct_defaults_and_explicit_overrides():
+    """Execute only the app-owned setup template, never model-generated code."""
+    namespace = {}
+    exec(TEST_FIXTURE_HELPER, namespace)
+    material = namespace['material']
+    entries = [material(index) for index in range(3)]
+    assert [entry['material_id'] for entry in entries] == [
+        'requirement_document', 'accident_scene_image', 'accident_damage_image']
+    assert [entry['content_type'] for entry in entries] == ['application/pdf', 'image/png', 'image/png']
+    assert len({entry['filename'] for entry in entries}) == 3
+    assert material(0, 'override', 'wrong/mime') == {
+        'material_id': 'requirement_document', 'filename': 'override', 'content_type': 'wrong/mime'}
+    assert material(index=1, filename='', content_type='') == {
+        'material_id': 'accident_scene_image', 'filename': '', 'content_type': ''}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['missing', 'extra', 'wrong_line', 'wrong_evidence', 'blank_evidence', 'false', 'string_boolean'])
+async def test_v2_review_cannot_pass_with_unbound_or_unsatisfied_checks(repo, tmp_path, monkeypatch, mode):
+    product, service, _ = environment(repo, tmp_path, monkeypatch, ALLOWED[0])
+    original_complete = service.gateway.complete
+
+    async def complete(messages, **kwargs):
+        response = await original_complete(messages, **kwargs)
+        if 'independent code Reviewer' in messages[0].content:
+            assert kwargs['response_schema'] == 'engineering_review_v2'
+            review = json.loads(response.content)
+            check = review['checks']['input_shape']
+            if mode == 'missing':
+                del review['checks']['tests']
+            elif mode == 'extra':
+                review['checks']['other'] = dict(check)
+            elif mode == 'wrong_line':
+                check['line'] = 999
+            elif mode == 'wrong_evidence':
+                check['evidence'] = '# invented source quotation'
+            elif mode == 'blank_evidence':
+                check['evidence'] = ' '
+            elif mode == 'false':
+                check['satisfied'] = False
+            else:
+                check['satisfied'] = 'true'
+            response.content = json.dumps(review)
+        return response
+
+    service.gateway.complete = complete
+    monkeypatch.setattr(Workspace, 'test', lambda workspace, argv, image: {
+        'exit_code': 0, 'timed_out': False, 'patch_sha': workspace.verify(), 'argv': argv,
+        'log': 'synthetic pass', 'gate': {'passed': True}, 'cwd': 'synthetic-sandbox',
+        'duration_seconds': 0.001})
+    run = service.create('founder', 'synthetic-invalid-v2-review').run
+    result = await service.execute(run.id)
+    assert result.status == 'failed'
+    assert result.snapshot.tasks[0].attempt_count == 2
+    assert len(service.gateway.calls) == 4
+    for path in service.root.glob('*-evidence/result.json'):
+        record = json.loads(path.read_text())
+        assert record['review_schema'] == 'engineering_review_v2'
+        assert len(record['tests']) == 3
+        assert all(gate['exit_code'] == 0 for gate in record['tests'])
+    assert 'delivery' not in product.get_run(run.id).run.metadata
+    assert not product.get_run(run.id).run.metadata['delivery_approved']
+
+
+@pytest.mark.asyncio
+async def test_truncated_review_is_labeled_as_adapter_failure_not_model_verdict(repo, tmp_path, monkeypatch):
+    _, service, _ = environment(repo, tmp_path, monkeypatch, ALLOWED[0])
+    original_complete = service.gateway.complete
+
+    async def complete(messages, **kwargs):
+        response = await original_complete(messages, **kwargs)
+        if 'independent code Reviewer' in messages[0].content:
+            response.content = '{"checks":'
+            response.finish_reason = 'length'
+        return response
+
+    service.gateway.complete = complete
+    monkeypatch.setattr(Workspace, 'test', lambda workspace, argv, image: {
+        'exit_code': 0, 'timed_out': False, 'patch_sha': workspace.verify(), 'argv': argv,
+        'log': 'synthetic pass', 'gate': {'passed': True}, 'cwd': 'synthetic-sandbox',
+        'duration_seconds': 0.001})
+    run = service.create('founder', 'synthetic-truncated-review').run
+    result = await service.execute(run.id)
+    assert result.status == 'failed'
+    for path in service.root.glob('*-evidence/result.json'):
+        record = json.loads(path.read_text())
+        assert record['review_status_source'] == 'adapter_output_truncated'
+        assert record['reviewer']['content'] == '{"checks":'
+        assert record['reviewer']['finish_reason'] == 'length'

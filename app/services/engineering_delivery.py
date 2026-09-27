@@ -89,6 +89,18 @@ class EngineeringDeliveryController:
     @staticmethod
     def _checks(result: dict[str, Any]) -> None:
         patch = result['patch_sha']
+        if ('review_schema' in result and result['review_schema'] not in
+                ('engineering_review_v1', 'engineering_review_v2')):
+            raise DeliveryConflict('checks_not_current')
+        if result.get('review_schema') == 'engineering_review_v2':
+            checks = result.get('review', {}).get('checks')
+            required = {'input_shape', 'material_rules', 'filenames',
+                        'output_contract', 'side_effects', 'tests'}
+            if (not isinstance(checks, dict) or set(checks) != required
+                    or any(not isinstance(check, dict)
+                           or type(check.get('satisfied')) is not bool
+                           or not check['satisfied'] for check in checks.values())):
+                raise DeliveryConflict('checks_not_current')
         if (result.get('state') != 'passed_checks_pending_delivery_approval'
             or len(result.get('tests', [])) != 3
             or any(t.get('patch_sha') != patch or t.get('exit_code') != 0 or t.get('timed_out')

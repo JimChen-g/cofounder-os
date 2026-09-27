@@ -68,7 +68,33 @@ def test_gateway_client_normalizes_completion_metadata():
     assert result.selected_model == "Qwen3"
     assert result.routing_reason == "Local planning."
     assert result.request_id == "req-123"
+    assert result.finish_reason is None
     assert result.usage["total_tokens"] == 15
+
+
+@pytest.mark.parametrize('upstream_reason,expected', [
+    ('length', 'length'), ('stop', 'stop'), (None, None), (42, None), ({'reason': 'length'}, None),
+])
+def test_gateway_client_preserves_string_finish_reason_without_repair(upstream_reason, expected):
+    calls = []
+
+    async def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json={
+            'choices': [{'message': {'role': 'assistant', 'content': '{"checks":'},
+                         'finish_reason': upstream_reason}],
+            'usage': {'prompt_tokens': 120, 'completion_tokens': 50, 'total_tokens': 170},
+            'cofounder_os': {'selected_provider': 'qwen', 'fallback_used': False},
+        })
+
+    client = GatewayClient('http://gateway.test', transport=httpx.MockTransport(handler))
+    result = asyncio.run(client.complete([ChatMessage(role='user', content='Review the patch.')]))
+    assert result.finish_reason == expected
+    assert result.content == '{"checks":'
+    assert result.usage == {'prompt_tokens': 120, 'completion_tokens': 50, 'total_tokens': 170}
+    assert result.selected_provider == 'qwen'
+    assert result.raw_metadata == {'selected_provider': 'qwen', 'fallback_used': False}
+    assert len(calls) == 1
 
 
 def test_gateway_client_rejects_missing_message_content():

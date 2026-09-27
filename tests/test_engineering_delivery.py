@@ -5,6 +5,8 @@ from uuid import uuid4
 
 import pytest
 
+from tests.engineering_review_helpers import synthetic_review_checks
+
 from app.clients.gateway import GatewayClient, GatewayCompletion
 from app.config import Settings
 from app.domain import utc_now
@@ -32,7 +34,7 @@ class SyntheticGateway(GatewayClient):
         else:
             self.reviews += 1
             content = {'patch_sha': json.loads(messages[1].content)['patch_sha'],
-                       'conclusion': 'passed', 'findings': []}
+                       'checks': synthetic_review_checks(messages), 'conclusion': 'passed', 'findings': []}
         return GatewayCompletion(content=json.dumps(content), requested_model='synthetic')
 
 
@@ -428,7 +430,7 @@ async def test_bounded_repair_preserves_untargeted_file_and_constraints(env, tar
             assert kwargs['max_tokens'] == 1200
             return GatewayCompletion(content=json.dumps({'old': initial_files[target],
                 'new': initial_files[target] + '# bounded synthetic change\n'}), requested_model='synthetic')
-        assert kwargs['max_tokens'] == 1500
+        assert kwargs['max_tokens'] == 3000
         return await original_complete(messages, **kwargs)
     s.gateway.complete = minimal_edit
     c.act(rid, 'founder', 'feedback', feedback(p, rid, path=target))

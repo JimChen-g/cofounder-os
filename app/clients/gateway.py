@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import ChatMessage, Provider
+from app.response_schemas import ResponseSchema
 from app.request_constraints import RequestPolicy
 from app.policy.request_policy import active_budget
 
@@ -38,6 +39,7 @@ class GatewayCompletion(BaseModel):
     routing_reason: str | None = None
     fallback_used: bool = False
     request_id: str | None = None
+    finish_reason: str | None = None
     usage: dict[str, Any] = Field(default_factory=dict)
     raw_metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -95,7 +97,7 @@ class GatewayClient:
         temperature: float = 0.1,
         max_tokens: int = 1800,
         policy: RequestPolicy | None = None,
-        response_schema: Literal["engineering_review_v1"] | None = None,
+        response_schema: ResponseSchema | None = None,
     ) -> GatewayCompletion:
         """Send one non-streaming Chat Completions request."""
 
@@ -237,6 +239,7 @@ class GatewayClient:
         )
         if request_id is not None:
             request_id = str(request_id)
+        finish_reason = first_choice.get("finish_reason")
 
         return GatewayCompletion(
             content=content.strip(),
@@ -258,6 +261,7 @@ class GatewayClient:
             ),
             fallback_used=fallback_used,
             request_id=request_id,
+            finish_reason=finish_reason if isinstance(finish_reason, str) else None,
             usage=usage,
             raw_metadata=metadata,
         )
