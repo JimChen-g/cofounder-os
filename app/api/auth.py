@@ -42,7 +42,8 @@ async def authenticate(request: Request, call_next: Callable[[Request], Awaitabl
                 and same(request.headers.get('x-feishu-tenant'), tenant)
                 and same(request.headers.get('x-feishu-user'), settings.feishu_open_id)):
             return JSONResponse({'error': 'identity_not_paired'}, status_code=403)
-        if path not in ('/api/bridge/receipt', '/api/health'):
+        engineering_allowed = (request.method == 'POST' and path == '/api/engineering/runs') or (request.method == 'GET' and path.startswith('/api/engineering/runs/') and len(path.split('/')) == 5)
+        if path not in ('/api/bridge/receipt', '/api/health') and not engineering_allowed:
             return JSONResponse({'error': 'bridge_business_actions_not_enabled'}, status_code=403)
     request.state.principal = settings.product_founder_id
     run = None

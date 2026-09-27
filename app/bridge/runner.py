@@ -2,7 +2,7 @@
 
 Run only one instance for the paired application. Config is a mode-0600 JSON
 file outside the checkout, containing app_id, app_secret, tenant, open_id,
-product_url, bridge_token and state_dir. No task creation or approval here.
+product_url, bridge_token and state_dir. Only supported engineering creation/query.
 """
 from __future__ import annotations
 
@@ -39,6 +39,29 @@ def validate_event(data: Any, config: dict[str, Any]) -> dict[str, str] | None:
             'message_id': message.message_id, 'event_id': data.header.event_id, 'text': text}
 
 
+def business_reply(payload: dict[str, str], config: dict[str, Any], client: httpx.Client, headers: dict[str, str]) -> str:
+    text = payload['text'].strip()
+    if text == '创建 材料检查':
+        request_id = hashlib.sha256(('/'.join(payload[k] for k in ('tenant', 'app', 'message_id'))).encode()).hexdigest()
+        response = client.post(config['product_url'] + '/api/engineering/runs', headers=headers,
+                               json={'request_id': request_id, 'task': 'materials_completeness'})
+        response.raise_for_status()
+        result = response.json()
+        return '材料检查任务已受理。Run ID: ' + str(result['run_id']) + '。查询状态请发送：查询 ' + str(result['run_id'])
+    if text.startswith('查询 '):
+        try:
+            run_id = str(uuid.UUID(text[3:].strip()))
+        except ValueError:
+            return 'Run ID 格式无效。请发送：查询 <Run UUID>'
+        response = client.get(config['product_url'] + '/api/engineering/runs/' + run_id, headers=headers)
+        if response.status_code == 404:
+            return '未找到本人可查询的任务。'
+        response.raise_for_status()
+        result = response.json()
+        return 'Run ID: ' + run_id + '。Controller 状态：' + str(result['snapshot']['run']['status']) + '；执行状态：' + str(result['dispatch_status']) + '。检查完成不代表交付已批准。'
+    return '仅支持：创建 材料检查；查询 <Run UUID>。此入口不执行审批或其他任务。'
+
+
 def process_one(inbox: Inbox, config: dict[str, Any], client: httpx.Client) -> bool:
     row = inbox.claim()
     if row is None:
@@ -54,12 +77,11 @@ def process_one(inbox: Inbox, config: dict[str, Any], client: httpx.Client) -> b
         receipt.raise_for_status()
         facts = receipt.json()
         inbox.record(key, service_received_at=facts['service_received_at'])
-        # This is a receipt worker, not a business Agent. agent_consumed_at stays null.
+        reply = business_reply(payload, config, client, headers)
         auth = client.post('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
                            json={'app_id': config['app_id'], 'app_secret': config['app_secret']})
         auth.raise_for_status()
         token = auth.json()['tenant_access_token']
-        reply = '消息已持久化并由服务受理。本轮仅验证桥接收发，尚未创建任务或执行审批；已读状态未知。'
         body = {'msg_type': 'text', 'content': json.dumps({'text': reply}, ensure_ascii=False),
                 'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, key))}
         # Stable UUID on bounded transport retry; never replay the business consumer.

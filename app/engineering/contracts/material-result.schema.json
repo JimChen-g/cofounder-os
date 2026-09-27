@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "insurance-materials-result-0.1"
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "incomplete"
+      ]
+    },
+    "missing_material_ids": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "requirement_document",
+          "accident_scene_image",
+          "accident_damage_image"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "present_material_ids": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "requirement_document",
+          "accident_scene_image",
+          "accident_damage_image"
+        ]
+      },
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "status",
+    "missing_material_ids",
+    "present_material_ids"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed manifest-only output"
+}

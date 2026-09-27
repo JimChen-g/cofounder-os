@@ -17,6 +17,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.auth import authenticate
 from app.api.evaluation import router as evaluation_router
+from app.api.engineering import router as engineering_router
 from app.api.insurance_poc import router as insurance_poc_router
 from app.api.product import router as product_router
 from app.api.routes import router as api_router
@@ -117,10 +118,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry.register(step)
         logger.info("Registered provider: %s", step.name)
 
+    import os
+    if os.environ.get("ENGINEERING_REPO"):
+        from app.api.engineering import _runtime
+        _runtime(Request({"type": "http", "app": app}))
+
     logger.info("Gateway v%s ready", settings.app_version)
 
     yield
 
+    runtime = getattr(app.state, "engineering_runtime", None)
+    if runtime is not None:
+        import asyncio
+        store, _, _, tasks, _ = runtime
+        for task in list(tasks):
+            task.cancel()
+        await asyncio.gather(*list(tasks), return_exceptions=True)
+        store.lock.close()
+        del app.state.engineering_runtime
     logger.info("Gateway shutting down")
 
 
@@ -198,6 +213,7 @@ app.middleware("http")(authenticate)
 app.include_router(api_router)
 app.include_router(product_router)
 app.include_router(evaluation_router)
+app.include_router(engineering_router)
 app.include_router(insurance_poc_router)
 app.include_router(ui_router)
 app.mount(
