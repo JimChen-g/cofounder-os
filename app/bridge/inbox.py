@@ -25,6 +25,9 @@ class Inbox:
                 platform_accepted_at TEXT, reply_message_id TEXT,
                 attempts INTEGER NOT NULL DEFAULT 0, error TEXT,
                 read_state TEXT NOT NULL DEFAULT 'unknown')''')
+            columns = {row[1] for row in db.execute('PRAGMA table_info(inbox)')}
+            if 'export_message_id' not in columns:
+                db.execute('ALTER TABLE inbox ADD COLUMN export_message_id TEXT')
             # An interrupted consumer is never silently re-executed.
             db.execute("UPDATE inbox SET state='uncertain', error='interrupted_after_claim' WHERE state='processing'")
         path.chmod(0o600)
@@ -60,7 +63,7 @@ class Inbox:
             return dict(row)
 
     def record(self, key: str, **facts: Any) -> None:
-        allowed = {'state', 'service_received_at', 'agent_consumed_at', 'replied_at', 'platform_accepted_at', 'reply_message_id', 'error'}
+        allowed = {'state', 'service_received_at', 'agent_consumed_at', 'replied_at', 'platform_accepted_at', 'reply_message_id', 'error', 'export_message_id'}
         if not facts.keys() <= allowed:
             raise ValueError('unknown_fact')
         with self.connect() as db:
@@ -68,4 +71,4 @@ class Inbox:
 
     def facts(self) -> list[dict[str, Any]]:
         with self.connect() as db:
-            return [dict(row) for row in db.execute('SELECT message_key,state,stored_at,service_received_at,agent_consumed_at,replied_at,platform_accepted_at,attempts,error,read_state FROM inbox')]
+            return [dict(row) for row in db.execute('SELECT message_key,state,stored_at,service_received_at,agent_consumed_at,replied_at,platform_accepted_at,attempts,error,read_state,export_message_id FROM inbox')]

@@ -218,3 +218,7 @@ paired notifications and conservative shadow quality prediction. See
 pending the current stage output receipts. The original expired/unapproved Run
 and its exhausted attempt count are preserved. This stage follows the September
 PR-first/fixed-commit release authorization rather than the historical July order.
+
+T26 export follow-up: provide the actual approved JSON as a Feishu attachment,
+with a backwards-compatible inbox column retaining its platform message ID.
+Metadata-only replies are not claimed as a downloadable phone delivery.
