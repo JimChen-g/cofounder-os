@@ -22,7 +22,13 @@ def repo(tmp_path):
 def test_workspace_scope_retention_and_cleanup(repo, tmp_path):
     workspace = Workspace(repo, tmp_path / 'tasks', 'HEAD')
     workspace.apply_files({path: '# fixture only\n' for path in ALLOWED})
-    assert len(workspace.verify()) == 64
+    digest = workspace.verify()
+    assert len(digest) == 64
+    commit = workspace.snapshot_commit()
+    assert len(commit) == 40
+    assert git(repo, "rev-parse", commit + "^").strip() == workspace.base
+    assert git(repo, "show", commit + ":" + ALLOWED[0]) == "# fixture only\n"
+    assert workspace.verify() == digest
     assert not (repo / ALLOWED[0]).exists()
     with pytest.raises(ValueError, match='active'):
         workspace.cleanup()
@@ -94,10 +100,31 @@ async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, m
     service = EngineeringService(product, repo, tmp_path/'tasks')
     service.gateway = SyntheticGateway('http://invalid')
     monkeypatch.setattr(Workspace, 'test', lambda self, argv, image: {
-        'exit_code':0,'timed_out':False,'patch_sha':self.verify(),'log':'synthetic gate fixture'})
+        'exit_code':0,'timed_out':False,'patch_sha':self.verify(),'log':'synthetic gate fixture',
+        'argv':argv,'cwd':'synthetic-sandbox','duration_seconds':0.001})
     snapshot = service.create('founder','unit-'+mode)
     result = await service.execute(snapshot.run.id)
     assert result.status == expected
     outputs = [a for a in result.snapshot.artifacts if a.name == 'engineering-result']
     assert bool(outputs) == (mode == 'passed')
     assert all(t.attempt_count <= 2 for t in result.snapshot.tasks)
+    from app.engineering.envelopes import validate_envelope
+    evidence_files = list((tmp_path/'tasks').glob('*-evidence/*-envelope.json'))
+    assert evidence_files
+    for path in evidence_files:
+        envelope = json.loads(path.read_text())
+        validate_envelope(envelope)
+        assert len(envelope['artifact_version']['patch_sha']) == 40
+        if envelope['kind'] == 'execution_result':
+            assert envelope['payload']['status'] == ('succeeded' if mode == 'passed' else 'failed')
+
+
+def test_wrapper_normalization_never_changes_source_strings():
+    import json
+    from app.engineering.service import normalize_envelope
+    source = 'x = ",}"; y = ",]"; z = "quoted\\\"",'
+    raw = json.dumps({'implementation':source,'tests':'# test'})
+    envelope = '```json\n' + raw[:-1] + ',}\n```'
+    normalized, changes = normalize_envelope(envelope)
+    assert json.loads(normalized)['implementation'] == source
+    assert changes == ['json_fence_removed','trailing_comma_removed']

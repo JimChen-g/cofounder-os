@@ -22,6 +22,7 @@ from app.services.orchestration import RunSnapshot
 from app.services.product_api import ProductAPIService
 from app.services.workflow_controller import WorkflowRunResult
 from .workspace import ALLOWED, Workspace, git
+from .envelopes import engineering_envelopes
 
 CONTRACT = '''Implement check_material_completeness(payload: dict) -> dict in
 app/insurance_poc/materials.py, with meaningful pytest tests in
@@ -35,13 +36,44 @@ accident_scene_image (image/png), accident_damage_image (image/png).
 Return exact keys schema_version="insurance-materials-result-0.1", status complete
 or incomplete, present_material_ids, missing_material_ids, in fixed required order.
 Complete iff all three supplied. Empty list valid. Do not mutate input.
-Invalid input raises ValueError: missing/extra fields, bad types (including non-dict),
+Error-message wording is not prescribed. Invalid input raises ValueError: missing/extra fields, bad types (including non-dict),
 unknown/duplicate ID, duplicate filename, blank or whitespace-only filename (including spaces/tabs) or filename with / or backslash,
 wrong slot MIME. Exact MIME only; extension irrelevant. No file IO or network.
+Use the exact full material IDs in test fixtures too; abbreviations such as req are invalid.
 Tests must cover complete, missing, empty, reordered, invalid structures/types,
 duplicates, MIME, path filenames, input immutability. Use only stdlib and pytest.
 Do not execute shell or request tools; return file contents as JSON.
 '''
+
+
+def normalize_envelope(raw: str) -> tuple[str, list[str]]:
+    """Normalize wrapper syntax only; never alter generated source string contents."""
+    value = raw.strip()
+    changes = []
+    if value.startswith('```json\n') and value.endswith('\n```'):
+        value = value[8:-4]
+        changes.append('json_fence_removed')
+    output = []
+    quoted = False
+    escaped = False
+    for index, char in enumerate(value):
+        if quoted:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                quoted = False
+        elif char == '"':
+            quoted = True
+            output.append(char)
+        elif char == ',' and value[index+1:].lstrip().startswith(('}', ']')):
+            if 'trailing_comma_removed' not in changes:
+                changes.append('trailing_comma_removed')
+        else:
+            output.append(char)
+    return ''.join(output), changes
 
 
 class Patch(BaseModel):
@@ -99,7 +131,8 @@ class EngineeringService:
             objective='保险POC材料完整性检查：真实补丁、测试与独立审查',
             actor=owner, owner=owner,
             metadata={'engineering': True, 'engineering_request_id': request_id, 'base_sha': base,
-                      'engineering_budget_id': key, 'contract_sha': hashlib.sha256(CONTRACT.encode()).hexdigest(),
+                      'engineering_budget_id': key, 'contract_sha': hashlib.sha256((Path(__file__).parent / 'contracts/material-cases.json').read_bytes()).hexdigest(),
+                      'prompt_sha': hashlib.sha256(CONTRACT.encode()).hexdigest(),
                       'delivery_approved': False})
         self.product.orchestration.create_task(
             run.id, title='Implement and independently review material completeness',
@@ -120,13 +153,14 @@ class EngineeringService:
     async def dispatch(self, task: Task, snapshot: RunSnapshot,
                        correlation_id: str | None) -> None:
         workspace = Workspace(self.repo, self.root, str(snapshot.run.metadata['base_sha']))
-        result: dict[str, Any] = {'contract_version': 'cofounder-common-0.1',
+        result: dict[str, Any] = {'schema_version': 'engineering-result-1',
             'run_id': str(task.run_id), 'task_id': str(task.id), 'base_sha': workspace.base,
             'attempt': task.attempt_count, 'workspace_id': workspace.id,
             'synthetic': False, 'delivery_approved': False, 'state': 'started'}
         try:
             await asyncio.wait_for(self._run(task, workspace, result), timeout=workspace.remaining())
             result['state'] = 'passed_checks_pending_delivery_approval'
+            self._publish_envelopes(task, snapshot, workspace, result, correlation_id)
             self.writer.write_json(task.run_id, 'engineering-result', 'engineering-result.json',
                 result, 'engineering-agent', task_id=task.id, relation='output',
                 idempotency_key=f'{task.id}:{result["patch_sha"]}', correlation_id=correlation_id)
@@ -137,6 +171,7 @@ class EngineeringService:
                 result['cleanup_error'] = type(cleanup_error).__name__
             result['state'] = 'cancelled'
             result['error'] = 'CancelledError'
+            self._publish_envelopes(task, snapshot, workspace, result, correlation_id)
             self.writer.write_json(task.run_id, 'engineering-cancelled-' + workspace.id,
                 'cancelled.json', result, 'engineering-agent', relation='run')
             raise
@@ -148,6 +183,7 @@ class EngineeringService:
                     result['cleanup_error'] = type(cleanup_error).__name__
             result['state'] = 'timeout' if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) else 'failed'
             result['error'] = type(exc).__name__
+            self._publish_envelopes(task, snapshot, workspace, result, correlation_id)
             # Retain failed evidence as a run artifact, never a successful task output.
             self.writer.write_json(task.run_id, 'engineering-failure-' + workspace.id,
                 'failure.json', result, 'engineering-agent', relation='run')
@@ -160,14 +196,27 @@ class EngineeringService:
             workspace.save('result.json', result)
             workspace.close(str(result['state']))
 
+    def _publish_envelopes(self, task: Task, snapshot: RunSnapshot, workspace: Workspace,
+                           result: dict[str, Any], correlation_id: str | None) -> None:
+        envelopes = engineering_envelopes(result, title=task.title,
+            owner=snapshot.run.owner or 'founder', allowed_paths=list(ALLOWED),
+            contract_sha256=str(snapshot.run.metadata['contract_sha']),
+            evidence_dir=str(workspace.evidence), correlation_id=correlation_id or str(task.run_id))
+        for kind, envelope in envelopes.items():
+            workspace.save(kind + '-envelope.json', envelope)
+            self.writer.write_json(task.run_id, kind + '-envelope-' + workspace.id,
+                kind + '-envelope.json', envelope, 'engineering-agent', relation='run',
+                idempotency_key=workspace.id + ':' + kind, correlation_id=correlation_id)
+
     async def _run(self, task: Task, workspace: Workspace, result: dict[str, Any]) -> None:
         session = str(uuid4())
+        result['executor'] = {'session_id': session}
         prior = []
         for path in self.root.glob('*-evidence/result.json'):
             item = json.loads(path.read_text())
             if item.get('task_id') == str(task.id) and item.get('state') in {'failed', 'timeout'}:
                 prior.append({'error': item.get('error'), 'failed_checks':
-                    [{"failed_cases": [c['case_id'] for c in test.get('gate', {}).get('cases', []) if not c['passed']], "log_tail": test.get('log', '')[-500:]} for test in item.get('tests', []) if test.get('exit_code') != 0]})
+                    [{"failed_cases": [c['case_id'] for c in test.get('gate', {}).get('cases', []) if not c['passed']], "log_tail": test.get('log', '')[-2000:]} for test in item.get('tests', []) if test.get('exit_code') != 0]})
         messages = [ChatMessage(role=Role.SYSTEM, content='You are an implementation Agent. '
                     'Return ONLY a JSON object with exactly two keys: {"implementation":"full materials.py source", "tests":"full pytest source"}. Do not include filenames as JSON keys or any extra keys. Keep output compact: implementation under 65 lines, parameterized tests under 90 lines, no long comments/docstrings. Entire JSON must finish within 3000 tokens.'),
                     ChatMessage(role=Role.USER, content=CONTRACT + "\nPrevious failed attempts; correct these issues: " + json.dumps(prior))]
@@ -177,14 +226,12 @@ class EngineeringService:
                          policy=RequestPolicy(max_attempts=4, max_total_tokens=100000, timeout_seconds=600))
         result['executor'] = {'session_id': session, **completion.model_dump(mode='json')}
         workspace.save('executor-response.json', result['executor'])
-        normalized = completion.content.strip()
-        fenced = normalized.startswith("```json\n") and normalized.endswith("\n```")
-        if fenced:
-            normalized = normalized[8:-4]
-        result["executor_format_normalized"] = fenced
+        normalized, changes = normalize_envelope(completion.content)
+        result['executor_format_normalization'] = changes
         patch = Patch.model_validate_json(normalized)
         workspace.apply_files(patch.files)
         result['patch_sha'] = workspace.verify()
+        result['candidate_commit'] = workspace.snapshot_commit()
         result['code_diff'] = (workspace.evidence / 'patch.diff').read_text()
         result['changed_files'] = list(ALLOWED)
         tests = []
@@ -200,6 +247,7 @@ class EngineeringService:
             if evidence['exit_code'] != 0 or evidence['timed_out']:
                 raise RuntimeError('test_gate_blocked')
         review_id = str(uuid4())
+        result['reviewer'] = {'session_id': review_id}
         # Fresh message array: no implementer conversation or self-rating is passed.
         review_input = {'contract': CONTRACT, 'base_sha': workspace.base,
                         'patch_sha': result['patch_sha'], 'diff': result['code_diff'],
@@ -210,6 +258,10 @@ class EngineeringService:
                     '{"patch_sha":"provided SHA", "conclusion":"passed|changes_requested|inconclusive", '
                     '"findings":[{"path":"file","line":1,"trigger":"condition",'
                     '"impact":"effect","evidence":"specific code/test","severity":"blocking|warning|info"}]}. '
+                    'Only contract violations are defects. Error-message wording, redundancy, style and '
+                    'performance suggestions are NOT defects under this contract. For every defect supply '
+                    'a concrete input triggering incorrect behavior, with actual versus required result. '
+                    'conclusion changes_requested requires at least one blocking finding. '
                     'Report ONLY actionable defects, at most THREE findings, each field under 30 words. '
                     'Do not describe correct code or repeat findings. If no actionable defects, return '
                     'conclusion passed and findings []. Use changes_requested only for actual defects. '
@@ -222,11 +274,8 @@ class EngineeringService:
                           policy=RequestPolicy(max_attempts=4, max_total_tokens=100000, timeout_seconds=600))
         result['reviewer'] = {'session_id': review_id, **completion.model_dump(mode='json')}
         workspace.save('reviewer-response.json', result['reviewer'])
-        review_text = completion.content.strip()
-        fenced = review_text.startswith('```json\n') and review_text.endswith('\n```')
-        if fenced:
-            review_text = review_text[8:-4]
-        result['reviewer_format_normalized'] = fenced
+        review_text, changes = normalize_envelope(completion.content)
+        result['reviewer_format_normalization'] = changes
         review = Review.model_validate_json(review_text)
         result['review'] = review.model_dump(mode='json')
         for finding in review.findings:

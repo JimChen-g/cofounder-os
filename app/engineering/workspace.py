@@ -101,6 +101,18 @@ class Workspace:
         (self.evidence / 'patch.diff').write_text(diff)
         return hashlib.sha256(diff.encode()).hexdigest()
 
+    def snapshot_commit(self) -> str:
+        """Record the allowlisted candidate as a Git commit without hooks or checkout."""
+        digest = self.verify()
+        git(self.path, 'add', '--', *ALLOWED)
+        tree = git(self.path, 'write-tree').strip()
+        commit = git(self.path, '-c', 'user.name=Co-founder Engineering',
+                     '-c', 'user.email=engineering@localhost', 'commit-tree', tree,
+                     '-p', self.base, '-m', 'Candidate diff SHA256: ' + digest).strip()
+        self.save('candidate-version.json', {'base_sha': self.base,
+                  'patch_sha': commit, 'diff_sha256': digest})
+        return commit
+
     def _stop_container(self) -> None:
         result = subprocess.run(['docker', 'rm', '-f', 'cofounder-test-' + self.id],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
