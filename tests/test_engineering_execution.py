@@ -111,12 +111,15 @@ async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, m
     from app.engineering.envelopes import validate_envelope
     evidence_files = list((tmp_path/'tasks').glob('*-evidence/*-envelope.json'))
     assert evidence_files
+    execution_attempts = set()
     for path in evidence_files:
         envelope = json.loads(path.read_text())
         validate_envelope(envelope)
         assert len(envelope['artifact_version']['patch_sha']) == 40
         if envelope['kind'] == 'execution_result':
+            execution_attempts.add(envelope['payload']['attempt'])
             assert envelope['payload']['status'] == ('succeeded' if mode == 'passed' else 'failed')
+    assert execution_attempts == ({1} if mode == 'passed' else {1, 2})
 
 
 def test_wrapper_normalization_never_changes_source_strings():
