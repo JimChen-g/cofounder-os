@@ -231,3 +231,8 @@ entries above are preserved. T28 bounded Agent trials and T29 638-test CPU
 regression completed with explicit transport/evaluation limits in
 `docs/t28-t29.md`. This stage adds evaluation/docs only; no production redeploy.
 U01 local connection and user acceptance are recorded separately; T30+ not done.
+
+U01 local-only proxy follows development handoff 6d3f669. It reuses the existing
+production UI/Controller, with no production release. Live self-test failures and
+final pending-candidate identity are explicitly separated in docs/u01-local-access.md.
+Founder approval is not submitted; subsequent T stages remain pending.
