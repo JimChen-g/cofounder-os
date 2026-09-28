@@ -7,7 +7,7 @@
   const shared = window.CofounderState;
   const LABELS = {pending: '等待批准', running: '执行中', ready: '待执行', queued: '排队中', created: '已创建', waiting_approval: '等待批准', completed: '已完成', approved: '已批准', failed: '失败', cancelled: '已取消', canceled: '已取消', rejected: '已驳回', expired: '已过期', repair_queued: '修复排队中', manual_required: '需要人工处理', passed: '通过', pass: '通过', success: '通过', blocked: '已阻止', timeout: '超时', active: '执行中', passed_checks_pending_delivery_approval: '检查通过，等待批准'};
   const state = {view: 'overview', connected: false, service: null, runs: [], runId: null, snapshot: null, delivery: null, candidate: null, candidateError: '', events: [], generation: 0, busy: false, loading: false, timer: null, detailKey: null, currentFile: null, uncertain: null, eventsGeneration: 0};
-  try { state.uncertain = JSON.parse(localStorage.getItem('spark-pending-action') || 'null'); } catch (_) { /* Storage is optional. */ }
+  try { state.uncertain = JSON.parse(localStorage.getItem('spark-pending-action') || sessionStorage.getItem('spark-pending-action') || 'null'); } catch (_) { /* Storage is optional. */ }
   const text = value => value === undefined || value === null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value);
   const pretty = value => JSON.stringify(value, null, 2);
   const label = value => shared.label(value) !== value ? shared.label(value) : LABELS[value] || text(value);
@@ -37,7 +37,7 @@
       throw new ApiError(error.name === 'AbortError' ? '请求超时，请刷新核实服务与任务状态。' : '连接中断：' + error.message, 0, Boolean(options.body));
     } finally { clearTimeout(timeout); }
   }
-  function keepPending(value) { state.uncertain = value; try { if (value) localStorage.setItem('spark-pending-action', JSON.stringify(value)); else localStorage.removeItem('spark-pending-action'); } catch (_) { /* Current-page protection still applies. */ } renderPending(); renderGates(); }
+  function keepPending(value) { state.uncertain = value; try { if (value) localStorage.setItem('spark-pending-action', JSON.stringify(value)); else { localStorage.removeItem('spark-pending-action'); sessionStorage.removeItem('spark-pending-action'); } } catch (_) { /* Current-page protection still applies. */ } renderPending(); renderGates(); }
   function renderPending() {
     let banner = $('pending-banner'); if (!banner) { banner = node('div','notice'); banner.id = 'pending-banner'; banner.setAttribute('role','status'); $('notice').after(banner); }
     banner.hidden = !state.uncertain; if (!state.uncertain) return;
@@ -165,7 +165,7 @@
     return {available, pending, repairable, reason, attempts, approve: available && !state.loading && pending, feedback: available && pending && repairable, cancel: available && !state.loading && current && !TERMINAL.has(shared.deriveDisplayState(current,state.delivery)) && state.delivery?.state !== 'approved' && Boolean(current.metadata?.base_sha || delivery?.base_sha), export: available && current?.status === 'completed' && delivery?.state === 'approved'};
   }
   function renderGates() {
-    const value = gate(); document.querySelectorAll('.create-run').forEach(button => { button.disabled = !state.connected || state.busy || Boolean(state.uncertain); button.textContent = state.busy && !state.runId ? '正在创建…' : '创建工程任务'; });
+    const value = gate(); document.querySelectorAll('.create-run').forEach(button => { button.disabled = !state.connected || state.readFailed || state.busy || Boolean(state.uncertain); button.textContent = state.busy && !state.runId ? '正在创建…' : '创建工程任务'; });
     const ended = run() && (TERMINAL.has(shared.deriveDisplayState(run(),state.delivery)) || shared.deriveDisplayState(run(),state.delivery) === 'approved'); $('approve-run').hidden = Boolean(ended); $('reject-run').hidden = Boolean(ended); $('decision-note').hidden = Boolean(ended); $('restart-run').hidden = !ended || shared.deriveDisplayState(run(),state.delivery) === 'approved';
     $('approve-run').disabled = !value.approve; $('reject-run').disabled = !value.approve; $('send-feedback').disabled = !value.feedback || state.loading; $('cancel-run').disabled = !value.cancel; $('export-run').disabled = !value.export; $('export-run').className = 'button ' + (value.export ? 'primary' : 'secondary'); $('refresh-selected').disabled = state.loading || state.busy; $('action-gate').textContent = value.reason; $('expiry-label').textContent = state.delivery ? (state.delivery.state === 'approved' ? '原批准期限 ' : '有效至 ') + time(state.delivery.expires_at) : '';
     $('feedback-disclosure').hidden = !value.feedback; $('feedback-form').hidden = !value.feedback; $('feedback-heading').hidden = !value.feedback; $('feedback-intro').hidden = !value.feedback;
@@ -175,7 +175,7 @@
     for (const id of ['feedback-path', 'feedback-line', 'feedback-comment']) $(id).disabled = !value.feedback;
   }
   async function createRun() {
-    if (!state.connected || state.busy || state.uncertain) return; state.busy = true; const requestId = crypto.randomUUID(); const pending = {action: '创建材料完整性任务', request_id: requestId, created_at: new Date().toISOString()}; keepPending(pending);
+    if (!state.connected || state.readFailed || state.busy || state.uncertain) return; state.busy = true; const requestId = crypto.randomUUID(); const pending = {action: '创建材料完整性任务', request_id: requestId, created_at: new Date().toISOString()}; keepPending(pending);
     try { const data = await api('/api/engineering/runs', {method: 'POST', body: JSON.stringify({request_id: requestId, task: 'materials_completeness'})}); const id = data.run_id || data.run?.id || data.snapshot?.run?.id; if (!id) throw new ApiError('创建响应缺少任务 ID，请刷新任务列表核实。', 200, true); keepPending(null); state.busy = false; notify('工程任务已创建，正在读取执行进度。'); await refreshRuns(); await selectRun(id); }
     catch (error) { if (!error.uncertain) keepPending(null); notify((error.uncertain ? '创建结果尚未确认，未自动重试。' : '创建未成功：') + error.message + (error.uncertain ? ' 请求 ID：' + requestId : ''), true); }
     finally { state.busy = false; renderGates(); if (state.uncertain) await refreshRuns(); }

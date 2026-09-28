@@ -34,6 +34,7 @@ jobs:
           node --check app/ui/static/app.js
           node --check tools/local_portal/static/portal.js
           node tests/test_display_state.js
+          node tests/test_portal_gates.js
       - name: Local portal contracts
         run: python -B -m unittest discover -s tools/local_portal -p test_server.py -q
       - name: Build
