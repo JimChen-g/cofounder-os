@@ -133,7 +133,7 @@ class MemorySocket:
 
 class PermittedTests(unittest.TestCase):
     def test_intended_routes_and_bounded_queries(self):
-        cases = [("GET", "/"), ("GET", "/ui?run=" + RID),
+        cases = [("GET", "/ui?view=evaluation"), ("GET", "/ui/assets/ink-paper.css"), ("GET", "/"), ("GET", "/ui?run=" + RID),
                  ("GET", "/ui/assets/app.js?v=d15-live-proof-2"),
                  ("GET", "/api/runs/" + RID + "/events?limit=200"),
                  ("GET", "/api/runs/" + RID + "/artifacts?include_content=false"),
@@ -149,6 +149,7 @@ class PermittedTests(unittest.TestCase):
                  ("GET", "//example.invalid/api/health"),
                  ("GET", "/ui/../api/health"), ("GET", "/ui/%2e%2e/api/health"),
                  ("GET", "/ui\\assets\\app.js"), ("GET", "/api/health#anything"),
+                 ("GET", "/ui?view=unknown"), ("GET", "/?view=evaluation"), ("GET", "/ui?view=evaluation&view=evaluation"),
                  ("GET", "/api/evaluation/summary?limit=201"),
                  ("GET", "/api/evaluation/summary?limit=1&limit=2"),
                  ("GET", "/api/runs/" + RID + "/events?limit=-1"),

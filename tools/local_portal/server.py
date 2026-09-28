@@ -65,7 +65,8 @@ def permitted(method, target):
     p = u.path
     if method == 'GET':
         if p in {'/','/ui','/ui/','/ui/engineering'}:
-            return set(q) <= {'run'} and all(len(v)==1 and re.fullmatch(UUID,v[0]) for v in q.values())
+            allowed = {'run', 'view'} if p in {'/ui','/ui/'} else {'run'}
+            return set(q) <= allowed and all(len(v)==1 and (v[0]=='evaluation' if k=='view' else re.fullmatch(UUID,v[0])) for k,v in q.items())
         if p in ASSETS:
             return set(q) <= {'v'} and all(len(v)==1 and re.fullmatch(r'[a-zA-Z0-9_.-]{1,80}',v[0]) for v in q.values())
         if p in {'/portal.css','/portal.js','/local/status','/local/runs','/api/health','/api/insurance-poc/fixture','/api/insurance-poc/evaluation'}:
