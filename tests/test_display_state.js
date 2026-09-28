@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const {deriveDisplayState: state, label, tone, reason} = require('../app/ui/static/display-state.js');
+const {deriveDisplayState: state, label, tone, reason, eventLabel} = require('../app/ui/static/display-state.js');
 const now = Date.parse('2026-09-28T14:00:00Z');
 const old = '2026-09-28T13:00:00Z';
 const future = '2026-09-28T15:00:00Z';
@@ -28,5 +28,8 @@ assert.equal(tone('approved'),'seal');
 assert.notEqual(tone('completed'),'seal');
 assert.match(reason({status:'failed',metadata:{termination_reason:'budget_or_policy_denied'}}),/预算或策略/);
 assert.doesNotMatch(reason({status:'failed',metadata:{termination_reason:'budget_or_policy_denied'}}),/时间用尽|候选保留/);
-assert.match(reason({status:'failed',metadata:{termination_reason:'unrecognized_failure'}}),/原始记录/);
-console.log(JSON.stringify({passed:cases.length+6,case_names:cases.map(c=>c[0]),source:'app/ui/static/display-state.js'}));
+assert.match(reason({status:'failed',metadata:{termination_reason:'unrecognized_failure'}}),/unrecognized_failure/);
+
+assert.equal(eventLabel({event_type:"engineering.approve",details:{revision:2}}),"本人批准第 2 版");
+assert.match(eventLabel({event_type:"engineering.reject",details:{revision:1}}),/第 1 版/);
+console.log(JSON.stringify({passed:cases.length+8,case_names:cases.map(c=>c[0]),source:'app/ui/static/display-state.js'}));

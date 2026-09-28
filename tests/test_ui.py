@@ -43,6 +43,7 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
         stylesheet = client.get("/ui/assets/app.css")
         script = client.get("/ui/assets/app.js")
         assert stylesheet.status_code == 200
+        assert client.get("/ui/assets/ink-paper.css").status_code == 200
         assert stylesheet.headers["content-type"].startswith("text/css")
         assert script.status_code == 200
         assert "use strict" in script.text
@@ -126,11 +127,11 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
     assert "decision.excluded_models" in script
     assert "decision.privacy_decision" in script
     assert "decision.validation_requirement" in script
-    assert "Simulation changes availability only" in script
+    assert "模拟只改变可用性" in script
     assert "已核验的模型调用" in script
     assert "candidate_scores" in script
     assert "execution_metadata" in script
-    assert "Restore normal routing" in script
+    assert "恢复正常路径" in script
     assert "已根据提交条件重新选择路径" in script
     assert "function renderConflicts()" in script
     assert "conflict.source_evidence" in script
@@ -140,22 +141,22 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
     assert "function renderInsuranceDemoEvaluation()" in script
     assert "不代表模型质量" in script
     assert "function renderLiveExecutionBoard()" in script
-    assert "Only persisted Gateway metadata can mark an Agent LIVE" in script
+    assert "只有已保存的模型调用记录可标为实时模型" in script
     assert 'element("span", null, "REQUEST ID")' not in script
-    assert '["REQUEST ID", execution.request_id' in script
-    assert '["TOKENS", execution.total_tokens' in script
-    assert '["LATENCY", formatExecutionLatency' in script
-    assert '["REPAIR", repairValue]' in script
-    assert '["FALLBACK", fallbackValue]' in script
+    assert '["请求编号", execution.request_id' in script
+    assert '["词元", execution.total_tokens' in script
+    assert '["耗时", formatExecutionLatency' in script
+    assert '["修改", repairValue]' in script
+    assert '["回退", fallbackValue]' in script
     assert "function waitForInsuranceWorkflow(jobId, requestEpoch)" in script
-    assert "DGX accepted the run · live Agents executing" in script
+    assert "服务已接收任务 · 角色执行中" in script
 
 
 def test_ui_static_root_contains_only_reviewable_source_assets() -> None:
     assert {path.relative_to(STATIC_ROOT) for path in STATIC_ROOT.iterdir() if path.is_file()} == {
         Path("index.html"),
         Path("engineering.html"), Path("engineering.css"), Path("engineering.js"),
-        Path("app.css"),
+        Path("app.css"), Path("ink-paper.css"),
         Path("app.js"),
         Path("display-state.js"),
     }
@@ -172,10 +173,11 @@ def test_ui_guards_stale_run_responses_and_terminal_failure_copy() -> None:
     assert terminal_check < replay_check
 
 
-def test_narrow_layout_keeps_mission_controls_and_five_views() -> None:
-    stylesheet = (STATIC_ROOT / "app.css").read_text(encoding="utf-8")
+def test_narrow_layout_keeps_controls_and_shared_navigation() -> None:
+    stylesheet = (STATIC_ROOT / "ink-paper.css").read_text(encoding="utf-8")
 
-    assert "grid-template-columns: repeat(5, 1fr)" in stylesheet
+    assert "@media(max-width:720px)" in stylesheet
+    assert "height:auto;min-height:0;flex-direction:column" in stylesheet
     assert "#refresh-run," not in stylesheet
     assert ".topbar .button-secondary" not in stylesheet
 

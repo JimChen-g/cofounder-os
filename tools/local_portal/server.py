@@ -15,7 +15,7 @@ spec = importlib.util.spec_from_file_location('existing_spark', BASE/'scripts/en
 existing = importlib.util.module_from_spec(spec); spec.loader.exec_module(existing)
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 PROTECTED = existing.PROTECTED_RUN
-ASSETS = {'/ui/assets/app.js','/ui/assets/app.css','/ui/assets/engineering.js','/ui/assets/engineering.css','/ui/static/display-state.js','/ui/assets/display-state.js'}
+ASSETS = {'/ui/assets/ink-paper.css','/ui/assets/app.js','/ui/assets/app.css','/ui/assets/engineering.js','/ui/assets/engineering.css','/ui/static/display-state.js','/ui/assets/display-state.js'}
 
 def owner_summary(report, owner, inventory=None):
     # Join persisted facts; the shared browser helper derives display state.
@@ -65,7 +65,8 @@ def permitted(method, target):
     p = u.path
     if method == 'GET':
         if p in {'/','/ui','/ui/','/ui/engineering'}:
-            return set(q) <= {'run'} and all(len(v)==1 and re.fullmatch(UUID,v[0]) for v in q.values())
+            allowed = {'run', 'view'} if p in {'/ui','/ui/'} else {'run'}
+            return set(q) <= allowed and all(len(v)==1 and (v[0]=='evaluation' if k=='view' else re.fullmatch(UUID,v[0])) for k,v in q.items())
         if p in ASSETS:
             return set(q) <= {'v'} and all(len(v)==1 and re.fullmatch(r'[a-zA-Z0-9_.-]{1,80}',v[0]) for v in q.values())
         if p in {'/portal.css','/portal.js','/local/status','/local/runs','/api/health','/api/insurance-poc/fixture','/api/insurance-poc/evaluation'}:
@@ -142,7 +143,7 @@ for r in repo.list_runs():
  if r.owner!=OWNER:continue
  d=r.metadata.get('delivery') or {}
  rows.append({'id':str(r.id),'objective':r.objective,'status':str(r.status),'owner':r.owner,'created_at':r.created_at.isoformat(),'updated_at':r.updated_at.isoformat(),'engineering':bool(r.metadata.get('engineering')),'request_id':r.metadata.get('engineering_request_id'),'delivery_state':d.get('state'),'revision':d.get('revision'),'expires_at':d.get('expires_at'),'termination_reason':r.metadata.get('termination_reason')})
-print(json.dumps({'runs':rows[:200],'commit':(root/'DEPLOYED_COMMIT').read_text().strip(),'bridge':json.loads((root/'bridge/status.json').read_text()).get('connection'),'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat()}))
+print(json.dumps({'runs':rows[:200],'complete':len(rows)<=200,'commit':(root/'DEPLOYED_COMMIT').read_text().strip(),'bridge':json.loads((root/'bridge/status.json').read_text()).get('connection'),'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat()}))
 """.replace('REMOTE_ROOT',repr(self.remote_root)).replace('OWNER',repr(owner))
         client=self.connection()
         command = 'cd ' + shlex.quote(self.remote_root + '/src') + ' && ../venv/bin/python -'

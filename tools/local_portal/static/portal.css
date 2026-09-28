@@ -6,3 +6,12 @@
 .execution-details,.event-technical { margin-top:16px; }
 .execution-details summary,.event-technical > summary { cursor:pointer; color:var(--muted); }
 .event-technical[open] > summary { margin-bottom:20px; }
+
+/* Claude review: object-first headings, quiet programmatic focus. */
+h1[tabindex="-1"]:focus { outline:none; }
+.selected-heading { align-items:flex-start; }
+.breadcrumb,#connection-badge,.version-strip,#decision-note,#poll-status,#audit-run-id { display:none; }
+.topbar { border:0; padding:0; margin-bottom:12px; justify-content:flex-end; }
+.decision-panel { padding:12px 0; }
+.decision-panel .panel-heading { margin-bottom:8px; }
+.scope-note { background:none; border:0; padding:0; font-size:12px; }
