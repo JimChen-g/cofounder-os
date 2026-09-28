@@ -106,8 +106,8 @@ def test_ui_files_do_not_embed_external_assets_or_inline_code() -> None:
     assert "http://" not in html
     assert "<style" not in html
     assert "<script>" not in html
-    assert '<script src="/ui/assets/app.js?v=d15-live-proof-2" defer></script>' in html
-    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=d15-live-proof-2">' in html
+    assert '<script src="/ui/assets/app.js?v=ink-paper-1" defer></script>' in html
+    assert '<link rel="stylesheet" href="/ui/assets/app.css?v=ink-paper-1">' in html
 
 
 def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> None:
