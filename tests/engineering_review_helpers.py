@@ -11,7 +11,9 @@ def synthetic_review_checks(messages):
     for key in REVIEW_KEYS:
         path = ALLOWED[1] if key == 'tests' else ALLOWED[0]
         text = source.split('FILE ' + path + '\n', 1)[1].split('END FILE\n', 1)[0]
-        first = text.splitlines()[0]
+        first = next(line for line in text.splitlines()
+                     if line.split(' | ', 1)[1].strip()
+                     and not line.split(' | ', 1)[1].strip().startswith(('#', 'import ', 'from ')))
         line, evidence = first.split(' | ', 1)
         checks[key] = {'path': path, 'line': int(line), 'evidence': evidence.strip(), 'satisfied': True}
     return checks

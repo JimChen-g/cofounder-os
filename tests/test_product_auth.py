@@ -82,3 +82,35 @@ def test_phone_actions_require_paired_identity_and_exact_route(auth_client):
         assert auth_client.post(url, headers=bridge_headers(), json={}).status_code == 422
     assert auth_client.post(f'/api/engineering/runs/{rid}/feedback', headers=bridge_headers(), json={}).status_code == 403
     assert auth_client.get('/api/engineering/notifications', headers=bridge_headers('other')).status_code == 403
+
+
+def test_skill_credential_cannot_escalate_to_gateway(auth_client, monkeypatch):
+    monkeypatch.setenv('SPARK_DECIDE_API_KEY', 'skill-token')
+    get_settings.cache_clear()
+    headers = {'Authorization': 'Bearer skill-token'}
+    assert auth_client.post('/v1/spark-decide', headers=headers, json={}).status_code == 422
+    assert auth_client.get('/v1/models', headers=headers).status_code == 403
+    assert auth_client.post('/v1/chat/completions', headers=headers, json={}).status_code == 403
+    assert auth_client.get('/api/health', headers=headers).status_code == 401
+
+
+def test_gateway_cannot_self_authorize_cloud(auth_client, monkeypatch):
+    monkeypatch.setenv('GATEWAY_ALLOW_CLOUD', 'false')
+    get_settings.cache_clear()
+    headers = {'Authorization': 'Bearer gateway-token'}
+    payload = {'model': 'cofounder-step', 'privacy': 'public', 'allowed_providers': ['step'],
+               'policy': {'permissions': ['model:invoke', 'cloud:invoke'], 'cloud_call_budget': 20},
+               'messages': [{'role': 'user', 'content': 'test'}]}
+    assert auth_client.post('/v1/chat/completions', headers=headers, json=payload).status_code == 403
+
+
+def test_proxy_token_is_single_run_scoped(auth_client, monkeypatch):
+    rid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    monkeypatch.setenv('PRODUCT_API_PROXY_TOKEN', 'proxy-token')
+    monkeypatch.setenv('PRODUCT_PROXY_RUN_ID', rid)
+    get_settings.cache_clear()
+    headers = {'Authorization': 'Bearer proxy-token'}
+    assert auth_client.post(f'/api/engineering/runs/{rid}/approve', headers=headers, json={}).status_code == 422
+    for path in ['/api/runs', '/api/engineering/runs', f'/api/engineering/runs/{rid}x/approve']:
+        assert auth_client.post(path, headers=headers, json={}).status_code == 403
+    assert auth_client.get('/api/health', headers=headers).status_code == 403

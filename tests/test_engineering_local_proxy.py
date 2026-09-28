@@ -152,3 +152,35 @@ def test_actual_asset_transform_hides_token_summarizes_and_gates_attempts():
     assert "el('feedback').disabled=!pending||Number(el('feedback').dataset.attempts)>=2" in js
     assert '本Run尝试次数已耗尽，不能再修复' in js
     assert "addEventListener('click'" in js
+
+
+def test_context_uses_live_deployment_not_hardcoded_commit():
+    class HealthSpark(FakeSpark):
+        def request(self, method, path, body=b''):
+            assert (method, path) == ('GET', '/health')
+            return 200, 'application/json', b'{"deployment_commit":"new-live-commit"}'
+    h = invoke(path='/local/context', spark=HealthSpark())
+    assert json.loads(h.result[1])['production_commit'] == 'new-live-commit'
+
+
+def test_connection_uses_key_known_hosts_and_private_local_token(tmp_path, monkeypatch):
+    import sys
+    calls = {}
+    class Client:
+        def load_host_keys(self, path): calls['hosts'] = path
+        def set_missing_host_key_policy(self, policy): calls['reject_unknown'] = True
+        def connect(self, host, **kwargs): calls.update(kwargs)
+        def get_transport(self): return SimpleNamespace(set_keepalive=lambda _: None)
+    monkeypatch.setitem(sys.modules, 'paramiko', SimpleNamespace(SSHClient=Client, RejectPolicy=object))
+    token = tmp_path/'token'
+    token.write_text('scoped-token')
+    token.chmod(0o600)
+    spark = proxy.Spark(tmp_path/'ssh-key', tmp_path/'hosts', 'host', 22, 'user', token_file=token)
+    spark.connection()
+    assert calls['key_filename'] == str(tmp_path/'ssh-key')
+    assert calls['reject_unknown'] and 'password' not in calls
+    assert spark.token == 'scoped-token'
+    token.chmod(0o644)
+    spark.client = None
+    with pytest.raises(RuntimeError, match='private'):
+        spark.connection()

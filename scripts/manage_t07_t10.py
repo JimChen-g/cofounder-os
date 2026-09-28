@@ -38,6 +38,13 @@ if action in {'start', 'restart'}:
     if config.stat().st_mode & 0o077:
         raise SystemExit('Runtime config must be mode 0600')
     c = json.loads(config.read_text())
+    product_config = root/'product-config.json'
+    # Transitional read supports the old deployment until its operator migrates.
+    # New deployments keep all founder/provider secrets out of bridge-config.
+    if product_config.exists():
+        if product_config.stat().st_mode & 0o077:
+            raise SystemExit('Product config must be mode 0600')
+        c = c | json.loads(product_config.read_text())
     env = dict(os.environ, PRODUCT_API_TOKEN=c['product_token'],
                PRODUCT_API_BRIDGE_TOKEN=c['bridge_token'], PRODUCT_FOUNDER_ID='founder',
                FEISHU_APP_ID=c['app_id'], FEISHU_OPEN_ID=c['open_id'],
@@ -46,7 +53,13 @@ if action in {'start', 'restart'}:
                QWEN_API_KEY=(root/'model.key').read_text().strip(), QWEN_MODEL='qwen3.5',
                QWEN_BASE_URL='http://127.0.0.1:8000/v1', STEP_API_KEY=c['step_key'],
                STEP_BASE_URL='https://api.stepfun.com/step_plan/v1', STEP_MODEL='step-3.7-flash',
-               COFOUNDER_BRIDGE_CONFIG=str(config))
+               SPARK_DECIDE_API_KEY=c.get('spark_decide_api_key', ''),
+               GATEWAY_ALLOW_CLOUD=str(c.get('gateway_allow_cloud', False)).lower(),
+               PRODUCT_API_PROXY_TOKEN=c.get('proxy_token', ''),
+               PRODUCT_PROXY_RUN_ID=c.get('proxy_run_id', ''),
+               DEPLOYMENT_COMMIT=(root/'DEPLOYED_COMMIT').read_text().strip())
+    bridge_env = {key: os.environ[key] for key in ('PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ') if key in os.environ}
+    bridge_env['COFOUNDER_BRIDGE_CONFIG'] = str(config)
     if (root/'engineering-base.git').exists():
         env.update(ENGINEERING_REPO=str(root/'engineering-base.git'),
                    ENGINEERING_WORKSPACE_ROOT=str(root/'engineering-workspaces'),
@@ -57,7 +70,7 @@ if action in {'start', 'restart'}:
         if pidfile.exists() and Path('/proc/'+pidfile.read_text().strip()).exists():
             continue
         with (root/(name+'.log')).open('a') as log:
-            p = subprocess.Popen([str(root/'venv/bin/python'), '-m', *args], env=env,
+            p = subprocess.Popen([str(root/'venv/bin/python'), '-m', *args], env=env if name == 'product' else bridge_env,
                                  cwd=root/'src', stdout=log, stderr=log, start_new_session=True)
         pidfile.write_text(str(p.pid))
 if action == 'status':

@@ -89,6 +89,22 @@ contracts.
 
 ## Current State
 
+- Accepted source baseline: `9bdf757c4c8e2a7822235322fe0ca8a3acf052b5`, PR #7 merged.
+- Last verified production before corrections: `57502708e30e8db9fcb72c508f37b04de590a2dd`.
+- T01–T29 scoped development completed, with the explicit limits in the stage reports.
+- T27 approved Run: `17c3e7a1-97cf-4eea-83d0-f79b3568e5da`; later approved Run:
+  `29a8b17d-538e-4504-88d8-5942be2287d1`. Historical evidence is retained.
+- Current authorized work: independent-review corrections F1–F16, branch
+  `codex/claude-review-fixes`; see `docs/independent-review-fixes.md` for actual
+  implementation, verification, deployment and remaining limitations.
+- Baseline verification: 665 tests. New correction results are recorded separately.
+- T30–T38, final materials and complete local-UI founder acceptance are not implied.
+- September founder authorization uses the existing T07 checkout, original GitHub
+  repository, PR-first merge and fixed-commit Spark deployment. Explicit credential
+  migration authorization is handled separately from ordinary feature rules.
+
+## Historical July / T17–T22 state (superseded)
+
 - **Current accepted implementation HEAD**: `5229238181b56a593ea5969c31885cc100c9f446`
 - **Resolve accepted implementation with**: `git rev-parse 5229238181b56a593ea5969c31885cc100c9f446`
 - **Resolve current repository HEAD with**: `git rev-parse HEAD`

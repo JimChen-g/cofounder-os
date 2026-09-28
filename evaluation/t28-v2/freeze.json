@@ -1,0 +1,29 @@
+{
+  "version": "t28-v2",
+  "frozen_at": "2026-09-28T10:39:24.238080+00:00",
+  "cases_sha256": "f3cae5c7c143dc82e62899f59b4462acbd052eca9df5e7b112a1a91ebd829f4b",
+  "harness_sha256": "16b6132b5e33eaed227a608e98e1f90cb6110a0d8c359fc3668e5a907c5daefb",
+  "instances": 10,
+  "attempts_per_arm": 2,
+  "arms": 2,
+  "scorer_version": "t28-http-contract-v2",
+  "source": "new corrected protocol scoring edition; same narrow 10 synthetic tasks; no new live trials",
+  "max_agent_calls": 80,
+  "max_decision_calls": 28,
+  "max_output_tokens_per_agent_call": 512,
+  "max_wall_seconds_per_trial": 150,
+  "concurrency": 1,
+  "judge_calls": 0,
+  "no_prompt_tuning_after_formal_start": true,
+  "learning_model": "existing fixed quality-model.json; rules plus shadow; no training",
+  "stop_conditions": [
+    "active engineering job before formal batch",
+    "host memory below 16GiB",
+    "sustained new swapping",
+    "provider identity mismatch or production degradation"
+  ],
+  "cost": "unknown; tokens reported when provider supplies usage",
+  "skill_sha256": "1673f73446b8b20465b6d3e60337ad9829cae22d7d9e5c8c588df6beb5efad1e",
+  "script_sha256": "4187edcae30abe9d9da4166dac6e48772171a28469d120bb7beece383c0d2e7e",
+  "continuation_sha256": "04dccbd34953d4f930e57a7ec1a95245fcab70578a0a21eba55a38dc6101b321"
+}

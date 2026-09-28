@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import pytest
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +12,15 @@ from app.config import get_settings
 from app.models import ChatMessage, Provider
 from app.providers.base import BaseProvider, ProviderError
 from app.providers.registry import ProviderRegistry, set_registry
+
+
+@pytest.fixture(autouse=True)
+def explicitly_authorized_cloud_server(monkeypatch):
+    # This module tests the deliberately cloud-enabled deployment profile.
+    monkeypatch.setenv('GATEWAY_ALLOW_CLOUD', 'true')
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def _find_audit_record(request_id: str) -> dict | None:

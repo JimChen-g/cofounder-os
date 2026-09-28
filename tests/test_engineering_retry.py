@@ -25,10 +25,10 @@ class RetryGateway(GatewayClient):
         self.calls.append((messages, kwargs))
         if 'repairing failed checks' in messages[0].content:
             content = {'edits': [self.invalid_edit or {
-                'path': self.path, 'old': '# broken\n', 'new': '# repaired\n'}]}
+                'path': self.path, 'old': '# broken\nsynthetic_fixture = True\n', 'new': '# repaired\nsynthetic_fixture = True\n'}]}
         elif 'implementation Agent' in messages[0].content:
-            content = {'implementation': '# broken\n' if self.path == ALLOWED[0] else '# preserve implementation\n',
-                       'tests': '# broken\n' if self.path == ALLOWED[1] else '# preserve tests\n'}
+            content = {'implementation': '# broken\nsynthetic_fixture = True\n' if self.path == ALLOWED[0] else '# preserve implementation\nsynthetic_fixture = True\n',
+                       'tests': '# broken\nsynthetic_fixture = True\n' if self.path == ALLOWED[1] else '# preserve tests\nsynthetic_fixture = True\n'}
         else:
             content = {'checks': synthetic_review_checks(messages),
                        'patch_sha': json.loads(messages[1].content)['patch_sha'],
@@ -74,7 +74,7 @@ async def test_failed_check_retry_preserves_other_file_and_reruns_all_gates(repo
     assert git(repo, 'rev-parse', repaired['candidate_commit'] + '^').strip() == repaired['base_sha']
     other = next(value for value in ALLOWED if value != path)
     assert git(repo, 'show', repaired['candidate_commit'] + ':' + other) == git(repo, 'show', failed['candidate_commit'] + ':' + other)
-    assert git(repo, 'show', repaired['candidate_commit'] + ':' + path) == '# repaired\n'
+    assert git(repo, 'show', repaired['candidate_commit'] + ':' + path) == '# repaired\nsynthetic_fixture = True\n'
     assert len([workspace for workspace, _ in gates if workspace == repaired['workspace_id']]) == 3
     assert repaired['executor']['session_id'] != repaired['reviewer']['session_id']
     assert len(service.gateway.calls) == 3
@@ -85,10 +85,10 @@ async def test_failed_check_retry_preserves_other_file_and_reruns_all_gates(repo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('edit', [
-    {'path': '../outside.py', 'old': '# broken\n', 'new': '# repaired\n'},
-    {'path': ALLOWED[0], 'old': '', 'new': '# repaired\n'},
-    {'path': ALLOWED[0], 'old': '# missing\n', 'new': '# repaired\n'},
-    {'path': ALLOWED[0], 'old': '# broken\n', 'new': '# repaired\n', 'command': 'ignored'},
+    {'path': '../outside.py', 'old': '# broken\nsynthetic_fixture = True\n', 'new': '# repaired\nsynthetic_fixture = True\n'},
+    {'path': ALLOWED[0], 'old': '', 'new': '# repaired\nsynthetic_fixture = True\n'},
+    {'path': ALLOWED[0], 'old': '# missing\n', 'new': '# repaired\nsynthetic_fixture = True\n'},
+    {'path': ALLOWED[0], 'old': '# broken\nsynthetic_fixture = True\n', 'new': '# repaired\nsynthetic_fixture = True\n', 'command': 'ignored'},
 ])
 async def test_invalid_retry_edit_fails_closed_without_more_checks_or_attempts(repo, tmp_path, monkeypatch, edit):
     product, service, gates = environment(repo, tmp_path, monkeypatch, ALLOWED[0], edit)
@@ -148,11 +148,11 @@ async def test_one_retry_sees_and_repairs_independent_failures_from_all_gates(re
             assert 'permuted_input' in messages[1].content
             assert 'duplicate filename in generated valid fixture' in messages[1].content
             content = {'edits': [
-                {'path': ALLOWED[0], 'old': '# input order\n', 'new': '# required order\n'},
-                {'path': ALLOWED[1], 'old': '# same filename\n', 'new': '# unique filenames\n'},
+                {'path': ALLOWED[0], 'old': '# input order\nsynthetic_fixture = True\n', 'new': '# required order\nsynthetic_fixture = True\n'},
+                {'path': ALLOWED[1], 'old': '# same filename\nsynthetic_fixture = True\n', 'new': '# unique filenames\nsynthetic_fixture = True\n'},
             ]}
         elif 'implementation Agent' in messages[0].content:
-            content = {'implementation': '# input order\n', 'tests': '# same filename\n'}
+            content = {'implementation': '# input order\nsynthetic_fixture = True\n', 'tests': '# same filename\nsynthetic_fixture = True\n'}
         else:
             content = {'checks': synthetic_review_checks(messages),
                        'patch_sha': json.loads(messages[1].content)['patch_sha'],
@@ -243,7 +243,7 @@ def test_numbered_source_preserves_escapes_blank_lines_and_original_line_numbers
 async def test_reviewer_receives_plain_numbered_immutable_sources_separate_from_metadata(repo, tmp_path, monkeypatch):
     product, service, _ = environment(repo, tmp_path, monkeypatch, ALLOWED[0])
     implementation = 'def check(filename):\n    if not filename.strip() or "/" in filename or "\\\\" in filename:\n        raise ValueError("invalid filename")\n'
-    tests = '# synthetic fixture containing a literal \\t sequence\n'
+    tests = '# synthetic fixture containing a literal \\t sequence\nsynthetic_fixture = True\n'
     original_complete = service.gateway.complete
 
     async def complete(messages, **kwargs):

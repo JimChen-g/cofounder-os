@@ -24,8 +24,7 @@ Do not call this endpoint just because a task mentions Spark or models.
 Requires Python 3.10+ and network access to an authorized endpoint.
 The client uses only the Python standard library.
 Set `SPARK_DECIDE_URL` to the full `/v1/spark-decide` endpoint.
-Set `SPARK_DECIDE_API_KEY` to its dedicated decision-only bearer token.
-Never distribute the gateway master token. The decision token cannot call chat or product APIs.
+Set `SPARK_DECIDE_TOKEN` to its existing gateway bearer token.
 Keep the token in the environment; do not include it in request files or logs.
 Use HTTPS outside loopback, or an authorized local tunnel.
 Do not install model, training, or project dependencies to use this skill.
@@ -75,9 +74,6 @@ Record `model_version`, `policy_version`, `latency_ms`, and usage with the decis
 This version returns `scores: null` and `score_kind: unavailable`.
 Unavailable does not mean zero confidence, certainty, or failure probability.
 There is no raw logprob score or calibrated probability in this version.
-The optional `shadow` field contains experimental, uncalibrated diagnostics;
-`raw_quality_scores` are not confidence, probabilities, or evidence of quality improvement.
-Shadow output never changes the executed decision.
 Do not turn an enum label, masked probability, or latency into a quality score.
 Do not assert tokenizer, thinking, or logprob support from a successful request.
 Service capability probes belong in separate measured evidence.
@@ -87,9 +83,6 @@ No competition certification or final release signature is claimed.
 ## Failure and demonstration
 
 Treat malformed labels, truncated output, exhausted budget, and transport failure as refusal.
-Client failures are separate from server decision receipts and expose `error_class`
-and `http_status` (null without an HTTP response). Only HTTP 422 establishes request
-validation rejection; 401, 500 and transport failures do not.
 Keep the task within its original privacy boundary after every failure.
 Do not execute arbitrary shell commands returned by a model.
 Do not use this decision to bypass artifact checks or human approval gates.

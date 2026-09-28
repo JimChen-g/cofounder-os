@@ -48,6 +48,8 @@ def test_notifications_only_paired_user_and_persisted_dedup(tmp_path):
     def handle(req):
         if req.url.path.endswith('/notifications'):
             return httpx.Response(200, json={'items': [{'run_id': RID, 'delivery': D}]})
+        if req.url.path.endswith('/candidate'):
+            return httpx.Response(200, json={'result': {'patch_sha': D['patch_sha'], 'review': {'conclusion': 'fixture-review'}, 'tests': [{'exit_code': 0}]}})
         if req.url.path.endswith('/internal'):
             return httpx.Response(200, json={'tenant_access_token': 'fixture'})
         sent.append(json.loads(req.content))
@@ -57,6 +59,7 @@ def test_notifications_only_paired_user_and_persisted_dedup(tmp_path):
         Notifications(tmp_path/'n.db').send_pending(CONFIG, c)
     assert len(sent) == 1 and sent[0]['receive_id'] == 'u'
     assert AID in sent[0]['content']
+    assert 'fixture-review' in sent[0]['content'] and '测试退出码' in sent[0]['content']
 
 
 def test_export_sends_actual_approved_artifact_and_never_unapproved():
@@ -77,3 +80,20 @@ def test_export_sends_actual_approved_artifact_and_never_unapproved():
     assert len(sent) == 2
     with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(409))) as c:
         assert send_export_attachment(payload(f'导出 {RID}'), CONFIG, c, {}, 'fixture') is None
+
+
+def test_notification_does_not_attach_summary_from_different_patch(tmp_path):
+    sent = []
+    def handle(req):
+        if req.url.path.endswith('/notifications'):
+            return httpx.Response(200, json={'items': [{'run_id': RID, 'delivery': D}]})
+        if req.url.path.endswith('/candidate'):
+            return httpx.Response(200, json={'result': {'patch_sha': 'different', 'review': {'conclusion': 'stale-approval'}, 'tests': []}})
+        if req.url.path.endswith('/internal'):
+            return httpx.Response(200, json={'tenant_access_token': 'fixture'})
+        sent.append(json.loads(req.content))
+        return httpx.Response(200, json={'code': 0, 'data': {'message_id': 'n'}})
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        Notifications(tmp_path/'n.db').send_pending(CONFIG, client)
+    assert 'stale-approval' not in sent[0]['content']
+    assert '摘要暂不可用' in sent[0]['content']

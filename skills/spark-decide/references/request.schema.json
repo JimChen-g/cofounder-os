@@ -101,14 +101,16 @@
       "maxItems": 4,
       "minItems": 1,
       "title": "Candidates",
-      "type": "array"
+      "type": "array",
+      "uniqueItems": true
     },
     "policy": {
       "$ref": "#/$defs/RequestPolicy"
     },
     "evidence_ids": {
       "items": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 160
       },
       "maxItems": 32,
       "title": "Evidence Ids",

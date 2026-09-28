@@ -1,5 +1,5 @@
-# Build offline from the deployment's existing Python 3.12 base image.
-# Record the base RepoDigest and resulting image ID in the deployment evidence.
-FROM python:3.12-slim
+# Observed on Spark 2026-09-28; preserve the existing deployed image until separately rebuilt.
+FROM python:3.12-slim@sha256:e5c9fa26ffb76e11e0f054f30dc2523a2f9693f0c36c0cf1e39b27e152d899fc
 COPY wheels /wheels
-RUN pip install --no-index --find-links=/wheels pytest pytest-asyncio fastapi httpx pydantic pydantic-settings pypdf tenacity && rm -rf /wheels
+COPY engineering-tests.lock /engineering-tests.lock
+RUN pip install --no-index --find-links=/wheels -r /engineering-tests.lock && rm -rf /wheels

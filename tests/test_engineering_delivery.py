@@ -30,7 +30,7 @@ class SyntheticGateway(GatewayClient):
         if 'implementation Agent' in messages[0].content:
             self.implementations += 1
             revision = 1 if self.same_patch else self.implementations
-            content = ({'old': '# synthetic revision 1', 'new': f'# synthetic revision {revision}'} if 'bounded repair' in messages[0].content else {'implementation': f'# synthetic revision {revision}\n', 'tests': '# fixture\n'})
+            content = ({'old': '# synthetic revision 1', 'new': f'# synthetic revision {revision}'} if 'bounded repair' in messages[0].content else {'implementation': f'# synthetic revision {revision}\nsynthetic_fixture = True\n', 'tests': '# fixture\nsynthetic_fixture = True\n'})
         else:
             self.reviews += 1
             content = {'patch_sha': json.loads(messages[1].content)['patch_sha'],
@@ -137,9 +137,10 @@ async def test_feedback_same_run_fresh_checks_and_two_round_cap(env):
         with pytest.raises(DeliveryConflict, match='stale_version'):
             c.act(rid, 'founder', 'approve', previous)
     assert s.gateway.implementations == s.gateway.reviews == 2
-    response = c.act(rid, 'founder', 'feedback', feedback(p, rid))
-    assert response['action'] == 'manual_required'
-    assert p.get_run(rid).run.metadata['termination_reason'] == 'repair_or_attempt_limit'
+    before = p.get_run(rid).model_dump(mode='json')
+    with pytest.raises(DeliveryConflict, match='repair_attempts_exhausted'):
+        c.act(rid, 'founder', 'feedback', feedback(p, rid))
+    assert p.get_run(rid).model_dump(mode='json') == before
 
 
 @pytest.mark.asyncio

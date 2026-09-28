@@ -19,14 +19,43 @@ async def authenticate(request: Request, call_next: Callable[[Request], Awaitabl
     settings = get_settings()
     path = request.url.path
     if path.startswith('/v1/'):
-        if not same(request.headers.get('authorization'), 'Bearer ' + (settings.gateway_api_key or '')) or not settings.gateway_api_key:
+        token = request.headers.get('authorization')
+        skill = bool(settings.spark_decide_api_key and same(token, 'Bearer ' + settings.spark_decide_api_key))
+        gateway = bool(settings.gateway_api_key and same(token, 'Bearer ' + settings.gateway_api_key))
+        # Scope wins even if an operator accidentally duplicates credentials.
+        if skill:
+            if path != '/v1/spark-decide' or request.method != 'POST':
+                return JSONResponse({'error': 'skill_scope_denied'}, status_code=403)
+        elif not gateway:
             return JSONResponse({'error': 'unauthorized'}, status_code=401)
+        if path == '/v1/chat/completions' and request.method == 'POST' and not settings.gateway_allow_cloud:
+            from app.models import ChatRequest, Provider
+            from app.request_constraints import RequestPolicy
+            from pydantic import ValidationError
+            try:
+                chat = ChatRequest.model_validate(await request.json())
+                policy = RequestPolicy.model_validate(chat.policy)
+            except (ValueError, ValidationError):
+                return JSONResponse({'error': 'invalid_request'}, status_code=422)
+            if (chat.model == 'cofounder-step' or chat.provider == Provider.STEP
+                    or 'step' in chat.allowed_providers or 'step' in policy.allowed_providers
+                    or 'cloud:invoke' in policy.permissions or policy.cloud_call_budget):
+                return JSONResponse({'error': 'server_cloud_disabled'}, status_code=403)
     if not path.startswith('/api/'):
         return await call_next(request)
     token = request.headers.get('authorization')
     is_founder = bool(settings.product_api_token and same(token, 'Bearer ' + settings.product_api_token))
     is_bridge = bool(settings.product_api_bridge_token and same(token, 'Bearer ' + settings.product_api_bridge_token))
-    if not (is_founder or is_bridge):
+    is_proxy = bool(settings.product_api_proxy_token and same(token, 'Bearer ' + settings.product_api_proxy_token))
+    if is_proxy:
+        base = '/api/engineering/runs/' + (settings.product_proxy_run_id or '')
+        suffix = path[len(base):] if path.startswith(base) else None
+        allowed = bool(settings.product_proxy_run_id) and (
+            (request.method == 'GET' and suffix in {'', '/delivery', '/export', '/candidate'})
+            or (request.method == 'POST' and suffix in {'/feedback', '/approve', '/reject', '/cancel', '/interrupt'}))
+        if not allowed:
+            return JSONResponse({'error': 'proxy_scope_denied'}, status_code=403)
+    if not (is_founder or is_bridge or is_proxy):
         return JSONResponse({'error': 'unauthorized'}, status_code=401)
     if is_bridge:
         tenant = settings.feishu_tenant_key

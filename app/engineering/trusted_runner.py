@@ -127,24 +127,30 @@ def compare_observations(output: str, cases: list[dict[str, Any]]) -> dict[str, 
 
 def child() -> None:
     # No expected answers enter this process. Host alone scores observations.
-    import copy
     import importlib.util
     import sys
     inputs = json.loads(sys.stdin.read())
+    # Freeze ordinary container snapshots and serializer methods before import.
+    # This defeats the reviewed deepcopy/encoder monkeypatches, not arbitrary
+    # adversarial Python in the same process (which needs a different protocol).
+    _repr = repr
+    originals = [_repr(value) for value in inputs]
+    encoder = json.JSONEncoder(ensure_ascii=False)
+    encoder.iterencode = encoder.iterencode  # type: ignore[method-assign]
+    _encode = encoder.encode
     spec = importlib.util.spec_from_file_location('candidate', '/candidate/app/insurance_poc/materials.py')
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     results = []
-    for original in inputs:
-        payload = copy.deepcopy(original)
+    for payload, original in zip(inputs, originals):
         try:
             result = module.check_material_completeness(payload)
             raises = None
         except BaseException as exc:
             result, raises = None, type(exc).__name__
-        results.append({'result': result, 'raises': raises, 'unchanged': payload == original})
-    print(json.dumps(results, ensure_ascii=False))
+        results.append({'result': result, 'raises': raises, 'unchanged': _repr(payload) == original})
+    print(_encode(results))
 
 
 if __name__ == '__main__':

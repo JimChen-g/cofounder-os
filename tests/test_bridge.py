@@ -61,3 +61,48 @@ def test_async_worker_facts_and_no_replay(tmp_path):
     assert facts['service_received_at'] == 'actual-service-time'
     assert facts['agent_consumed_at'] is None and facts['read_state'] == 'unknown'
     assert len(calls) == 3
+
+
+def test_failed_business_write_replies_fixed_warning_without_replay(tmp_path):
+    import json
+    inbox = Inbox(tmp_path/'inbox.db')
+    inbox.accept(payload() | {'text': '创建 材料检查'})
+    writes, replies = [], []
+    def handle(req):
+        if req.url.path.endswith('/receipt'):
+            return httpx.Response(200, json={'service_received_at': 'time'})
+        if req.url.path.endswith('/runs'):
+            writes.append(req)
+            raise httpx.ReadTimeout('secret must not appear', request=req)
+        if req.url.path.endswith('/internal'):
+            return httpx.Response(200, json={'tenant_access_token': 'fixture'})
+        replies.append(json.loads(req.content))
+        return httpx.Response(200, json={'code': 0, 'data': {'message_id': 'warning'}})
+    config = dict(product_url='http://localhost', bridge_token='b', app_id='a', app_secret='s')
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        assert process_one(inbox, config, client)
+        assert not process_one(inbox, config, client)
+    assert len(writes) == len(replies) == 1
+    assert '详情' in replies[0]['content'] and 'secret' not in replies[0]['content']
+    assert inbox.facts()[0]['state'] == 'failed'
+    assert inbox.facts()[0]['error'] == 'ReadTimeout'
+
+
+def test_uncertain_reply_does_not_trigger_another_warning(tmp_path):
+    inbox = Inbox(tmp_path/'inbox.db')
+    inbox.accept(payload())
+    replies = []
+    def handle(req):
+        if req.url.path.endswith('/receipt'):
+            return httpx.Response(200, json={'service_received_at': 'time'})
+        if req.url.path.endswith('/internal'):
+            return httpx.Response(200, json={'tenant_access_token': 'fixture'})
+        replies.append(req.content)
+        raise httpx.ReadTimeout('ambiguous', request=req)
+    config = dict(product_url='http://localhost', bridge_token='b', app_id='a', app_secret='s')
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        assert process_one(inbox, config, client)
+        assert not process_one(inbox, config, client)
+    # Existing bounded reply retry uses the same idempotent UUID. No new warning.
+    assert len(replies) == 2 and replies[0] == replies[1]
+    assert inbox.facts()[0]['state'] == 'failed'
