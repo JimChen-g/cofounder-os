@@ -309,7 +309,7 @@ async function handleEvidenceFiles(event) {
   } catch (error) {
     state.pendingAttachments = [];
     renderAttachmentList();
-    showAlert("Evidence files could not be read", error);
+    showAlert("材料读取失败", error);
   }
 }
 
@@ -405,7 +405,7 @@ function renderLiveExecutionBoard() {
     const route = element("div", "live-route-line");
     append(
       route,
-      element("span", null, "ROUTE"),
+      element("span", null, "处理路径"),
       element("strong", null, decision.selected_model),
       element(
         "small",
@@ -518,7 +518,7 @@ function renderRoutingBoard() {
     const selected = element("div", "route-selection");
     append(
       selected,
-      element("span", null, "Selected"),
+      element("span", null, "已选择"),
       element("strong", null, decision.selected_model),
       decision.candidate_scores?.[decision.selected_model] !== undefined
         ? element(
@@ -555,7 +555,7 @@ function renderRoutingBoard() {
     );
     const scoreBlock = rankedScores.length ? element("div", "route-scores") : null;
     if (scoreBlock) {
-      scoreBlock.append(element("strong", null, "Eligible candidate scores"));
+      scoreBlock.append(element("strong", null, "符合条件的候选评分"));
       rankedScores.forEach(([model, score], index) => {
         scoreBlock.append(
           element(
@@ -584,7 +584,7 @@ function renderRoutingBoard() {
     if (callEvidence) {
       append(
         callEvidence,
-        element("strong", null, "Verified live call"),
+        element("strong", null, "已核验的模型调用"),
         element(
           "p",
           null,
@@ -596,7 +596,7 @@ function renderRoutingBoard() {
       fallbackEvidence = element("div", "route-fallback-evidence");
       append(
         fallbackEvidence,
-        element("strong", null, "Live route failed safely"),
+        element("strong", null, "模型调用失败，已停止此路径"),
         execution.call_count
           ? element(
               "p",
@@ -635,7 +635,7 @@ function renderRoutingBoard() {
   );
   if (changedRoutes.length) {
     selectors.routingDisclosure.append(
-      element("strong", null, "Route recalculated from submitted constraints"),
+      element("strong", null, "已根据提交条件重新选择路径"),
       ...changedRoutes.map((decision) =>
         element(
           "p",
@@ -690,7 +690,7 @@ async function simulateRouteFallback() {
     );
     if (restoreNormal) {
       state.routeSimulationTarget = null;
-      toast("Normal routing restored; measured provider health will be used again.");
+      toast("已恢复正常路径，将使用实际服务健康记录。");
     } else {
       const rerouted = plan.decisions.find(
         (decision) => decision.task_key === "engineering-plan",
@@ -700,7 +700,7 @@ async function simulateRouteFallback() {
       );
     }
   } catch (error) {
-    showAlert("Fallback simulation could not run", error);
+    showAlert("路径中断模拟未能执行", error);
   } finally {
     setButtonLoading(selectors.simulateRouteFallback, false);
   }
@@ -808,7 +808,7 @@ async function buildEvidencePackage({ quiet = false } = {}) {
     renderEvidenceBoard();
     await loadRoutingDecisions();
     if (!quiet) {
-      toast("Evidence Package built with source, privacy, and Agent-use links.");
+      toast("材料已整理，来源、隐私级别和使用记录已关联。");
       selectors.evidenceBoard.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     return state.evidencePackage;
@@ -822,7 +822,7 @@ async function previewEvidence() {
   try {
     await buildEvidencePackage();
   } catch (error) {
-    showAlert("Evidence extraction needs attention", error);
+    showAlert("材料整理需要处理", error);
   }
 }
 
@@ -840,7 +840,7 @@ async function loadPocFixture() {
     renderAttachmentList();
     await buildEvidencePackage();
   } catch (error) {
-    showAlert("Stable demo evidence could not be loaded", error);
+    showAlert("演示材料读取失败", error);
   } finally {
     setButtonLoading(selectors.loadPocFixture, false);
   }
@@ -923,13 +923,13 @@ async function checkHealth() {
     const health = await apiRequest("/api/health");
     selectors.systemState.classList.remove("is-error");
     selectors.systemState.classList.add("is-healthy");
-    selectors.systemStateLabel.textContent = "System ready";
-    selectors.systemStateDetail.textContent = `Product API v${health.version}`;
+    selectors.systemStateLabel.textContent = "服务已连接";
+    selectors.systemStateDetail.textContent = "连接正常";
   } catch (error) {
     selectors.systemState.classList.remove("is-healthy");
     selectors.systemState.classList.add("is-error");
-    selectors.systemStateLabel.textContent = "API unavailable";
-    selectors.systemStateDetail.textContent = "Check runtime";
+    selectors.systemStateLabel.textContent = "服务未连接";
+    selectors.systemStateDetail.textContent = "请稍后刷新";
   }
 }
 
@@ -951,7 +951,7 @@ async function createMission(event) {
         await buildEvidencePackage({ quiet: true });
       }
     } catch (error) {
-      showAlert("Mission evidence is not ready", error);
+      showAlert("决策材料尚未就绪", error);
       return;
     }
   }
@@ -1011,11 +1011,11 @@ async function createMission(event) {
     state.selectedArtifactId = null;
     await loadRun({ useCurrentSnapshot: true });
     if (state.runId === created.run_id && state.snapshot) {
-      toast("Mission created and workflow evidence loaded.");
+      toast("决策已创建，执行记录已载入。");
     }
   } catch (error) {
     if (requestEpoch === state.requestEpoch) {
-      showAlert("Mission could not start", error);
+      showAlert("决策未能开始", error);
     }
   } finally {
     window.clearTimeout(slowMessageTimer);
@@ -1098,7 +1098,7 @@ async function loadRun({ useCurrentSnapshot = false } = {}) {
       requestEpoch === state.requestEpoch &&
       requestedRunId === state.runId
     ) {
-      showAlert("Run evidence could not be refreshed", error);
+      showAlert("任务记录刷新失败", error);
     }
   } finally {
     if (
@@ -1146,7 +1146,7 @@ async function retryRun() {
       requestEpoch === state.requestEpoch &&
       requestedRunId === state.runId
     ) {
-      showAlert("Recovery could not continue", error);
+      showAlert("恢复操作未能继续", error);
     }
   } finally {
     setButtonLoading(selectors.retryRun, false);
@@ -1217,7 +1217,7 @@ async function resolveApproval(approvalId, decision, card) {
       requestEpoch === state.requestEpoch &&
       requestedRunId === state.runId
     ) {
-      showAlert("Approval could not be resolved", error);
+      showAlert("放行操作未完成", error);
       progress.remove();
       card.removeAttribute("aria-busy");
       buttons.forEach((button) => {
@@ -1302,22 +1302,22 @@ function renderRunSummary() {
   const noticeAction = document.querySelector("#notice-action");
   notice.classList.remove("is-hidden");
   if (pendingApprovals.length) {
-    noticeTitle.textContent = "Founder decision required";
+    noticeTitle.textContent = "需要你作出决定";
     noticeBody.textContent =
       `${pendingApprovals.length} controlled action awaits review before execution can continue.`;
-    noticeAction.textContent = "Review";
+    noticeAction.textContent = "查看依据";
     noticeAction.onclick = () => switchView("approvals");
   } else if (run.status === "failed") {
-    noticeTitle.textContent = "Workflow stopped safely";
+    noticeTitle.textContent = "执行已停止";
     noticeBody.textContent =
       "Inspect the failed task and audit evidence, then run bounded recovery if eligible.";
-    noticeAction.textContent = "View audit";
+    noticeAction.textContent = "查看记录";
     noticeAction.onclick = () => switchView("audit");
   } else if (run.status === "completed") {
-    noticeTitle.textContent = "Decision bundle ready";
+    noticeTitle.textContent = "决策输出已就绪";
     noticeBody.textContent =
       `${state.artifacts.length} artifacts are available with checksum evidence.`;
-    noticeAction.textContent = "Open bundle";
+    noticeAction.textContent = "查看输出";
     noticeAction.onclick = () => switchView("artifacts");
   } else {
     notice.classList.add("is-hidden");
@@ -1494,7 +1494,7 @@ function renderConflicts() {
     append(
       head,
       element("span", "conflict-id", conflict.conflict_id),
-      element("span", "task-status status-completed", "Resolved"),
+      element("span", "task-status status-completed", "已处理"),
     );
     const transition = element("div", "conflict-transition");
     append(
@@ -1583,7 +1583,7 @@ function renderPolicy() {
   const boundary = element("div", "policy-state");
   append(
     boundary,
-    element("strong", null, "Execution boundary"),
+    element("strong", null, "执行边界"),
     element(
       "p",
       null,
@@ -1833,7 +1833,7 @@ function renderArtifacts() {
   const head = element("div", "artifact-list-head");
   append(
     head,
-    element("strong", null, "Decision bundle"),
+    element("strong", null, "决策输出"),
     element(
       "span",
       null,
@@ -1858,7 +1858,7 @@ function renderArtifacts() {
       element(
         "small",
         null,
-        `${labelize(resource.artifact.kind)} · ${resource.artifact.size_bytes || 0} bytes`,
+        `${labelize(resource.artifact.kind)} · ${resource.artifact.size_bytes || 0} 字节`,
       ),
     );
     append(
@@ -1890,6 +1890,8 @@ function renderArtifacts() {
 
 function renderArtifactViewer() {
   selectors.artifactViewer.replaceChildren();
+  selectors.artifactViewer.classList.toggle("is-hidden", !state.artifacts.length);
+  selectors.artifactList.parentElement.classList.toggle("is-empty", !state.artifacts.length);
   const resource = state.artifacts.find(
     (item) => item.artifact.id === state.selectedArtifactId,
   );
@@ -1899,8 +1901,8 @@ function renderArtifactViewer() {
     append(
       empty,
       element("span", null, "▱"),
-      element("h3", null, "Select an artifact"),
-      element("p", null, "The verified content will appear here."),
+      element("h3", null, "选择一项输出"),
+      element("p", null, "选择后查看已校验的内容。"),
     );
     selectors.artifactViewer.append(empty);
     return;
@@ -1914,7 +1916,7 @@ function renderArtifactViewer() {
     element(
       "p",
       null,
-      `SHA-256 ${resource.artifact.checksum_sha256 || "not available"}`,
+      `SHA-256 ${resource.artifact.checksum_sha256 || "未提供"}`,
     ),
   );
   append(
@@ -1923,14 +1925,14 @@ function renderArtifactViewer() {
     element(
       "span",
       "verified-label",
-      resource.content_available ? "● Checksum verified" : "Content unavailable",
+      resource.content_available ? "● 文件校验通过" : "内容暂不可用",
     ),
   );
   const content = element(
     "pre",
     "viewer-content",
     resource.content ||
-      `Content omitted: ${resource.content_omitted_reason || "not available"}`,
+      `内容未展示： ${resource.content_omitted_reason || "未提供"}`,
   );
   append(selectors.artifactViewer, head, content);
 }
@@ -1953,19 +1955,19 @@ function downloadSelectedArtifact() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-  toast(`${artifactName(resource)} downloaded.`);
+  toast(`${artifactName(resource)} 已下载。`);
 }
 
 function renderAudit() {
   selectors.auditList.replaceChildren();
   selectors.auditCount.textContent =
-    `${state.events.length} event${state.events.length === 1 ? "" : "s"}`;
+    `${state.events.length} 条记录`;
   if (!state.events.length) {
     selectors.auditList.append(
       emptyCard(
         "≋",
-        "No audit events yet",
-        "Workflow state transitions and decisions will appear here.",
+        "暂无记录",
+        "任务开始后，这里会显示执行与决定记录。",
       ),
     );
     return;
@@ -2031,7 +2033,7 @@ async function loadEvaluation() {
     renderEvaluation();
   } catch (error) {
     if (evaluationEpoch === state.evaluationEpoch) {
-      showAlert("Evaluation evidence could not be loaded", error);
+      showAlert("评测证据读取失败", error);
       state.insuranceEvaluation = null;
       renderInsuranceDemoEvaluation();
       renderEvaluationEmpty();
@@ -2068,26 +2070,29 @@ function renderInsuranceDemoEvaluation() {
     if (metrics.measurement_status === "unavailable") {
       append(
         card,
-        element("span", "demo-strategy-label", "UNAVAILABLE"),
+        element("span", "demo-strategy-label", "未测量"),
         element("h3", null, title),
         element(
           "p",
           "route-reason",
-          metrics.unavailability_reason || "This strategy was not measured.",
+          "此策略尚未测量，不能据此比较效果。",
         ),
       );
+      const original = element("details", "source-disclosure");
+      append(original, element("summary", null, "查看原始原因"), element("p", null, metrics.unavailability_reason || "未提供原因"));
+      card.append(original);
       selectors.demoStrategyGrid.append(card);
       return;
     }
     [
-      ["Task completion", formatRate(metrics.task_completion_rate)],
-      ["Routing accuracy", formatRate(metrics.routing_accuracy)],
-      ["Local execution share", formatRate(metrics.local_model_share)],
-      ["Tool success", formatRate(metrics.tool_success_rate)],
-      ["Verifier corrections", String(metrics.verifier_correction_count)],
-      ["Human interventions", String(metrics.human_intervention_count)],
-      ["Measured route latency", `${metrics.average_latency_ms.toFixed(1)} ms`],
-      ["Estimated cloud cost", `$${metrics.estimated_cloud_api_cost_usd.toFixed(2)}`],
+      ["任务完成率", formatRate(metrics.task_completion_rate)],
+      ["路径选择正确率", formatRate(metrics.routing_accuracy)],
+      ["本地执行占比", formatRate(metrics.local_model_share)],
+      ["工具成功率", formatRate(metrics.tool_success_rate)],
+      ["核验修正次数", String(metrics.verifier_correction_count)],
+      ["人工介入次数", String(metrics.human_intervention_count)],
+      ["本地处理耗时", `${metrics.average_latency_ms.toFixed(1)} ms`],
+      ["估算云端成本", `$${metrics.estimated_cloud_api_cost_usd.toFixed(2)}`],
     ].forEach(([label, value]) => {
       const row = element("div", "demo-metric-row");
       append(row, element("span", null, label), element("strong", null, value));
@@ -2095,7 +2100,7 @@ function renderInsuranceDemoEvaluation() {
     });
     append(
       card,
-      element("span", "demo-strategy-label", className === "baseline" ? "BASELINE" : "ROUTED"),
+      element("span", "demo-strategy-label", className === "baseline" ? "基线" : "按路径执行"),
       element("h3", null, title),
       rows,
     );
@@ -2103,13 +2108,16 @@ function renderInsuranceDemoEvaluation() {
   });
   selectors.demoEvaluationDisclosure.replaceChildren(
     element("strong", null, "合成演示对比 · 不代表模型质量"),
-    element("p", null, evaluation.disclosure),
+    element("p", null, "合成案例用于观察流程，不代表统计上的模型质量；未测量的基线不能作效果比较。"),
     element(
       "p",
       null,
       `来源：${evaluation.source_dataset}。延迟为本地处理耗时，不代表实时模型推理或账单成本。`,
     ),
   );
+  const original = element("details", "source-disclosure");
+  append(original, element("summary", null, "查看原始评测说明"), element("p", null, evaluation.disclosure || "未提供"));
+  selectors.demoEvaluationDisclosure.append(original);
 }
 
 function renderEvaluationEmpty() {
@@ -2122,24 +2130,24 @@ function renderEvaluationEmpty() {
   document.querySelector("#evaluation-grade").textContent = "—";
   document.querySelector("#evaluation-grade").className =
     "evaluation-grade grade-attention";
-  document.querySelector("#evaluation-retries").textContent = "0 retries";
+  document.querySelector("#evaluation-retries").textContent = "重试 0 次";
   document.querySelector("#evaluation-updated").textContent =
     "等待任务记录";
   selectors.evaluationLatest.replaceChildren(
     emptyCard(
       "◫",
-      "No evaluated runs",
-      "Launch a founder mission to create deterministic execution evidence.",
+      "暂无评测记录",
+      "发起决策后查看执行证据。",
     ),
   );
   selectors.evaluationAgents.replaceChildren(
-    element("p", "evaluation-empty-copy", "No agent performance evidence yet."),
+    element("p", "evaluation-empty-copy", "暂无步骤执行记录。"),
   );
   selectors.evaluationRuns.replaceChildren(
-    element("p", "evaluation-empty-copy", "No Run history is available."),
+    element("p", "evaluation-empty-copy", "暂无历史任务。"),
   );
   selectors.evaluationProviders.replaceChildren(
-    element("p", "evaluation-empty-copy", "No provider routes are recorded."),
+    element("p", "evaluation-empty-copy", "暂无服务使用记录。"),
   );
 }
 
@@ -2162,7 +2170,7 @@ function renderEvaluation() {
   document.querySelector("#evaluation-integrity").textContent =
     formatPercent(summary.artifact_integrity_rate);
   document.querySelector("#evaluation-retries").textContent =
-    `${summary.total_retries} ${summary.total_retries === 1 ? "retry" : "retries"}`;
+    `重试 ${summary.total_retries} 次`;
   document.querySelector("#evaluation-updated").textContent =
     `更新于 ${formatTime(summary.generated_at, true)}`;
 
@@ -2197,7 +2205,7 @@ function renderLatestEvaluation(run) {
     `evaluation-score grade-ring-${grade}`,
     run.overall_score,
   );
-  score.setAttribute("aria-label", `${run.overall_score} out of 100`);
+  score.setAttribute("aria-label", `${run.overall_score} 分，满分 100`);
   const copy = element("div");
   append(
     copy,
@@ -2239,9 +2247,10 @@ function renderLatestEvaluation(run) {
 
 function renderEvaluationAgents(agents) {
   selectors.evaluationAgents.replaceChildren();
+  selectors.evaluationAgents.closest(".evaluation-agents-panel").classList.toggle("is-hidden", !agents.length);
   if (!agents.length) {
     selectors.evaluationAgents.append(
-      element("p", "evaluation-empty-copy", "No governed tasks are available."),
+      element("p", "evaluation-empty-copy", "暂无决策步骤记录。"),
     );
     return;
   }
@@ -2251,7 +2260,7 @@ function renderEvaluationAgents(agents) {
     append(
       heading,
       element("strong", null, labelize(agent.agent_id)),
-      element("span", null, `${agent.success_rate.toFixed(1)}% success`),
+      element("span", null, `成功率 ${agent.success_rate.toFixed(1)}%`),
     );
     const track = element("div", "evaluation-track");
     const fill = element("span", "evaluation-fill dimension-pass");
@@ -2264,7 +2273,7 @@ function renderEvaluationAgents(agents) {
       element(
         "p",
         null,
-        `${agent.completed}/${agent.tasks} complete · ${agent.retries} retries · ${agent.average_attempts.toFixed(2)} avg attempts`,
+        `完成 ${agent.completed}/${agent.tasks} 步 · 重试 ${agent.retries} 次 · 平均尝试 ${agent.average_attempts.toFixed(2)} 次`,
       ),
     );
     selectors.evaluationAgents.append(row);
@@ -2293,7 +2302,7 @@ function renderEvaluationRuns(runs) {
         `task-status ${statusClass(evaluationState(run))}`,
         evaluationLabel(run),
       ),
-      element("strong", "evaluation-run-score", isEngineering(run) ? "不适用 · 工程检查" : run.overall_score),
+      element("strong", "evaluation-run-score", isEngineering(run) ? "" : run.overall_score),
     );
     const inspect = element(
       "button",
@@ -2310,9 +2319,10 @@ function renderEvaluationRuns(runs) {
 function renderEvaluationProviders(distribution, evaluatedRunCount) {
   selectors.evaluationProviders.replaceChildren();
   const entries = Object.entries(distribution);
+  selectors.evaluationProviders.closest(".evaluation-providers-panel").classList.toggle("is-hidden", !entries.length);
   if (!entries.length) {
     selectors.evaluationProviders.append(
-      element("p", "evaluation-empty-copy", "No provider routes are recorded."),
+      element("p", "evaluation-empty-copy", "暂无服务使用记录。"),
     );
     return;
   }
@@ -2324,7 +2334,7 @@ function renderEvaluationProviders(distribution, evaluatedRunCount) {
       element(
         "span",
         null,
-        `${count} / ${evaluatedRunCount} evaluated runs`,
+        `${count} / ${evaluatedRunCount} 个已评测任务`,
       ),
     );
     selectors.evaluationProviders.append(row);
@@ -2348,7 +2358,7 @@ function openEvaluatedRun(runId) {
   selectors.emptyOverview.classList.add("is-hidden");
   selectors.runWorkspace.classList.add("is-hidden");
   switchView("mission");
-  toast(`Loading Run ${shortId(runId)} evidence.`);
+  toast(`正在读取任务 ${shortId(runId)} 的证据。`);
   loadRun();
 }
 
@@ -2368,14 +2378,14 @@ function renderEmptyDataViews() {
     emptyCard(
       "✓",
       "尚未选择决策任务",
-      "Launch a founder mission to review controlled actions and policy evidence.",
+      "发起或选择决策后，在这里处理需要你放行的操作。",
     ),
   );
   selectors.artifactList.replaceChildren(
     emptyCard(
       "▱",
       "尚未选择决策任务",
-      "The synthesized decision bundle will appear after a workflow runs.",
+      "任务生成的决策输出会显示在这里。",
     ),
   );
   renderArtifactViewer();
@@ -2383,7 +2393,7 @@ function renderEmptyDataViews() {
     emptyCard(
       "≋",
       "尚未选择决策任务",
-      "The append-only audit trace will appear after a workflow starts.",
+      "任务开始后，这里会保留执行与决定记录。",
     ),
   );
 }
@@ -2454,7 +2464,7 @@ if (
 if (localPortal) {
   const docsLink = document.querySelector('a[href="/docs"]');
   if (docsLink) { docsLink.href = "/"; docsLink.textContent = "返回今日与工程"; docsLink.removeAttribute("target"); }
-  document.querySelectorAll("[data-engineering-link]").forEach(link => { link.href = "/"; });
+  document.querySelectorAll("[data-engineering-link]").forEach(link => { link.href = link.textContent.trim() === "工程" ? "/#tasks" : "/"; });
   selectors.missionForm.querySelectorAll("button[type=submit]").forEach(button => { button.disabled = true; });
   fetch("/local/status", {credentials: "same-origin"}).then(response => {
     if (!response.ok) throw new Error("无法读取本机账号，请刷新后重试");

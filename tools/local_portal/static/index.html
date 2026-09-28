@@ -41,9 +41,9 @@
     </section>
 
     <section class="view" id="view-tasks" hidden>
-      <div class="page-heading"><div><div class="eyebrow">工程</div><h1>工程任务</h1><p class="lede">查看真实进度，保持原有预算、次数和版本边界。</p></div><button class="button primary create-run" disabled>创建工程任务</button></div>
+      <div class="page-heading"><div><div class="eyebrow">工程</div><h1>工程任务</h1><p class="lede">查看任务进度与交付版本。</p></div><button class="button primary create-run" disabled>创建工程任务</button></div>
       <div class="scope-note"><strong>当前范围</strong> 仅支持“材料完整性检查”固定模板；本入口暂不接受任意代码任务。</div>
-      <form id="load-form" class="load-form"><label for="run-id">按任务 ID 加载</label><input id="run-id" autocomplete="off" spellcheck="false" placeholder="输入 Run ID（UUID）"><button class="button secondary" type="submit">加载任务</button></form>
+      <form id="load-form" class="load-form"><label for="run-id">按任务编号查找</label><input id="run-id" autocomplete="off" spellcheck="false" placeholder="输入任务编号"><button class="button secondary" type="submit">加载任务</button></form>
       <div class="task-grid"><aside class="panel run-list-panel"><div class="panel-heading"><h2>任务列表</h2><button class="text-button" id="refresh-runs">刷新</button></div><div id="run-list" class="run-list"><div class="empty small">尚未读取任务列表</div></div></aside><article class="panel task-detail"><div id="task-empty" class="empty"><span class="empty-symbol">▤</span><h3>选择一个任务</h3><p>从左侧历史记录选择，或输入任务 ID。<br>也可以手动创建材料完整性检查任务。</p></div><div id="task-content" hidden><div class="selected-heading"><div><span class="small-label">当前任务</span><h2 id="task-objective"></h2><details class="credentials"><summary>任务编号</summary><code id="task-id"></code></details></div><span class="status-badge" id="task-status"></span></div><div id="progress" class="progress-steps"></div><div id="task-alert" class="info-note" hidden></div><dl id="task-details" class="detail-list two-column"></dl><div class="section-title"><h3>执行步骤</h3><span id="poll-status" class="muted"></span></div><div id="task-steps"></div><div class="detail-actions"><button class="button primary" data-view="review">审阅与决定 →</button><button class="button secondary" id="refresh-selected">刷新任务</button><button class="button danger-subtle" id="cancel-run" disabled>取消任务</button></div></div></article></div>
     </section>
 

@@ -2958,3 +2958,13 @@ h1,h2,h3,.brand strong { font-family:"Songti SC","Noto Serif CJK SC",serif; }
 
 .agent-monogram,.agent-avatar { display:none!important; }
 .map-card { grid-template-columns:1fr; background:var(--surface); border-color:var(--line); }
+
+/* Review polish: concise empty states and optional technical evidence. */
+.evidence-disclosure > summary { cursor:pointer; font-size:16px; font-weight:600; padding:16px 20px; }
+.evidence-disclosure[open] > summary { border-bottom:1px solid var(--line); margin-bottom:16px; }
+.source-disclosure { margin-top:12px; font-size:13px; color:var(--ink-soft); }
+.source-disclosure summary { cursor:pointer; }
+.artifact-layout.is-empty { grid-template-columns:1fr; }
+.empty-card,.artifact-empty { min-height:160px; padding:32px 24px; }
+.evaluation-layout:has(.evaluation-agents-panel.is-hidden),.evaluation-secondary:has(.evaluation-providers-panel.is-hidden) { grid-template-columns:1fr; }
+.topbar .eyebrow,.panel-heading .eyebrow { display:none; }
