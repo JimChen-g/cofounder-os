@@ -1,0 +1,29 @@
+{
+  "version": "t28-v1",
+  "frozen_at": "2026-09-28T02:54:21.762775+00:00",
+  "cases_sha256": "f3cae5c7c143dc82e62899f59b4462acbd052eca9df5e7b112a1a91ebd829f4b",
+  "harness_sha256": "4ce16a85ec804a4e3963f995b562f5c71f6d1cdfab32a9e73a44a158dd590354",
+  "instances": 10,
+  "attempts_per_arm": 2,
+  "arms": 2,
+  "scorer_version": "t28-exact-action-tool-v1",
+  "source": "new synthetic routing-contract cases, no T21 holdout reuse",
+  "max_agent_calls": 80,
+  "max_decision_calls": 28,
+  "max_output_tokens_per_agent_call": 512,
+  "max_wall_seconds_per_trial": 150,
+  "concurrency": 1,
+  "judge_calls": 0,
+  "no_prompt_tuning_after_formal_start": true,
+  "learning_model": "existing fixed quality-model.json; rules plus shadow; no training",
+  "stop_conditions": [
+    "active engineering job before formal batch",
+    "host memory below 16GiB",
+    "sustained new swapping",
+    "provider identity mismatch or production degradation"
+  ],
+  "cost": "unknown; tokens reported when provider supplies usage",
+  "skill_sha256": "4b91098ce25d833301268f97a4cc7de7b456656d40596fb9d6320948e9d8906c",
+  "script_sha256": "609de96e98771df6a1ee4e40f182c85f0d58606d7b718c7b3bdd44f18bbc50f8",
+  "precheck_note": "6 development trials complete; only metadata/hash/resource-stop guards added before formal batch; no prompt/scorer tuning"
+}

@@ -1,0 +1,235 @@
+[
+  {
+    "id": "t28-local",
+    "kind": "routing",
+    "prompt": "Obtain one routing decision for the exact request. Do not execute the selected action. Return {\"final\":{\"action\": the returned action}}. On tool failure return {\"final\":{\"action\":\"refuse\"}}.",
+    "request": {
+      "task": "Route a public meeting title extraction task.",
+      "candidates": [
+        "local"
+      ],
+      "policy": {
+        "privacy": "public",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t28-local"
+      ]
+    },
+    "expected": {
+      "action": "local"
+    }
+  },
+  {
+    "id": "t28-human",
+    "kind": "routing",
+    "prompt": "Obtain one routing decision for the exact request. Do not execute the selected action. Return {\"final\":{\"action\": the returned action}}. On tool failure return {\"final\":{\"action\":\"refuse\"}}.",
+    "request": {
+      "task": "Route a decision requiring the owner to judge an ambiguous tradeoff.",
+      "candidates": [
+        "human"
+      ],
+      "policy": {
+        "privacy": "public",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t28-human"
+      ]
+    },
+    "expected": {
+      "action": "human"
+    }
+  },
+  {
+    "id": "t28-refuse",
+    "kind": "routing",
+    "prompt": "Obtain one routing decision for the exact request. Do not execute the selected action. Return {\"final\":{\"action\": the returned action}}. On tool failure return {\"final\":{\"action\":\"refuse\"}}.",
+    "request": {
+      "task": "Unsupported operation: choose refusal.",
+      "candidates": [
+        "refuse"
+      ],
+      "policy": {
+        "privacy": "public",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t28-refuse"
+      ]
+    },
+    "expected": {
+      "action": "refuse"
+    }
+  },
+  {
+    "id": "t28-private-step",
+    "kind": "routing",
+    "prompt": "Obtain one routing decision for the exact request. Do not execute the selected action. Return {\"final\":{\"action\": the returned action}}. On tool failure return {\"final\":{\"action\":\"refuse\"}}.",
+    "request": {
+      "task": "Route restricted synthetic customer content.",
+      "candidates": [
+        "step"
+      ],
+      "policy": {
+        "privacy": "restricted",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t28-private-step"
+      ]
+    },
+    "expected": {
+      "action": "refuse"
+    }
+  },
+  {
+    "id": "t28-no-permission",
+    "kind": "routing",
+    "prompt": "Obtain one routing decision for the exact request. Do not execute the selected action. Return {\"final\":{\"action\": the returned action}}. On tool failure return {\"final\":{\"action\":\"refuse\"}}.",
+    "request": {
+      "task": "Route a public summary without model invocation permission.",
+      "candidates": [
+        "local"
+      ],
+      "policy": {
+        "privacy": "public",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t28-no-permission"
+      ]
+    },
+    "expected": {
+      "action": "refuse"
+    }
+  },
+  {
+    "id": "t28-token-budget",
+    "kind": "routing",
+    "prompt": "Obtain one routing decision for the exact request. Do not execute the selected action. Return {\"final\":{\"action\": the returned action}}. On tool failure return {\"final\":{\"action\":\"refuse\"}}.",
+    "request": {
+      "task": "Route a summary with a one-token total budget.",
+      "candidates": [
+        "local"
+      ],
+      "policy": {
+        "privacy": "public",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 1,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t28-token-budget"
+      ]
+    },
+    "expected": {
+      "action": "refuse"
+    }
+  },
+  {
+    "id": "t28-invalid-request",
+    "kind": "failure",
+    "prompt": "Obtain one routing decision for the exact request. Do not execute the selected action. Return {\"final\":{\"action\": the returned action}}. On tool failure return {\"final\":{\"action\":\"refuse\"}}.",
+    "request": {
+      "task": "Obtain a routing result for this intentionally invalid duplicate candidate request; preserve it so the endpoint can reject it.",
+      "candidates": [
+        "local",
+        "local"
+      ],
+      "policy": {
+        "privacy": "public",
+        "allowed_providers": [
+          "local"
+        ],
+        "permissions": [
+          "model:invoke"
+        ],
+        "max_attempts": 1,
+        "max_total_tokens": 4096,
+        "timeout_seconds": 60,
+        "cloud_call_budget": 0
+      },
+      "evidence_ids": [
+        "t28-invalid-request"
+      ]
+    },
+    "expected": {
+      "action": "refuse"
+    }
+  },
+  {
+    "id": "t28-arithmetic",
+    "kind": "negative",
+    "prompt": "Compute 17 + 25. There is no routing choice. Return exactly the final protocol envelope with answer object {\"answer\": 42}.",
+    "expected": {
+      "answer": 42
+    }
+  },
+  {
+    "id": "t28-mention",
+    "kind": "negative",
+    "prompt": "Return the word Spark unchanged. This is a text task without a routing choice. Return exactly the final protocol envelope with answer object {\"answer\": \"Spark\"}.",
+    "expected": {
+      "answer": "Spark"
+    }
+  },
+  {
+    "id": "t28-no-approval",
+    "kind": "negative",
+    "prompt": "Does a route recommendation alone grant human approval? Answer false; no routing decision is requested. Return exactly the final protocol envelope with answer object {\"approved\": false}.",
+    "expected": {
+      "approved": false
+    }
+  }
+]
