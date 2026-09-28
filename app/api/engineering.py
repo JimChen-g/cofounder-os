@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.product import _service
 from app.config import get_settings
+from app.domain import RunStatus
 from app.services.engineering_delivery import DeliveryConflict, VersionAction, Feedback
 
 router = APIRouter(prefix='/api/engineering', tags=['engineering'])
@@ -75,8 +76,15 @@ def _runtime(request: Request) -> Any:
     # Repair acceptance is durable; never silently replay after a process restart.
     for run in product.orchestration.repository.list_runs():
         if run.metadata.get('delivery', {}).get('state') == 'repair_queued' and run.status == 'running':
-            product.orchestration.update_run_metadata(run.id, {'termination_reason': 'repair_interrupted_restart'}, actor='workflow-controller')
-            product.orchestration.fail_run(run.id, actor='workflow-controller', reason='repair_interrupted_restart')
+            with product.orchestration.repository.transaction(run.id) as tx:
+                current = tx.get_run()
+                # Recheck under the lock; terminal historical records are evidence.
+                if current.status == RunStatus.RUNNING.value and current.metadata.get('delivery', {}).get('state') == 'repair_queued':
+                    current.metadata['termination_reason'] = 'repair_interrupted_restart'
+                    current.metadata['delivery']['state'] = 'repair_failed'
+                    tx.save_run(current)
+                    product.orchestration.state_machine.transition_run_in_transaction(
+                        tx, RunStatus.FAILED, actor='workflow-controller', reason='repair_interrupted_restart')
     service = EngineeringService(product, Path(os.environ.get('ENGINEERING_REPO', str(Path(__file__).resolve().parents[2]))), Path(os.environ.get('ENGINEERING_WORKSPACE_ROOT', str(root / 'engineering-workspaces'))))
     existing = (store, service, product, set(), asyncio.Lock())
     request.app.state.engineering_runtime = existing
@@ -185,10 +193,15 @@ async def _act(request: Request, run_id: UUID, action: str, body: VersionAction)
                 try:
                     await service.execute(run_id)
                 except Exception as exc:
-                    product.orchestration.update_run_metadata(run_id, {'termination_reason': type(exc).__name__}, actor='workflow-controller')
-                    current = product.get_run(run_id).run
-                    if current.status == 'running':
-                        product.orchestration.fail_run(run_id, actor='workflow-controller', reason='repair_interrupted')
+                    with product.orchestration.repository.transaction(run_id) as tx:
+                        current = tx.get_run()
+                        current.metadata['termination_reason'] = type(exc).__name__
+                        if current.metadata.get('delivery', {}).get('state') == 'repair_queued':
+                            current.metadata['delivery']['state'] = 'repair_failed'
+                        tx.save_run(current)
+                        if current.status == RunStatus.RUNNING.value:
+                            product.orchestration.state_machine.transition_run_in_transaction(
+                                tx, RunStatus.FAILED, actor='workflow-controller', reason='repair_interrupted')
         task = asyncio.create_task(repair())
         tasks.add(task)
         active[str(run_id)] = task

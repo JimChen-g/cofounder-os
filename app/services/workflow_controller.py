@@ -488,6 +488,12 @@ class WorkflowController:
         correlation_id: Optional[str],
     ) -> bool:
         if not task.claim_token or not task.claimed_by:
+            if task.metadata.get('task_type') == 'engineering.materials':
+                self.orchestration.fail_task(task.run_id, task.id, actor=actor,
+                    reason='engineering_recovery_not_supported', correlation_id=correlation_id)
+                self.orchestration.update_run_metadata(task.run_id,
+                    {'termination_reason': 'engineering_recovery_not_supported'}, actor=actor)
+                return True
             self.orchestration.block_task(
                 task.run_id,
                 task.id,
@@ -505,6 +511,14 @@ class WorkflowController:
                 actor=task.claimed_by,
                 correlation_id=correlation_id,
             )
+            return True
+
+        if task.metadata.get('task_type') == 'engineering.materials':
+            # An uncertain model invocation must never be silently replayed.
+            self.orchestration.fail_task(task.run_id, task.id, actor=actor,
+                reason='engineering_recovery_not_supported', correlation_id=correlation_id)
+            self.orchestration.update_run_metadata(task.run_id,
+                {'termination_reason': 'engineering_recovery_not_supported'}, actor=actor)
             return True
 
         try:

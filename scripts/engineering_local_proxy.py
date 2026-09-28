@@ -10,7 +10,6 @@ import argparse
 import http.client
 import http.server
 import json
-import re
 import secrets
 import threading
 from http.cookies import SimpleCookie
@@ -45,9 +44,10 @@ def version_matches(body: dict, run: dict, suffix: str) -> bool:
 
 
 class Spark:
-    def __init__(self, credentials: Path, known_hosts: Path, host: str, port: int, user: str) -> None:
+    def __init__(self, credentials: Path, known_hosts: Path, host: str, port: int, user: str, *, token_file: Path) -> None:
         self.host, self.port, self.user = host, port, user
-        self.credentials = credentials
+        self.credentials = credentials  # SSH private key, never a prose password reference.
+        self.token_file = token_file
         self.known_hosts = known_hosts
         self.lock = threading.Lock()
         self.client = None
@@ -60,19 +60,19 @@ class Spark:
                 return self.client
             if self.client:
                 self.client.close()
-            text = self.credentials.read_text()
-            match = re.search(r'(?:密码|password|口令)\s*[:：=]\s*(.+)', text, re.I)
-            if match is None:
-                raise RuntimeError('credential_reference_unavailable')
-            password = match.group(1).strip().strip('\"\'`')
+            import stat
+            if stat.S_IMODE(self.token_file.stat().st_mode) & 0o077:
+                raise RuntimeError('token_file_must_be_private')
+            token = self.token_file.read_text().strip()
+            if not token or any(c.isspace() for c in token):
+                raise RuntimeError('invalid_token_file')
             client = paramiko.SSHClient()
             client.load_host_keys(str(self.known_hosts))
+            client.set_missing_host_key_policy(paramiko.RejectPolicy())
             client.connect(self.host, port=self.port, username=self.user,
-                           password=password, look_for_keys=False, allow_agent=False, timeout=15)
+                           key_filename=str(self.credentials), look_for_keys=False, allow_agent=False, timeout=15)
             client.get_transport().set_keepalive(5)
-            with client.open_sftp() as sftp:
-                with sftp.open('/home/Developer/cofounder-t07-t10/bridge-config.json') as f:
-                    self.token = json.load(f)['product_token']
+            self.token = token
             self.client = client
             return client
 
@@ -191,7 +191,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.error(502, '远程连接失败；未自动重试，请加载真实状态后再操作')
             return
         if self.path == '/local/context':
-            self.reply(200, json.dumps({'run_id': self.server.run_id, 'remote': 'DGX Spark · 既有 9000 工程服务', 'production_commit': '57502708e30e8db9fcb72c508f37b04de590a2dd', 'model': 'Qwen3.5（本阶段核验；本次实际模型见下方执行记录）', 'user_accepted': False}).encode())
+            try:
+                status, _, payload = self.server.spark.request('GET', '/health')
+                health = json.loads(payload) if status == 200 else {}
+                self.reply(200, json.dumps({'run_id': self.server.run_id, 'remote': 'DGX Spark · 既有 9000 工程服务', 'production_commit': health.get('deployment_commit', 'unknown'), 'model': '实际模型见执行记录', 'user_accepted': False}).encode())
+            except Exception:
+                self.error(502, '无法读取当前部署版本')
             return
         try:
             status, content_type, payload = self.server.spark.request(self.command, self.path, raw)
@@ -230,7 +235,8 @@ def main():
     parser.add_argument('--ssh-port', type=int, default=22)
     parser.add_argument('--ssh-user', required=True)
     parser.add_argument('--port', type=int, default=0)
-    parser.add_argument('--credentials', type=Path, required=True)
+    parser.add_argument('--ssh-key', '--credentials', dest='credentials', type=Path, required=True)
+    parser.add_argument('--token-file', type=Path, required=True)
     parser.add_argument('--known-hosts', type=Path, required=True)
     parser.add_argument('--state', type=Path, required=True)
     args = parser.parse_args()
@@ -238,7 +244,7 @@ def main():
     import os
     if str(UUID(args.run)) != args.run:
         parser.error('canonical Run UUID required')
-    spark = Spark(args.credentials, args.known_hosts, args.ssh_host, args.ssh_port, args.ssh_user)
+    spark = Spark(args.credentials, args.known_hosts, args.ssh_host, args.ssh_port, args.ssh_user, token_file=args.token_file)
     spark.connection()
     server = Proxy(args.port, spark, args.run)
     args.state.write_text(json.dumps({'pid': os.getpid(), 'url': server.origin + '/ui/engineering', 'run_id': args.run}))

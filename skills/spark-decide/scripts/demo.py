@@ -17,7 +17,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
         assert request["candidates"] == ["human"]
         body = json.dumps({"decision_id":"fixture-only", "refusal_reason":None, "model_version":"fixture-no-model", "policy_version":"fixture-only", "latency_ms":0, "evidence_ids":[], "request_sha256":"0"*64, "action": "human", "legal_candidates": ["human"],
                            "scores": None, "score_kind": "unavailable",
-                           "disclosure": "synthetic wiring fixture; no model call"}).encode()
+                           "shadow": None}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -35,7 +35,7 @@ def main():
             with tempfile.TemporaryDirectory(prefix="spark-decide-outside-project-") as directory:
                 path = Path(directory) / "request.json"
                 path.write_text(json.dumps({"task": "Need human judgment", "candidates": ["human"]}))
-                env = dict(os.environ, SPARK_DECIDE_TOKEN="fixture-only",
+                env = dict(os.environ, SPARK_DECIDE_API_KEY="fixture-only",
                            SPARK_DECIDE_URL=f"http://127.0.0.1:{server.server_port}/v1/spark-decide")
                 return subprocess.run([sys.executable, str(Path(__file__).with_name("decide.py")),
                                        str(path)], cwd=directory, env=env).returncode

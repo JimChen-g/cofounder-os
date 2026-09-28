@@ -9,6 +9,7 @@ import subprocess
 import time
 import threading
 import re
+import tempfile
 
 from .trusted_runner import bounded_process, compare_observations
 from typing import Any
@@ -20,6 +21,15 @@ ALLOWED = ('app/insurance_poc/materials.py', 'tests/test_insurance_poc_materials
 def git(repo: Path, *args: str) -> str:
     return subprocess.run(['git', '-C', str(repo), *args], check=True,
                           capture_output=True, text=True, timeout=30).stdout
+
+
+def mutation_detected(evidence: dict[str, Any]) -> bool:
+    """Require a pytest assertion failure, not an early exit or collection error."""
+    summary = evidence.get('log', '').strip().splitlines()[-1:]
+    return (evidence.get('exit_code') == 1 and not evidence.get('timed_out')
+            and not evidence.get('execution_error') and not evidence.get('cleanup_error')
+            and bool(summary) and bool(re.search(r'\b[1-9][0-9]* failed\b', summary[0]))
+            and not re.search(r'\b(errors?|skipped|xfailed|xpassed)\b', summary[0]))
 
 
 class Workspace:
@@ -34,6 +44,7 @@ class Workspace:
         self.evidence.mkdir(mode=0o700)
         self.started = time.monotonic()
         self.seconds = seconds
+        self.oracle = Path(__file__).parent / "contracts/material-cases.json"
         self._cleanup_confirmed = True
         self._cancelled = threading.Event()
         self._test_finished = threading.Event()
@@ -47,7 +58,24 @@ class Workspace:
                   'state': 'active'})
 
     def save(self, name: str, value: Any) -> None:
-        (self.evidence / name).write_text(json.dumps(value, ensure_ascii=False, indent=2))
+        target = self.evidence / name
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                    dir=self.evidence, prefix='.' + name + '.', delete=False) as handle:
+                temporary = Path(handle.name)
+                json.dump(value, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, target)
+            directory = os.open(self.evidence, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def remaining(self) -> float:
         left = self.seconds - (time.monotonic() - self.started)
@@ -109,6 +137,7 @@ class Workspace:
         commit = git(self.path, '-c', 'user.name=Co-founder Engineering',
                      '-c', 'user.email=engineering@localhost', 'commit-tree', tree,
                      '-p', self.base, '-m', 'Candidate diff SHA256: ' + digest).strip()
+        git(self.repo, 'update-ref', 'refs/cofounder/candidates/workspaces/' + self.id, commit)
         self.save('candidate-version.json', {'base_sha': self.base,
                   'patch_sha': commit, 'diff_sha256': digest})
         return commit
@@ -163,7 +192,7 @@ class Workspace:
         image = subprocess.run(['docker', 'image', 'inspect', '--format', '{{.Id}}', image],
                                capture_output=True, text=True, check=True, timeout=10).stdout.strip()
         harness = Path(__file__).parent / 'trusted_runner.py'
-        oracle = Path(__file__).parent / 'contracts' / 'material-cases.json'
+        oracle = self.oracle
         acceptance = argv == allowed[0]
         cases = json.loads(oracle.read_text())['cases'] if acceptance else []
         actual_argv = ['python', '/trusted_runner.py'] if acceptance else argv
@@ -194,11 +223,36 @@ class Workspace:
             passed = re.search(r'\b([1-9][0-9]*) passed\b', line)
             gate = {'passed': bool(passed) and not re.search(r'\b(skipped|failed|error|errors|xfailed|xpassed)\b', line),
                     'summary': line}
+        if argv == allowed[1] and evidence['exit_code'] == 0 and gate['passed']:
+            # Versioned test-effectiveness probes. Candidate tests must reject
+            # both an always-wrong return value and rejection of all valid input.
+            mutations = []
+            for name, source in (
+                ('wrong_result', 'def check_material_completeness(payload):\n    return {}\n'),
+                ('reject_valid', 'def check_material_completeness(payload):\n    raise ValueError("mutant")\n'),
+            ):
+                mutant = self.evidence / ('mutation-' + name + '.py')
+                mutant.write_text(source)
+                mutation_command = list(command)
+                at = mutation_command.index('-w')
+                mutation_command[at:at] = ['-v', f'{mutant}:/candidate/{ALLOWED[0]}:ro']
+                observed = bounded_process(mutation_command, input_data=b'',
+                    timeout=min(timeout, self.remaining()), stop=self._stop_container,
+                    cancelled=self._cancelled.is_set)
+                detected = mutation_detected(observed)
+                mutations.append({'name': name, 'detected': detected, **observed})
+                self._cleanup_confirmed = (observed['cleanup_error'] is None
+                                          and observed['execution_error'] is None)
+                if not self._cleanup_confirmed or observed['timed_out']:
+                    break
+            gate['mutation_version'] = 'generated-tests-mutations-v1'
+            gate['mutations'] = mutations
+            gate['passed'] = len(mutations) == 2 and all(m['detected'] for m in mutations)
         if evidence['exit_code'] == 0 and not gate['passed']:
             evidence['exit_code'] = 126
             evidence['termination_reason'] = 'invalid_test_completion'
         evidence.update({'argv': argv, 'actual_argv': actual_argv, 'sandbox_argv': command,
-                    'harness': 'host-oracle-input-only-v1' if acceptance else 'pytest-summary-v1',
+                    'harness': 'host-oracle-input-only-v1' if acceptance else 'pytest-summary-and-mutations-v2' if argv == allowed[1] else 'pytest-summary-v1',
                     'oracle_sha256': hashlib.sha256(oracle.read_bytes()).hexdigest() if acceptance else None,
                     'gate': gate, 'cwd': '/candidate',
                     'duration_seconds': time.monotonic()-started, 'base_sha': self.base,

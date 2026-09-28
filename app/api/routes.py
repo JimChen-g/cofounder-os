@@ -53,6 +53,7 @@ async def health(request: Request) -> HealthResponse:
     return HealthResponse(
         status=overall,
         version=settings.app_version,
+        deployment_commit=settings.deployment_commit,
         providers=[
             ProviderHealth(
                 provider=ph["provider"],

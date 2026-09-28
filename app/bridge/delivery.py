@@ -91,13 +91,23 @@ class Notifications:
                 claimed = db.execute('INSERT OR IGNORE INTO notifications VALUES(?,?,NULL)', (d['approval_id'], 'claimed')).rowcount
             if not claimed:
                 continue
+            summary = '\n测试与审查摘要暂不可用；请先查询详情，勿直接批准。'
+            try:
+                candidate = client.get(config['product_url'] + '/api/engineering/runs/' + rid + '/candidate', headers=headers)
+                candidate.raise_for_status()
+                result = candidate.json()['result']
+                if result['patch_sha'] == d['patch_sha']:
+                    summary = ('\n隔离上下文审查: ' + str(result['review']['conclusion'])[:500]
+                               + '\n测试退出码: ' + str([t['exit_code'] for t in result['tests']])[:200])
+            except (httpx.HTTPError, KeyError, TypeError, ValueError):
+                pass
             auth = client.post('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', json={'app_id': config['app_id'], 'app_secret': config['app_secret']})
             auth.raise_for_status()
             response = client.post('https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id',
                 headers={'Authorization': 'Bearer ' + auth.json()['tenant_access_token']},
                 json={'receive_id': config['open_id'], 'msg_type': 'text',
                       'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, d['approval_id'])),
-                      'content': json.dumps({'text': '当前候选待本人审批。\n' + details(rid, d)}, ensure_ascii=False)})
+                      'content': json.dumps({'text': '当前候选待本人审批。\n' + details(rid, d) + summary}, ensure_ascii=False)})
             response.raise_for_status()
             result = response.json()
             if result.get('code') != 0:

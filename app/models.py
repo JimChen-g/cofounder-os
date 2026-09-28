@@ -113,6 +113,7 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     providers: list[ProviderHealth]
+    deployment_commit: str = "unknown"
 
 
 class ErrorResponse(BaseModel):

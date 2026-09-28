@@ -151,3 +151,64 @@ def test_bridge_creation_reply_is_bound_and_deduplicated(tmp_path):
     assert creations[0]['task'] == 'materials_completeness'
     assert run_id in replies[0]
     assert inbox.facts()[0]['state'] == 'replied'
+
+
+def test_repair_execute_exception_terminalizes_delivery_and_preserves_candidate(client, monkeypatch):
+    from types import SimpleNamespace
+    from app.api import engineering
+    from app.services.engineering_delivery import VersionAction
+    _, _, store, product = client
+    run, _ = product.orchestration.create_run(objective='repair failure regression', actor='test', owner='founder')
+    product.orchestration.start_run(run.id, actor='test', reason='repair regression')
+    candidate = {'state': 'repair_queued', 'revision': 1, 'candidate_commit': 'a'*40,
+                 'history': [{'patch_sha': 'b'*64}], 'feedback': [{'comment': 'preserve'}]}
+    product.orchestration.update_run_metadata(run.id, {'delivery': candidate}, actor='test')
+    class BrokenService:
+        async def execute(self, run_id):
+            raise OSError('private exception detail must not be persisted')
+    product.workflow_controller.engineering_delivery = SimpleNamespace(
+        act=lambda *args: {'action': 'feedback', 'duplicate': False})
+    async def exercise():
+        tasks = set()
+        monkeypatch.setattr(engineering, '_runtime', lambda request: (store, BrokenService(), product, tasks, asyncio.Lock()))
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()), state=SimpleNamespace(principal='founder'))
+        body = VersionAction(request_id='repair', revision=1, base_sha='a'*40, patch_sha='b'*64, approval_id='approval')
+        await engineering._act(request, run.id, 'feedback', body)
+        await asyncio.gather(*list(tasks))
+    asyncio.run(exercise())
+    snapshot = product.get_run(run.id)
+    assert snapshot.run.status == 'failed'
+    assert snapshot.run.metadata['delivery'] == candidate | {'state': 'repair_failed'}
+    assert snapshot.run.metadata['termination_reason'] == 'OSError'
+    assert 'private exception' not in str(snapshot.model_dump())
+
+
+def test_restart_terminalizes_active_repair_without_replay_or_rewriting_legacy_failed(client, monkeypatch):
+    from types import SimpleNamespace
+    from app.api import engineering
+    from app.engineering import service as engineering_service
+    _, _, store, product = client
+    ids = []
+    for legacy in (False, True):
+        run, _ = product.orchestration.create_run(objective='restart regression', actor='test', owner='founder',
+            metadata={'delivery': {'state': 'repair_queued', 'candidate_commit': 'a'*40, 'history': [{'revision': 1}]}})
+        product.orchestration.start_run(run.id, actor='test', reason='repair')
+        if legacy:
+            product.orchestration.fail_run(run.id, actor='test', reason='historical failure')
+        ids.append(run.id)
+    legacy_before = product.get_run(ids[1]).model_dump(mode='json')
+    class NoReplayService:
+        def __init__(self, *args): pass
+        async def execute(self, *args): pytest.fail('Restart replayed a model/business execution')
+    monkeypatch.setattr(engineering, '_service', lambda request: product)
+    monkeypatch.setattr(engineering, 'DispatchStore', lambda root: store)
+    monkeypatch.setattr(engineering_service, 'EngineeringService', NoReplayService)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    runtime = engineering._runtime(request)
+    assert not runtime[3]
+    current = product.get_run(ids[0]).run
+    assert current.status == 'failed'
+    assert current.metadata['delivery'] == {'state': 'repair_failed', 'candidate_commit': 'a'*40, 'history': [{'revision': 1}]}
+    assert current.metadata['termination_reason'] == 'repair_interrupted_restart'
+    assert product.get_run(ids[1]).model_dump(mode='json') == legacy_before
+    assert engineering._runtime(request) is runtime

@@ -35,8 +35,9 @@ class Feedback(VersionAction):
 
 class EngineeringDeliveryController:
     """All decisions live in one locked Run record; external payloads have no authority."""
-    def __init__(self, product: Any) -> None:
+    def __init__(self, product: Any, repair_preflight: Any = None) -> None:
         self.product = product
+        self.repair_preflight = repair_preflight
         self.repository = product.orchestration.repository
 
     @staticmethod
@@ -177,25 +178,27 @@ class EngineeringDeliveryController:
                 if len(tasks) != 1:
                     raise DeliveryConflict('task_scope')
                 task = tasks[0]
-                d['feedback'].append(body.model_dump(mode='json'))
                 if d['repair_rounds'] >= 2 or task.attempt_count >= task.max_attempts:
-                    d['state'] = 'manual_required'
-                    run.status = RunStatus.FAILED.value
-                    run.metadata['termination_reason'] = 'repair_or_attempt_limit'
-                    response['action'] = 'manual_required'
-                else:
-                    d['history'].append({k: v for k, v in d.items() if k not in {'history','receipts','feedback'}})
-                    d['repair_rounds'] += 1
-                    d['state'] = 'repair_queued'
-                    run.metadata['delivery_approved'] = False
-                    run.status = RunStatus.RUNNING.value
-                    task.status = TaskStatus.READY.value
-                    task.metadata['repair_feedback'] = body.model_dump(mode='json')
-                    task.metadata['previous_result'] = result
-                    task.output_artifact_ids = []
-                    task.claim_token = None
-                    task.claimed_by = None
-                    tx.save_task(task)
+                    raise DeliveryConflict('repair_attempts_exhausted')
+                if self.repair_preflight is None:
+                    raise DeliveryConflict('repair_budget_exhausted')
+                self.repair_preflight(run, result, body)
+                d['feedback'].append(body.model_dump(mode='json'))
+                d['history'].append({k: v for k, v in d.items() if k not in {'history','receipts','feedback'}})
+                d['repair_rounds'] += 1
+                d['state'] = 'repair_queued'
+                run.metadata['delivery_approved'] = False
+                run.status = RunStatus.RUNNING.value
+                task.status = TaskStatus.READY.value
+                task.metadata['repair_feedback'] = body.model_dump(mode='json')
+                task.metadata['previous_result'] = result
+                task.output_artifact_ids = []
+                task.claim_token = None
+                task.claimed_by = None
+                # Commit the no-replay repair intent before the task record. A
+                # crash between files is then visible to restart reconciliation.
+                tx.save_run(run)
+                tx.save_task(task)
             else:
                 raise DeliveryConflict('invalid_action')
             d['receipts'][body.request_id] = {'digest': digest, 'response': response}

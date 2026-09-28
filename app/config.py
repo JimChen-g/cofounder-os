@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # ── Gateway / OpenAI-compatible upstream auth ───────────────────────────
     gateway_api_key: Optional[str] = Field(default=None, validation_alias="GATEWAY_API_KEY")
 
+    spark_decide_api_key: str | None = None
+    gateway_allow_cloud: bool = False
+    product_api_proxy_token: str | None = None
+    product_proxy_run_id: str | None = None
+    deployment_commit: str = "unknown"
+
     # ── Qwen ───────────────────────────────────────────────────────────────
     qwen_base_url: str = Field(
         default="http://127.0.0.1:8000/v1",

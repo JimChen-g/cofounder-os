@@ -89,7 +89,7 @@ async def test_controller_review_gate_binds_patch(repo, tmp_path, monkeypatch, m
         async def complete(self, messages, **kwargs):
             system = messages[0].content
             if 'implementation Agent' in system:
-                content = json.dumps({'implementation':'# synthetic fixture\n', 'tests':'# fixture\n'})
+                content = json.dumps({'implementation':'# synthetic fixture\nsynthetic_fixture = True\n', 'tests':'# fixture\nsynthetic_fixture = True\n'})
             else:
                 payload = json.loads(messages[1].content)
                 content = json.dumps({'patch_sha': 'stale' if mode == 'stale' else payload['patch_sha'],

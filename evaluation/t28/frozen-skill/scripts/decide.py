@@ -9,14 +9,6 @@ import urllib.parse
 import urllib.request
 
 
-def failure(error_class, http_status=None):
-    # Never include exception strings, URLs, headers or response bodies: they may contain secrets.
-    print(json.dumps({"action": "refuse", "refusal_reason": "client_or_transport_failure",
-                      "scores": None, "score_kind": "unavailable",
-                      "error_class": error_class, "http_status": http_status}))
-    return 1
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("request", help="JSON request path or - for stdin")
@@ -29,9 +21,9 @@ def main():
         parser.error("endpoint must be an HTTP(S) URL without embedded credentials")
     if endpoint.scheme == "http" and endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}:
         parser.error("non-loopback endpoints require HTTPS; use an authorized local tunnel")
-    token = os.environ.get("SPARK_DECIDE_API_KEY")
+    token = os.environ.get("SPARK_DECIDE_TOKEN")
     if not token:
-        parser.error("set SPARK_DECIDE_API_KEY")
+        parser.error("set SPARK_DECIDE_TOKEN")
     try:
         if args.request == "-":
             request = json.load(sys.stdin)
@@ -59,12 +51,10 @@ def main():
         if result["action"] != "refuse" and result["action"] not in result.get("legal_candidates", []):
             raise ValueError("illegal_action")
         print(json.dumps(result, ensure_ascii=False))
-    except urllib.error.HTTPError as exc:
-        return failure("http_error", exc.code)
-    except (OSError, urllib.error.URLError):
-        return failure("transport_error")
-    except ValueError:
-        return failure("invalid_response_or_request")
+    except (OSError, ValueError, urllib.error.URLError):
+        print(json.dumps({"action": "refuse", "refusal_reason": "client_or_transport_failure",
+                          "scores": None, "score_kind": "unavailable"}))
+        return 1
     return 0
 
 

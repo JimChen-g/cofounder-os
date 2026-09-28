@@ -1,0 +1,489 @@
+{
+  "schema_version": "engineering-material-cases-0.2",
+  "synthetic": true,
+  "cases": [
+    {
+      "case_id": "complete",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "schema_version": "insurance-materials-result-0.1",
+        "status": "complete",
+        "missing_material_ids": [],
+        "present_material_ids": [
+          "requirement_document",
+          "accident_scene_image",
+          "accident_damage_image"
+        ]
+      }
+    },
+    {
+      "case_id": "missing_damage",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "schema_version": "insurance-materials-result-0.1",
+        "status": "incomplete",
+        "missing_material_ids": [
+          "accident_damage_image"
+        ],
+        "present_material_ids": [
+          "requirement_document",
+          "accident_scene_image"
+        ]
+      }
+    },
+    {
+      "case_id": "empty_list",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": []
+      },
+      "expected": {
+        "schema_version": "insurance-materials-result-0.1",
+        "status": "incomplete",
+        "missing_material_ids": [
+          "requirement_document",
+          "accident_scene_image",
+          "accident_damage_image"
+        ],
+        "present_material_ids": []
+      }
+    },
+    {
+      "case_id": "permuted_input",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          }
+        ]
+      },
+      "expected": {
+        "schema_version": "insurance-materials-result-0.1",
+        "status": "complete",
+        "missing_material_ids": [],
+        "present_material_ids": [
+          "requirement_document",
+          "accident_scene_image",
+          "accident_damage_image"
+        ]
+      }
+    },
+    {
+      "case_id": "only_damage",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "schema_version": "insurance-materials-result-0.1",
+        "status": "incomplete",
+        "missing_material_ids": [
+          "requirement_document",
+          "accident_scene_image"
+        ],
+        "present_material_ids": [
+          "accident_damage_image"
+        ]
+      }
+    },
+    {
+      "case_id": "duplicate_id",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "duplicate_filename",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "wrong_content_type_for_slot",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "path_traversal",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "../requirements.pdf",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "blank_filename",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": " ",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "missing_materials",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1"
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "unknown_field",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ],
+        "claim_id": "unexpected"
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "wrong_collection_type",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": "not a list"
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "unknown_slot",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "policy_number",
+            "filename": "x.pdf",
+            "content_type": "application/pdf"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "entry_extra_key",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf",
+            "extra": true
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "backslash_filename",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "a\\\\b",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "tab_filename",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "\t",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "wrong_schema_version",
+      "input": {
+        "schema_version": "wrong",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": "insurance-poc-requirements.pdf",
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "non_string_field",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          {
+            "material_id": "requirement_document",
+            "filename": 1,
+            "content_type": "application/pdf"
+          },
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "non_dict_entry",
+      "input": {
+        "schema_version": "insurance-materials-input-0.1",
+        "materials": [
+          [],
+          {
+            "material_id": "accident_scene_image",
+            "filename": "accident-intersection.png",
+            "content_type": "image/png"
+          },
+          {
+            "material_id": "accident_damage_image",
+            "filename": "accident-damage.png",
+            "content_type": "image/png"
+          }
+        ]
+      },
+      "expected": {
+        "raises": "ValueError"
+      }
+    },
+    {
+      "case_id": "non_dict_payload",
+      "input": [],
+      "expected": {
+        "raises": "ValueError"
+      }
+    }
+  ]
+}

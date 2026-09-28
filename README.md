@@ -1,5 +1,27 @@
 # Co-founder OS — Founder Mission Control
 
+## September hackathon: engineering execution and spark-decide
+
+The supported materials-completeness engineering task generates a real candidate
+patch in an isolated workspace, runs contract/regression/generated tests, obtains
+a same-model review in a separate context, and requires version-bound founder
+approval before export. The standalone [spark-decide Skill](skills/spark-decide/SKILL.md)
+recommends a policy-constrained action; it does not execute that action.
+
+See [T23–T27](docs/t23-t27.md), [T28–T29](docs/t28-t29.md), and the
+[independent-review correction record](docs/independent-review-fixes.md).
+The historical T28 benchmark has **0/10 cases requiring a choice among multiple
+legal candidates**. Its observed difference concerns tool-protocol adherence,
+not demonstrated decision-quality improvement. Original failed trials remain
+part of the original scores. Learning stays in shadow mode; no official Tier 3
+PASS or general quality lift is claimed.
+
+The engineering review anchors quotations to source; quotation presence does
+not prove semantic support. Delivery control has dedicated state mutations and
+is not yet one atomic transaction across every Run/Task/evidence file. A passing
+candidate is not founder approval. These boundaries are part of the release scope.
+
+
 > An AI operating system for solo founders that turns goals and evidence into auditable workflows, coordinating product, engineering, finance, and risk agents with human approval.
 
 Co-founder OS turns a founder objective into a bounded, inspectable execution process. It combines structured planning, specialist agents, deterministic governance, durable artifacts, human approval, and replayable state in one local-first web application.
@@ -257,7 +279,7 @@ python -m build --no-isolation
 git diff --check
 ```
 
-The current repository passes 456 tests, Ruff, strict Mypy across 66 source files, frontend JavaScript syntax checking, package build, and whitespace validation. The suite may emit Pydantic and Starlette deprecation warnings; they do not currently fail the checks.
+The pre-review baseline passed 665 tests. Current correction verification and release receipts are recorded in `docs/independent-review-fixes.md`; run the commands above for the checked-out revision. The suite may emit Pydantic and Starlette deprecation warnings; they do not currently fail the checks.
 
 To run the committed small-sample insurance demo evaluation:
 
@@ -301,13 +323,13 @@ tests/                   # Behavioral and regression test suite
 - The application is a hackathon prototype, not a production multi-tenant service.
 - State and artifacts are filesystem-backed and designed for a single process and single worker.
 - Provider registration happens at startup; changing providers requires a restart.
-- Generic chat completions and product endpoints do not yet have full request-level authentication.
+- Gateway and product endpoints authenticate requests; credential scopes and server-side provider limits are described in the correction record.
 - Gateway audit files rotate only by UTC day and have no size-based retention policy.
 - Health checks synchronously call each configured provider's model endpoint.
 - Only the insurance Engineering Planning and Risk Review tasks have D15 live-model execution; other insurance stages are deterministic controls or local fallbacks.
 - Arbitrary image analysis is not implemented; the demo recognizes only checksum-bound synthetic image fixtures.
 - The adaptive insurance router is rule- and score-based, not trained.
-- The Engineering artifact is a plan. It does not claim a code diff, executed tests, or deployment.
+- The older insurance-planning artifact remains a plan; the separate materials engineering endpoint produces a real candidate diff and test evidence, but does not automatically merge or deploy candidate code.
 - No real insurer write, email, payment, production change, or autonomous liability decision occurs.
 - The committed six-case demo evaluation is too small to establish general model quality.
 

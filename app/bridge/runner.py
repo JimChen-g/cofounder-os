@@ -72,6 +72,7 @@ def process_one(inbox: Inbox, config: dict[str, Any], client: httpx.Client) -> b
         return False
     key = row['message_key']
     payload = json.loads(row['payload'])
+    reply_started = False
     try:
         headers = {'Authorization': 'Bearer ' + config['bridge_token'],
                    'X-Feishu-App': payload['app'], 'X-Feishu-Tenant': payload['tenant'],
@@ -93,6 +94,7 @@ def process_one(inbox: Inbox, config: dict[str, Any], client: httpx.Client) -> b
         body = {'msg_type': 'text', 'content': json.dumps({'text': reply}, ensure_ascii=False),
                 'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, key))}
         # Stable UUID on bounded transport retry; never replay the business consumer.
+        reply_started = True
         for attempt in range(2):
             try:
                 response = client.post('https://open.feishu.cn/open-apis/im/v1/messages/' + payload['message_id'] + '/reply',
@@ -110,6 +112,24 @@ def process_one(inbox: Inbox, config: dict[str, Any], client: httpx.Client) -> b
         return True
     except Exception as exc:
         inbox.record(key, state='failed', error=type(exc).__name__)
+        if not reply_started:
+            # A single best-effort warning; never repeat the business request or
+            # send a contradictory warning after an uncertain normal reply.
+            try:
+                auth = client.post('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+                                   json={'app_id': config['app_id'], 'app_secret': config['app_secret']})
+                auth.raise_for_status()
+                warning = '请求处理未确认完成，未自动重放操作。请发送“详情 <Run UUID>”核对真实状态；创建任务未返回 ID 时请先在本机查看任务清单，勿重复提交。'
+                response = client.post('https://open.feishu.cn/open-apis/im/v1/messages/' + payload['message_id'] + '/reply',
+                    headers={'Authorization': 'Bearer ' + auth.json()['tenant_access_token']},
+                    json={'msg_type': 'text', 'content': json.dumps({'text': warning}, ensure_ascii=False),
+                          'uuid': str(uuid.uuid5(uuid.NAMESPACE_URL, key + '/failure-warning'))})
+                response.raise_for_status()
+                result = response.json()
+                if result.get('code') == 0:
+                    inbox.record(key, platform_accepted_at=now(), replied_at=now(), reply_message_id=result['data']['message_id'])
+            except Exception:
+                pass  # Keep original failure evidence; an uncertain warning is not retried.
         return True
 
 
