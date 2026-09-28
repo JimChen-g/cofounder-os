@@ -127,11 +127,11 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
     assert "decision.privacy_decision" in script
     assert "decision.validation_requirement" in script
     assert "Simulation changes availability only" in script
-    assert "Verified live call" in script
+    assert "已核验的模型调用" in script
     assert "candidate_scores" in script
     assert "execution_metadata" in script
     assert "Restore normal routing" in script
-    assert "Route recalculated from submitted constraints" in script
+    assert "已根据提交条件重新选择路径" in script
     assert "function renderConflicts()" in script
     assert "conflict.source_evidence" in script
     assert 'const ACTIVE_RUN_KEY = "cofounder-os.active-run-id"' in script
@@ -185,5 +185,5 @@ def test_provider_distribution_uses_evaluated_run_denominator() -> None:
 
     assert "summary.run_count" in script
     assert "function renderEvaluationProviders(distribution, evaluatedRunCount)" in script
-    assert "${count} / ${evaluatedRunCount} evaluated runs" in script
+    assert "${count} / ${evaluatedRunCount} 个已评测任务" in script
     assert "entries.reduce((sum, [, count])" not in script

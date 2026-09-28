@@ -22,7 +22,7 @@
   function paintBadge(el, value, custom) { const title = custom || label(value); if (el.textContent !== title) el.textContent = title; el.className = 'status-badge ' + shared.tone(value); }
   function notify(message, error = false) { $('notice').hidden = false; $('notice').className = 'notice' + (error ? ' error' : ''); $('notice-text').textContent = message; }
   function details(id, rows) { replace(id, rows.map(([key, value, mono]) => { const row = node('div'); row.append(node('dt', '', key)); const dd = node('dd'); dd.append(node(mono ? 'code' : 'span', '', value)); row.append(dd); return row; })); }
-  function setView(view) { if (!TITLES[view]) view = 'overview'; state.view = view; for (const name of Object.keys(TITLES)) $('view-' + name).hidden = name !== view; document.querySelectorAll('.nav-item').forEach(el => { const active = el.dataset.view === view; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }); $('page-title').textContent = TITLES[view]; if (location.hash !== '#' + view) history.replaceState(null, '', location.pathname + location.search + '#' + view); if (view === 'audit' && state.runId) loadEvents(); const heading = $('view-' + view).querySelector('h1'); if (heading) { heading.tabIndex = -1; heading.focus({preventScroll:true}); } }
+  function setView(view) { if (!TITLES[view]) view = 'overview'; const changedView = state.view !== view; state.view = view; for (const name of Object.keys(TITLES)) $('view-' + name).hidden = name !== view; document.querySelectorAll('.nav-item').forEach(el => { const active = el.dataset.view === view; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }); $('page-title').textContent = TITLES[view]; if (location.hash !== '#' + view) history.replaceState(null, '', location.pathname + location.search + '#' + view); if (view === 'audit' && state.runId) loadEvents(); const heading = $('view-' + view).querySelector('h1'); if (heading) { heading.tabIndex = -1; heading.focus({preventScroll:true}); } if (changedView) window.scrollTo({top:0,behavior:'instant'}); }
   class ApiError extends Error { constructor(message, status, uncertain) { super(message); this.status = status; this.uncertain = uncertain; } }
   async function api(path, options = {}) {
     const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), options.body ? 65000 : 25000);
@@ -59,7 +59,7 @@
     finally { state.reconciling = false; }
   }
   async function refreshStatus() {
-    try { const data = await api('/local/status'); state.service = data; state.connected = data.connected === true; paintBadge($('connection-badge'), state.connected ? 'connected' : 'failed', state.connected ? '● Spark 已连接' : '● Spark 未连接'); $('sidebar-status').textContent = state.connected ? 'Spark 连接正常' : 'Spark 连接不可用'; $('sidebar-dot').className = 'dot ' + (state.connected ? 'good' : 'bad'); $('service-check').textContent = time(data.checked_at); details('service-details', [['服务状态', state.connected ? '在线' : '不可用'], ['当前模型', data.model?.name || data.model?.model || data.model], ['Bridge', data.bridge?.status || data.bridge], ['当前身份', data.owner], ['生产版本', data.commit, true], ['健康信息', data.health?.status || data.health]]); if (!state.connected) notify('Spark 未连接。' + text(data.error || data.health?.error || '请检查本机连接与远端服务。'), true); }
+    try { const data = await api('/local/status'); state.service = data; state.connected = data.connected === true; paintBadge($('connection-badge'), state.connected ? 'connected' : 'failed', state.connected ? '● Spark 已连接' : '● Spark 未连接'); $('sidebar-status').textContent = state.connected ? 'Spark 连接正常' : 'Spark 连接不可用'; $('sidebar-dot').className = 'dot ' + (state.connected ? 'good' : 'bad'); $('service-check').textContent = time(data.checked_at); details('service-details', [['服务状态', state.connected ? '在线' : '不可用'], ['当前模型', data.model?.name || data.model?.model || data.model], ['消息桥接', data.bridge?.status || data.bridge], ['当前身份', data.owner === 'founder' ? '创始人' : data.owner], ['生产版本', data.commit, true], ['健康信息', data.health?.status || data.health]]); if (!state.connected) notify('Spark 未连接。' + text(data.error || data.health?.error || '请检查本机连接与远端服务。'), true); }
     catch (error) { state.connected = false; paintBadge($('connection-badge'), 'failed', '● 连接失败'); $('sidebar-status').textContent = '连接失败'; $('sidebar-dot').className = 'dot bad'; details('service-details', [['服务状态', '不可用'], ['实际错误', error.message]]); notify(error.message, true); }
     renderGates();
   }
@@ -70,7 +70,7 @@
   function runRow(item, compact) {
     const button = node('button', 'recent-row' + (item.id === state.runId ? ' selected' : '')); button.type = 'button';
     if (compact) button.append(node('span', 'run-icon', '▤'));
-    const body = node('span', 'run-text'); body.append(node('span', 'run-title', engineering(item) ? '材料完整性检查' : item.objective || '决策任务')); body.append(node('span', 'run-sub', time(item.created_at) + (item.revision ? ' · v' + item.revision : '') + (!engineering(item) ? ' · 决策任务' : '') + (shared.reason(item) ? ' · ' + shared.reason(item) : ''))); button.append(body, badge(displayStatus(item)));
+    const body = node('span', 'run-text'); body.append(node('span', 'run-title', engineering(item) ? '材料完整性检查' : item.objective || '决策任务')); body.append(node('span', 'run-sub', time(item.created_at) + ' · ' + String(item.id || '').slice(0,8) + (item.revision ? ' · v' + item.revision : '') + (!engineering(item) ? ' · 决策任务' : '') + (shared.reason(item) ? ' · ' + shared.reason(item) : ''))); button.append(body, badge(displayStatus(item)));
     button.addEventListener('click', () => { if (!engineering(item)) { location.assign('/ui?run=' + encodeURIComponent(item.id)); return; } selectRun(item.id); }); return button;
   }
   function renderRuns() {
@@ -122,7 +122,7 @@
     const fact = delivery?.state === 'approved' ? '本人已批准此版本' : status === 'expired' ? '候选有效期已结束' : delivery?.state === 'pending' ? '已有待决定候选版本' : result?.review ? '已有模型复核记录' : result?.tests ? '已有检查记录' : '当前阶段尚不可确认';
     replace('progress', [node('p','phase-line', (TERMINAL.has(status) ? '任务已结束 · ' : '') + fact)]);
     const explanation = shared.reason(current,delivery); $('task-alert').hidden = !explanation; $('task-alert').textContent = explanation; $('task-alert').className = 'info-note';
-    details('task-details', [['创建时间', time(current.created_at)], ['执行次数', Number.isInteger(attempts.used) ? attempts.used + ' / ' + (attempts.max ?? '未知') : '未提供'], ['交付版本', delivery ? 'v' + delivery.revision : '尚未生成'], ['修复轮次', delivery?.repair_rounds ?? '尚未生成'], ['批准有效期', time(delivery?.expires_at)], ['当前身份', current.owner]]);
+    details('task-details', [['创建时间', time(current.created_at)], ['执行次数', Number.isInteger(attempts.used) ? attempts.used + ' / ' + (attempts.max ?? '未知') : '未提供'], ['交付版本', delivery ? 'v' + delivery.revision : '尚未生成'], ['修复轮次', delivery?.repair_rounds ?? '尚未生成'], ['批准有效期', time(delivery?.expires_at)], ['当前身份', current.owner === 'founder' ? '创始人' : current.owner]]);
     replace('task-steps', tasks().length ? tasks().map(item => { const row = node('div', 'step-record'); const body = node('div'); body.append(node('strong', '', item.metadata?.task_type === 'engineering.materials' ? '代码实现与模型复核' : item.title || item.name || '步骤记录')); body.append(node('p', '', '次数 ' + text(item.attempt_count) + ' / ' + text(item.max_attempts) + (item.error || item.failure_reason || item.last_error ? ' · ' + text(item.error || item.failure_reason || item.last_error) : ''))); row.append(body, badge(item.status)); return row; }) : [node('p', 'muted', '暂未返回执行步骤')]); renderReview(); renderGates();
   }
   function renderFiles() {
@@ -134,6 +134,12 @@
     const source = state.candidate?.files?.[state.currentFile]; if (typeof source !== 'string') { replace('code-lines', [node('span', 'line-text', '尚无可展示的候选文件')]); $('code-count').textContent = ''; return; }
     const lines = source.split('\n'); replace('code-lines', lines.map((line, i) => { const row = node('span', 'code-line'); row.append(node('span', 'line-number', i + 1), node('span', 'line-text', line || ' ')); return row; })); $('code-count').textContent = lines.length + ' 行'; $('file-select').value = state.currentFile;
   }
+  function testSummary(value) {
+    const original = text(value);
+    if (!/[A-Za-z]/.test(original)) return original;
+    const match = original.match(/^(\d+) passed(?:, (\d+) warnings?)? in ([\d.]+)s$/);
+    return match ? '通过 ' + match[1] + ' 项' + (match[2] ? ' · 警告 ' + match[2] + ' 项' : '') + ' · 用时 ' + match[3] + ' 秒' : '详细结果见原始记录';
+  }
   function checkRecord(title, value, body) { const row = node('div', 'check-row'); const heading = node('div', 'check-heading'); heading.append(node('strong', '', title), badge(value)); row.append(heading); if (body) row.append(node('p', '', body)); return row; }
   function renderReview() {
     if (!run()) return; const delivery = state.delivery; const result = state.candidate?.result;
@@ -141,9 +147,10 @@
     $('candidate-notice').textContent = state.candidateError ? '候选产物暂不可读：' + state.candidateError : delivery ? (run().status === 'failed' ? '以下为保留的历史候选，检查结果不代表本次修改成功。' : '当前版本的候选代码与检查记录。') + '模型复核：同一模型 · 独立上下文。' : '执行、测试与模型复核通过后，服务才会生成待批准的候选版本。'; $('candidate-notice').className = 'info-note' + (state.candidateError ? ' error' : '');
     renderFiles(); const tests = Array.isArray(result?.tests) ? result.tests : result?.tests ? [result.tests] : [];
     replace('test-results', tests.length ? tests.map((item, index) => {
-      const title = item.name || item.gate?.name || (item.harness === 'host-oracle-input-only-v1' ? '合同检查' : item.harness === 'pytest-summary-v1' ? (index === 1 ? '生成的测试' : '回归测试') : item.command || '检查 ' + (index + 1));
+      const title = item.name || item.gate?.name || (item.harness === 'host-oracle-input-only-v1' ? '合同检查' : item.harness === 'pytest-summary-v1' ? (index === 1 ? '生成的测试' : '回归测试') : '测试记录 ' + (index + 1));
       const summary = item.gate?.summary || item.summary || (Array.isArray(item.gate?.cases) ? item.gate.cases.filter(check => check.passed === true).length + ' / ' + item.gate.cases.length + ' 项通过' : '退出码：' + text(item.exit_code));
-      const row = checkRecord(title, item.passed === true || item.gate?.passed === true ? 'passed' : item.passed === false || item.gate?.passed === false ? 'failed' : item.status || '未提供', summary);
+      const row = checkRecord(title, item.passed === true || item.gate?.passed === true ? 'passed' : item.passed === false || item.gate?.passed === false ? 'failed' : item.status || '未提供', testSummary(summary));
+      if (testSummary(summary) !== text(summary)) { const original = node('details'); original.append(node('summary', 'muted', '查看原始摘要'), node('pre', '', text(summary))); row.append(original); }
       if (item.log) { const detail = node('details'); detail.append(node('summary', 'muted', '查看测试日志'), node('pre', '', item.log)); row.append(detail); } return row;
     }) : [node('p', 'muted', '尚无测试结果')]);
     const review = result?.review; const nodes = [];
@@ -152,8 +159,8 @@
       if (Array.isArray(review.findings)) for (const finding of review.findings) nodes.push(checkRecord(finding.title || finding.code || finding.severity || '审查意见', finding.blocking ? 'blocked' : '记录', finding.message || finding.description || text(finding)));
       const checks = review.evidence_checks || review.checks;
       if (checks) { const detail = node('details'); detail.append(node('summary', 'muted', '查看证据检查')); detail.append(node('pre', '', pretty(checks))); nodes.push(detail); }
-      const identity = value => value && typeof value === 'object' ? [value.selected_model || value.selected_provider || '未提供模型', value.session_id ? '会话 ' + short(value.session_id) : '', value.usage?.total_tokens ? value.usage.total_tokens + ' tokens' : ''].filter(Boolean).join(' · ') : text(value);
-      nodes.push(node('p', 'muted', '代码实现：' + identity(result.executor))); nodes.push(node('p', 'muted', '代码复核：' + identity(result.reviewer)));
+      const identity = value => value && typeof value === 'object' ? [value.selected_model || value.selected_provider || '未提供模型', value.session_id ? '会话 ' + short(value.session_id) : '', value.usage?.total_tokens ? value.usage.total_tokens + ' 个词元' : ''].filter(Boolean).join(' · ') : text(value);
+      const execution = node('details', 'execution-details'); execution.append(node('summary', 'muted', '模型执行明细'), node('p', 'muted', '代码实现：' + identity(result.executor)), node('p', 'muted', '代码复核：' + identity(result.reviewer))); nodes.push(execution);
     } else nodes.push(node('p', 'muted', '尚无模型复核结果'));
     replace('review-results', nodes); details('version-details', [['基础版本', delivery?.base_sha, true], ['补丁指纹', delivery?.patch_sha, true], ['批准记录', delivery?.approval_id, true], ['产物标识', delivery?.artifact_id, true]]); renderGates();
   }
@@ -161,7 +168,7 @@
     const current = run(); const delivery = state.delivery; const attempts = attemptsInfo(); const expires = Date.parse(delivery?.expires_at || ''); const unexpired = Number.isFinite(expires) && expires > Date.now(); const versionComplete = delivery && ['revision', 'base_sha', 'patch_sha', 'approval_id', 'artifact_id'].every(key => delivery[key] !== undefined && delivery[key] !== null && delivery[key] !== '');
     const available = state.connected && !state.readFailed && !state.busy && !state.uncertain; const pending = Boolean(current?.status === 'waiting_approval' && delivery?.state === 'pending' && unexpired && versionComplete && state.candidate && !state.candidateError);
     const repairable = Number.isInteger(attempts.used) && Number.isInteger(attempts.max) && attempts.used < attempts.max && Number.isInteger(delivery?.repair_rounds) && delivery.repair_rounds < 2;
-    let reason = !current ? '请先选择工程任务。' : !state.connected || state.readFailed ? '连接或读取中断，操作已暂停，不会自动重发。最后成功读取：' + time(state.lastRead) + '。' : state.uncertain ? '上一笔请求结果待核实，所有写入已暂停。' : state.busy ? '操作正在提交，请勿重复点击。' : delivery?.state === 'approved' ? '已由 ' + text(delivery.decided_by || '记录未提供批准人') + ' 于 ' + time(delivery.decided_at) + ' 批准，此版本只读保留，可导出交付记录。' : TERMINAL.has(current.status) ? shared.reason(current,delivery) || '任务已结束，现有产物和记录保留。' : !delivery ? '当前尚无可批准的交付版本。' : delivery.state !== 'pending' ? '当前交付状态为“' + label(delivery.state) + '”，请等待或查看任务记录。' : !unexpired ? '当前批准有效期已结束或缺少有效期信息，无法批准、驳回或继续反馈。' : !versionComplete || !state.candidate ? '版本信息或候选产物不完整，请刷新核实。' : '当前版本等待你的决定。请先阅读代码、测试与模型复核，再批准或提出反馈。';
+    let reason = !current ? '请先选择工程任务。' : !state.connected || state.readFailed ? '连接或读取中断，操作已暂停，不会自动重发。最后成功读取：' + time(state.lastRead) + '。' : state.uncertain ? '上一笔请求结果待核实，所有写入已暂停。' : state.busy ? '操作正在提交，请勿重复点击。' : delivery?.state === 'approved' ? '已由 ' + text(delivery.decided_by === 'founder' ? '创始人' : delivery.decided_by || '记录未提供批准人') + ' 于 ' + time(delivery.decided_at) + ' 批准，此版本只读保留，可导出交付记录。' : TERMINAL.has(current.status) ? shared.reason(current,delivery) || '任务已结束，现有产物和记录保留。' : !delivery ? '当前尚无可批准的交付版本。' : delivery.state !== 'pending' ? '当前交付状态为“' + label(delivery.state) + '”，请等待或查看任务记录。' : !unexpired ? '当前批准有效期已结束或缺少有效期信息，无法批准、驳回或继续反馈。' : !versionComplete || !state.candidate ? '版本信息或候选产物不完整，请刷新核实。' : '当前版本等待你的决定。请先阅读代码、测试与模型复核，再批准或提出反馈。';
     return {available, pending, repairable, reason, attempts, approve: available && !state.loading && pending, feedback: available && pending && repairable, cancel: available && !state.loading && current && !TERMINAL.has(shared.deriveDisplayState(current,state.delivery)) && state.delivery?.state !== 'approved' && Boolean(current.metadata?.base_sha || delivery?.base_sha), export: available && current?.status === 'completed' && delivery?.state === 'approved'};
   }
   function renderGates() {
@@ -171,7 +178,7 @@
     $('feedback-disclosure').hidden = !value.feedback; $('feedback-form').hidden = !value.feedback; $('feedback-heading').hidden = !value.feedback; $('feedback-intro').hidden = !value.feedback;
     $('approve-run').textContent = state.delivery ? '批准第 ' + state.delivery.revision + ' 版' : '批准当前版本';
     $('feedback-budget').hidden = state.delivery?.state === 'approved';
-    $('feedback-budget').textContent = Number.isInteger(value.attempts.used) ? '已用 ' + value.attempts.used + ' / ' + (value.attempts.max ?? '未知') + ' 次尝试' + (!value.repairable && state.delivery ? Number.isInteger(value.attempts.max) && value.attempts.used >= value.attempts.max ? ' · 无剩余修改次数' : ' · 修改额度未能确认' : '') + ' · 修改时间窗与 token 余额未提供，由服务核验'  : '尝试次数未提供，反馈暂不可用';
+    $('feedback-budget').textContent = Number.isInteger(value.attempts.used) ? '已用 ' + value.attempts.used + ' / ' + (value.attempts.max ?? '未知') + ' 次尝试' + (!value.repairable && state.delivery ? Number.isInteger(value.attempts.max) && value.attempts.used >= value.attempts.max ? ' · 无剩余修改次数' : ' · 修改额度未能确认' : '') + ' · 修改时限与模型用量余额未知，提交时由服务核验'  : '尝试次数未提供，反馈暂不可用';
     for (const id of ['feedback-path', 'feedback-line', 'feedback-comment']) $(id).disabled = !value.feedback;
   }
   async function createRun() {
@@ -203,7 +210,12 @@
   }
   async function loadEvents(expectedGeneration = state.generation) {
     if (!state.runId) return; const id = state.runId; const ticket = ++state.eventsGeneration;
-    try { const data = await api('/api/runs/' + encodeURIComponent(id) + '/events?limit=200'); if (expectedGeneration !== state.generation || ticket !== state.eventsGeneration) return; const events = Array.isArray(data.events) ? data.events : Array.isArray(data) ? data : []; state.events = events; replace('events-list', events.length ? events.map(item => { const row = node('article', 'event-row'); row.append(node('time', '', time(item.created_at || item.timestamp || item.occurred_at))); const kind = item.event_type || item.type || item.kind || item.name; const names = {'run.created':'任务已创建','task.created':'执行步骤已创建','run.status_changed':'任务状态更新','task.status_changed':'步骤状态更新','policy.allowed':'策略检查允许执行','task.claimed':'开始执行步骤','artifact.registered':'保存产物证据','task.completed':'步骤已完成','engineering.delivery_pending':'候选版本待你决定','engineering.feedback':'已记录批注与修改请求','task.failed':'步骤未通过','run.metadata_updated':'任务记录更新','engineering.approved':'本人批准版本','engineering.rejected':'版本被驳回'}; row.append(node('h3', '', names[kind] || '事件记录')); const detail = node('details'); detail.append(node('summary', '', '查看完整记录'), node('pre', '', pretty(item))); row.append(detail); return row; }) : [node('div', 'empty small', '服务尚未返回此任务的事件')]); }
+    try { const data = await api('/api/runs/' + encodeURIComponent(id) + '/events?limit=200'); if (expectedGeneration !== state.generation || ticket !== state.eventsGeneration) return; const events = Array.isArray(data.events) ? data.events : Array.isArray(data) ? data : []; state.events = events; const eventRows = events.map(item => { const row = node('article', 'event-row'); row.append(node('time', '', time(item.created_at || item.timestamp || item.occurred_at))); const kind = item.event_type || item.type || item.kind || item.name; const names = {'run.created':'任务已创建','task.created':'执行步骤已创建','run.status_changed':'任务状态更新','task.status_changed':'步骤状态更新','policy.allowed':'策略检查允许执行','task.claimed':'开始执行步骤','artifact.registered':'保存产物证据','task.completed':'步骤已完成','engineering.delivery_pending':'候选版本待你决定','engineering.feedback':'已记录批注与修改请求','task.failed':'步骤未通过','run.metadata_updated':'任务记录更新','engineering.approved':'本人批准版本','engineering.rejected':'版本被驳回'}; row.append(node('h3', '', names[kind] || '事件记录')); const detail = node('details'); detail.append(node('summary', '', '查看完整记录'), node('pre', '', pretty(item))); row.append(detail); return row; });
+      const visible = [], technical = node('details', 'event-technical');
+      technical.append(node('summary', '', '执行明细与原始事件（' + events.length + ' 条）'));
+      eventRows.forEach(row => technical.append(row));
+      events.forEach((item, index) => { const kind = item.event_type || item.type || item.kind || item.name; if (['run.created','task.completed','task.failed','engineering.delivery_pending','engineering.approved','engineering.rejected'].includes(kind)) visible.push(eventRows[index].cloneNode(true)); });
+      replace('events-list', events.length ? [...visible, technical] : [node('div', 'empty small', '服务尚未返回此任务的事件')]); }
     catch (error) { if (expectedGeneration === state.generation && ticket === state.eventsGeneration) replace('events-list', [node('div', 'empty small', '审计记录读取失败：' + error.message)]); }
   }
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
