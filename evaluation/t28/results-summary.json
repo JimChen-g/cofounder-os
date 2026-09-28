@@ -1,0 +1,65 @@
+{
+  "formal": {
+    "trials": 40,
+    "passes": {
+      "without_skill": 11,
+      "with_skill": 13
+    },
+    "model_responses": 44,
+    "host_attempts": 58,
+    "host_tokens": 47916,
+    "tool_calls": 18,
+    "decision_tokens": 860,
+    "elapsed_seconds": 69.303
+  },
+  "connection_recovery_supplement": {
+    "trials": 14,
+    "passes": {
+      "without_skill": 7,
+      "with_skill": 7
+    },
+    "model_responses": 22,
+    "host_attempts": 22,
+    "host_tokens": 22054,
+    "tool_calls": 8,
+    "decision_tokens": 0,
+    "elapsed_seconds": 32.895
+  },
+  "actual_model_trials_across_batches": {
+    "trials": 40,
+    "passes": {
+      "without_skill": 18,
+      "with_skill": 20
+    },
+    "model_responses": 66,
+    "host_attempts": 66,
+    "host_tokens": 69970,
+    "tool_calls": 26,
+    "decision_tokens": 860,
+    "elapsed_seconds": 101.457
+  },
+  "all_attempts": {
+    "trials": 54,
+    "passes": {
+      "without_skill": 18,
+      "with_skill": 20
+    },
+    "model_responses": 66,
+    "host_attempts": 80,
+    "host_tokens": 69970,
+    "tool_calls": 26,
+    "decision_tokens": 860,
+    "elapsed_seconds": 102.197
+  },
+  "not_replacement_score": true,
+  "cost": null,
+  "judge_calls": 0,
+  "limitations": [
+    "14 original transport failures retained",
+    "recovery supplement separate; not original formal score",
+    "narrow strong-protocol synthetic tasks",
+    "resource pauses and changing cache/host load; no stable performance inference",
+    "temperature=0 repetitions not independent large sample",
+    "official Agent trials zero, no Tier3 PASS"
+  ]
+}

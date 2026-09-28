@@ -222,3 +222,12 @@ PR-first/fixed-commit release authorization rather than the historical July orde
 T26 export follow-up: provide the actual approved JSON as a Feishu attachment,
 with a backwards-compatible inbox column retaining its platform message ID.
 Metadata-only replies are not claimed as a downloadable phone delivery.
+
+## September T28–T29 development acceptance
+
+Current product baseline remains `57502708e30e8db9fcb72c508f37b04de590a2dd`.
+T23–T27 actual acceptance is recorded in its stage receipts; historical pending
+entries above are preserved. T28 bounded Agent trials and T29 638-test CPU
+regression completed with explicit transport/evaluation limits in
+`docs/t28-t29.md`. This stage adds evaluation/docs only; no production redeploy.
+U01 local connection and user acceptance are recorded separately; T30+ not done.
