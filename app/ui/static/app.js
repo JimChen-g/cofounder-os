@@ -2183,7 +2183,7 @@ function renderLatestEvaluation(run) {
     badge.className = "evaluation-grade";
     const link = element("a", "button button-secondary", "查看工程检查");
     link.href = engineeringUrl(run.run_id);
-    append(selectors.evaluationLatest, element("h3", null, "工程任务 · " + evaluationLabel(run)), element("p", null, "工程任务不使用决策文档清单评分。检查与模型复核证据请见工程工作区。"), link);
+    append(selectors.evaluationLatest, element("h3", null, "工程任务 · " + evaluationLabel(run)), element("p", null, (window.CofounderState?.reason(run) || "") + " 工程任务不使用决策文档清单评分。检查与模型复核证据请见工程工作区。"), link);
     return;
   }
   const grade = String(run.grade || "attention").replace(/[^a-z]/g, "");
@@ -2282,7 +2282,7 @@ function renderEvaluationRuns(runs) {
       element(
         "p",
         null,
-        `Run ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)} · ${run.completed_tasks}/${run.task_count} tasks`,
+        `任务 ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)} · ${run.completed_tasks}/${run.task_count} 步骤` + (isEngineering(run) ? " · " + (window.CofounderState?.reason(run) || "") : ""),
       ),
     );
     const evidence = element("div", "evaluation-run-evidence");
