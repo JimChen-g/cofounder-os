@@ -1,4 +1,4 @@
-"""D13 Founder Mission Control route and API-boundary tests."""
+"""D13 Cofounder route and API-boundary tests."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
 
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/html")
-        assert "Founder Mission Control" in response.text
+        assert "Cofounder" in response.text
         assert 'id="mission-form"' in response.text
         assert 'id="approval-list"' in response.text
         assert 'id="artifact-viewer"' in response.text
@@ -36,9 +36,9 @@ def test_ui_shell_and_assets_are_served_by_existing_app() -> None:
         assert 'id="conflict-grid"' in response.text
         assert 'id="demo-strategy-grid"' in response.text
         assert 'id="demo-evaluation-disclosure"' in response.text
-        assert "Engineering Agent" in response.text
-        assert "Risk Agent" in response.text
-        assert "D15 · 2 LIVE LLM SPECIALISTS" in response.text
+        assert "工程规划" in response.text
+        assert "风险核验" in response.text
+        assert "工程规划与风险核验 · 实际路径以执行记录为准" in response.text
 
         stylesheet = client.get("/ui/assets/app.css")
         script = client.get("/ui/assets/app.js")
@@ -114,12 +114,12 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
     script = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
     html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
 
-    assert "Build Evidence Package" in html
-    assert "Simulate Engineering route outage" in html
-    assert "Adaptive explainable router" in html
-    assert "not a trained or learned Router" in html
+    assert "整理材料" in html
+    assert "模拟工程规划路径中断" in html
+    assert "可解释的规则路由" in html
+    assert "并非经过训练的路由模型" in html
     assert "Simulate Step unavailable" not in html
-    assert "Files are normalized locally before any model route" in html
+    assert "材料先在本地整理，再选择模型处理路径" in html
     assert "source.adapter_mode" in script
     assert "state.snapshot = insuranceMission" in script
     assert "hydrateInsuranceRunState" in script
@@ -138,7 +138,7 @@ def test_insurance_poc_ui_labels_adaptive_routes_and_verified_live_calls() -> No
     assert "window.localStorage.setItem(ACTIVE_RUN_KEY" in script
     assert "function tasksInStageOrder()" in script
     assert "function renderInsuranceDemoEvaluation()" in script
-    assert "not statistical model quality" in script
+    assert "不代表模型质量" in script
     assert "function renderLiveExecutionBoard()" in script
     assert "Only persisted Gateway metadata can mark an Agent LIVE" in script
     assert 'element("span", null, "REQUEST ID")' not in script
@@ -157,6 +157,7 @@ def test_ui_static_root_contains_only_reviewable_source_assets() -> None:
         Path("engineering.html"), Path("engineering.css"), Path("engineering.js"),
         Path("app.css"),
         Path("app.js"),
+        Path("display-state.js"),
     }
 
 

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Cofounder · 创始人操作系统</title>
+  <link rel="stylesheet" href="/portal.css">
+  <script src="/ui/assets/display-state.js" defer></script>
+  <script src="/portal.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">c</span><span>Cofounder<span class="brand-sub">创始人操作系统</span></span></a>
+    <nav aria-label="主导航">
+      <button class="nav-item active" data-view="overview">今日</button>
+      <a class="nav-item" href="/ui">决策</a>
+      <button class="nav-item" data-view="tasks">工程</button>
+      <button class="nav-item" data-view="audit">记录</button>
+    </nav>
+    <div class="sidebar-bottom">
+      <a class="mission-link" href="/ui">进入决策工作区 →</a>
+      <div class="local-label"><span class="dot" id="sidebar-dot"></span><span id="sidebar-status">正在连接 Spark</span></div>
+      <p>本机入口 · 实际服务<br>所有交付由你本人批准</p>
+    </div>
+  </aside>
+
+  <main id="main-content" tabindex="-1">
+    <header class="topbar"><div class="breadcrumb">工作空间 <span>/</span> <strong id="page-title">今日</strong></div><div class="top-actions"><span class="status-badge neutral" id="connection-badge">连接中</span><button class="icon-button" id="refresh-all" title="刷新服务与任务">↻ <span>刷新</span></button></div></header>
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden><span id="notice-text"></span><button id="notice-close" aria-label="关闭提示">×</button></div>
+
+    <section class="view" id="view-overview">
+      <div class="eyebrow" id="today-date"></div>
+      <div class="page-heading"><div><h1 id="today-heading">今天，专注下一件事。</h1><p class="lede">阅读证据，作出决定；批准之后，再交付。</p></div></div>
+      <section class="home-section"><h2>待你决定</h2><div id="attention-runs"><p class="muted">正在读取…</p></div></section>
+      <section class="home-section"><h2>进行中</h2><div id="active-runs"></div></section>
+      <section class="home-section"><h2>开始一件新事</h2><div class="start-grid"><div><h3>决策任务</h3><p>一起梳理目标、行动、预算与风险。</p><a class="button secondary" href="/ui">发起决策 →</a></div><div><h3>工程任务 · 材料完整性检查</h3><p>固定模板；实时模型生成代码，通过检查与模型复核后，由你决定。</p><button class="button secondary create-run" disabled>创建工程任务</button></div></div></section>
+      <div class="stats-grid" hidden><article class="stat"><span>可见任务</span><strong id="stat-total">—</strong><small>当前身份的真实记录</small></article><article class="stat"><span>执行中</span><strong id="stat-active">—</strong><small>排队、执行或修复</small></article><article class="stat"><span>等待批准</span><strong id="stat-pending">—</strong><small>请检查版本与有效期</small></article><article class="stat"><span>已批准交付</span><strong id="stat-approved">—</strong><small>可导出真实交付记录</small></article></div>
+      <div class="overview-grid"><article class="panel"><div class="panel-heading"><h2>最近的任务</h2><button class="text-button" data-view="tasks">查看全部 →</button></div><div id="recent-runs" class="recent-runs"><div class="empty small">连接后显示实际任务</div></div></article><details class="panel service-panel"><summary>服务与运行信息</summary><div class="panel-heading"><h2>服务连接</h2><span id="service-check" class="muted">待检查</span></div><dl id="service-details" class="detail-list"></dl><div class="info-note">服务不可用时暂停操作，不会自动重发请求。</div></details></div>
+    </section>
+
+    <section class="view" id="view-tasks" hidden>
+      <div class="page-heading"><div><div class="eyebrow">工程</div><h1>工程任务</h1><p class="lede">查看真实进度，保持原有预算、次数和版本边界。</p></div><button class="button primary create-run" disabled>创建工程任务</button></div>
+      <div class="scope-note"><strong>当前范围</strong> 仅支持“材料完整性检查”固定模板；本入口暂不接受任意代码任务。</div>
+      <form id="load-form" class="load-form"><label for="run-id">按任务 ID 加载</label><input id="run-id" autocomplete="off" spellcheck="false" placeholder="输入 Run ID（UUID）"><button class="button secondary" type="submit">加载任务</button></form>
+      <div class="task-grid"><aside class="panel run-list-panel"><div class="panel-heading"><h2>任务列表</h2><button class="text-button" id="refresh-runs">刷新</button></div><div id="run-list" class="run-list"><div class="empty small">尚未读取任务列表</div></div></aside><article class="panel task-detail"><div id="task-empty" class="empty"><span class="empty-symbol">▤</span><h3>选择一个任务</h3><p>从左侧历史记录选择，或输入任务 ID。<br>也可以手动创建材料完整性检查任务。</p></div><div id="task-content" hidden><div class="selected-heading"><div><span class="small-label">当前任务</span><h2 id="task-objective"></h2><details class="credentials"><summary>任务编号</summary><code id="task-id"></code></details></div><span class="status-badge" id="task-status"></span></div><div id="progress" class="progress-steps"></div><div id="task-alert" class="info-note" hidden></div><dl id="task-details" class="detail-list two-column"></dl><div class="section-title"><h3>执行步骤</h3><span id="poll-status" class="muted"></span></div><div id="task-steps"></div><div class="detail-actions"><button class="button primary" data-view="review">审阅与决定 →</button><button class="button secondary" id="refresh-selected">刷新任务</button><button class="button danger-subtle" id="cancel-run" disabled>取消任务</button></div></div></article></div>
+    </section>
+
+    <section class="view" id="view-review" hidden>
+      <div class="page-heading"><div><div class="eyebrow">工程 / 材料完整性检查</div><h1>审阅与决定</h1><p class="lede">阅读代码与检查结果，所有操作绑定当前版本。</p></div><button class="button secondary" id="export-run" disabled>↓ 导出交付包</button></div>
+      <div id="review-empty" class="empty panel"><span class="empty-symbol">⌘</span><h3>先选择一个工程任务</h3><p>候选产物通过检查后，会在这里展示。</p><button class="button secondary" data-view="tasks">前往工程任务</button></div>
+      <div id="review-content" hidden>
+        <div class="version-strip"><div><span class="small-label">当前候选</span><strong id="review-version">尚无交付版本</strong><details class="credentials"><summary>任务编号</summary><span class="muted" id="review-run-id"></span></details></div><span class="status-badge" id="delivery-state"></span></div>
+        <article class="panel decision-panel"><div class="panel-heading"><h2>你的交付决定</h2><span id="expiry-label" class="muted"></span></div><p id="action-gate" class="info-note"></p><div class="decision-actions"><button class="button primary" id="approve-run" disabled>批准当前版本</button><button class="button danger-subtle" id="reject-run" disabled>驳回当前版本</button><span id="decision-note" class="muted">批准仅对当前版本生效，修改后需重新审阅。</span><button id="restart-run" class="button primary create-run" hidden>创建新任务</button><button class="button secondary" data-view="audit">查看经过</button></div><p id="feedback-budget" class="muted"></p><details id="feedback-disclosure"><summary>批注并修改</summary><h3 id="feedback-heading">批注 · 修改</h3><p id="feedback-intro" class="muted">修改会消耗本任务剩余次数与预算。</p><form id="feedback-form"><div class="feedback-location"><label>文件<select id="feedback-path" required></select></label><label class="line-field">行号<input id="feedback-line" type="number" min="1" value="1" required></label></div><label for="feedback-comment">修改意见</label><textarea id="feedback-comment" rows="3" maxlength="2000" placeholder="说明这一行存在的问题，以及你期望的结果" required></textarea><div class="feedback-footer"><button class="button secondary" id="send-feedback" type="submit" disabled>提交批注并修改</button></div></form></details></article>
+        <div id="candidate-notice" class="info-note"></div>
+        <div class="code-panel panel"><div class="code-toolbar"><label for="file-select">文件</label><select id="file-select" aria-label="选择候选文件"></select><span id="code-count" class="muted"></span></div><div class="code-scroll"><pre id="code-lines" tabindex="0" aria-label="候选代码，包含行号"></pre></div></div>
+        <div class="checks-grid"><article class="panel"><div class="panel-heading"><h2>测试结果</h2><span class="small-label">真实执行记录</span></div><div id="test-results"></div></article><article class="panel"><div class="panel-heading"><h2>模型复核</h2><span class="small-label">同一模型 · 独立上下文</span></div><p class="muted">引用可定位到原文，不等于逐条证明。</p><div id="review-results"></div></article></div>
+
+        <details class="panel credentials"><summary>版本凭据</summary><dl id="version-details" class="detail-list two-column compact"></dl></details>
+      </div>
+    </section>
+
+    <section class="view" id="view-audit" hidden><div class="page-heading"><div><div class="eyebrow">记录</div><h1>记录</h1><p class="lede">当前任务的真实事件与版本记录。</p></div><button class="button secondary" id="refresh-events">刷新记录</button></div><div class="panel"><div class="panel-heading"><h2>任务时间线</h2><code id="audit-run-id">尚未选择任务</code></div><div id="events-list" class="events-list"><div class="empty small">选择任务后查看记录</div></div></div><details class="panel raw-panel"><summary>查看当前任务原始记录</summary><pre id="raw-snapshot">尚未加载</pre></details></section>
+    <footer class="page-footer"><span>Cofounder · 创始人操作系统</span><span>由你决定 · 按版本交付</span></footer>
+  </main>
+</body>
+</html>
