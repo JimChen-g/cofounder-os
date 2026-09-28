@@ -54,3 +54,27 @@ checks and package build passed. Spark isolated Docker checks passed for the
 21-case positive candidate and both mutation probes; forged-pass output and
 deepcopy hijacking were rejected. These checks used no model call or approval.
 The PR CI checks the final complete source snapshot on Python 3.10 and 3.12.
+
+## Release acceptance
+
+[PR #8](https://github.com/JimChen-g/cofounder-os/pull/8) merged as
+`a44b9bdca7f4cbb65e54adaca721eb78c9695ac4`. [Main CI](https://github.com/JimChen-g/cofounder-os/actions/runs/36412668267)
+passed Python 3.10/3.12 on the final 706-test snapshot. Spark received that exact
+source, preserving Qwen identity and all production Runs. Both approved Runs
+and the pending 61fe0f3a Run matched their pre-release snapshots exactly.
+
+An isolated real Qwen Run `305a5521-fb47-461b-958a-05ff9e0c3dd9` passed initial
+checks, accepted positioned feedback, passed revision 2 and remained pending.
+Its two total attempts were exhausted; another feedback was rejected with
+`repair_attempts_exhausted` and an unchanged full snapshot. No founder approval
+or Feishu message was submitted. This is a new isolated validation, not a rewrite
+of T27/T28 or a production user's Run.
+
+The private correction restore verified 5,051 files and six SQLite databases,
+with an offline authenticated API and approved export. Sixteen historical
+candidate objects were additionally protected and restored from a Git bundle.
+Credentials are excluded from this public repository. SSH key/known_hosts and
+private local token access work at both local entry pages. Bridge configuration
+and process environment exclude founder/provider keys; same-UID OS isolation
+remains unimplemented. Full linked-worktree reexecution from the restore remains
+unverified. Private receipt paths and hashes are in the owner's release report.

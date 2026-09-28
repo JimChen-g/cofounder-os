@@ -89,15 +89,13 @@ contracts.
 
 ## Current State
 
-- Accepted source baseline: `9bdf757c4c8e2a7822235322fe0ca8a3acf052b5`, PR #7 merged.
-- Last verified production before corrections: `57502708e30e8db9fcb72c508f37b04de590a2dd`.
+- Accepted correction implementation: `a44b9bdca7f4cbb65e54adaca721eb78c9695ac4`, PR #8 merged; prior review baseline `9bdf757` retained in history.
+- Correction production release `a44b9bd` verified on Spark on September 28. Both PR and main CI passed Python 3.10/3.12. Subsequent receipt-only commits retain this application tree.
 - T01–T29 scoped development completed, with the explicit limits in the stage reports.
 - T27 approved Run: `17c3e7a1-97cf-4eea-83d0-f79b3568e5da`; later approved Run:
   `29a8b17d-538e-4504-88d8-5942be2287d1`. Historical evidence is retained.
-- Current authorized work: independent-review corrections F1–F16, branch
-  `codex/claude-review-fixes`; see `docs/independent-review-fixes.md` for actual
-  implementation, verification, deployment and remaining limitations.
-- Baseline verification: 665 tests. New correction results are recorded separately.
+- F1–F16 correction round is implemented and released within the explicitly partial boundaries in `docs/independent-review-fixes.md`. F3–F6, same-UID isolation, aggregate credential quotas and complete dependency hash locking remain limitations, not closed security guarantees.
+- Verification: 703 local full-suite tests plus 32 final edge regressions; final snapshot contains 706 tests and passes both CI versions. Real isolated Qwen initial/feedback revisions passed, with no founder approval.
 - T30–T38, final materials and complete local-UI founder acceptance are not implied.
 - September founder authorization uses the existing T07 checkout, original GitHub
   repository, PR-first merge and fixed-commit Spark deployment. Explicit credential
