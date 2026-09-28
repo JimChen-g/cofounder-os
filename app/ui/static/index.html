@@ -1,49 +1,51 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="Founder Mission Control for CoFounder OS workflows, approvals, artifacts, and audit evidence."
+      content="Cofounder 创始人操作系统：决策、放行、输出与过程记录。"
     >
-    <title>Founder Mission Control · CoFounder OS</title>
-    <link rel="stylesheet" href="/ui/assets/app.css?v=d15-live-proof-2">
-    <script src="/ui/assets/app.js?v=d15-live-proof-2" defer></script>
+    <title>决策 · Cofounder</title>
+    <link rel="stylesheet" href="/ui/assets/app.css?v=ink-paper-1">
+    <script src="/ui/assets/display-state.js" defer></script>
+    <script src="/ui/assets/app.js?v=ink-paper-1" defer></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">跳至主要内容</a>
     <div class="app-shell">
-      <aside class="sidebar" aria-label="Mission Control navigation">
-        <a class="brand" href="/ui" aria-label="CoFounder OS Mission Control">
+      <aside class="sidebar" aria-label="创始人操作系统 navigation">
+        <a class="brand" href="/ui" aria-label="Cofounder 创始人操作系统">
           <span class="brand-mark" aria-hidden="true">CO</span>
           <span>
-            <strong>CoFounder OS</strong>
-            <small>Mission Control</small>
+            <strong>Cofounder</strong>
+            <small>创始人操作系统</small>
           </span>
         </a>
 
         <nav class="nav-list" aria-label="Workspace">
           <button class="nav-item is-active" type="button" data-view-target="mission">
             <span class="nav-icon" aria-hidden="true">⌁</span>
-            Mission
+            决策
           </button>
           <button class="nav-item" type="button" data-view-target="approvals">
             <span class="nav-icon" aria-hidden="true">✓</span>
-            Approvals
+            待你放行
             <span class="nav-count is-hidden" id="approval-count">0</span>
           </button>
           <button class="nav-item" type="button" data-view-target="artifacts">
             <span class="nav-icon" aria-hidden="true">▱</span>
-            Artifacts
+            决策输出
             <span class="nav-count is-hidden" id="artifact-count">0</span>
           </button>
           <button class="nav-item" type="button" data-view-target="audit">
             <span class="nav-icon" aria-hidden="true">≋</span>
-            Audit trail
+            记录
           </button>
           <button class="nav-item" type="button" data-view-target="evaluation">
             <span class="nav-icon" aria-hidden="true">◫</span>
-            Evaluation
+            评测
           </button>
         </nav>
 
@@ -51,32 +53,33 @@
           <div class="system-state" id="system-state">
             <span class="system-dot" aria-hidden="true"></span>
             <span>
-              <strong id="system-state-label">Checking system</strong>
-              <small id="system-state-detail">Product API</small>
+              <strong id="system-state-label">正在检查连接</strong>
+              <small id="system-state-detail">产品服务</small>
             </span>
           </div>
           <a class="text-link" href="/docs" target="_blank" rel="noreferrer">
-            API documentation <span aria-hidden="true">↗</span>
+            API 文档 <span aria-hidden="true">↗</span>
           </a>
         </div>
       </aside>
 
-      <main class="main">
+      <main class="main" id="main-content" tabindex="-1">
+        <nav class="workspace-switcher" aria-label="工作区"><a href="/" data-engineering-link>今日</a><a href="/ui" aria-current="page">决策</a><a href="/ui/engineering" data-engineering-link>工程</a><button type="button" data-view-target="audit">记录</button></nav>
         <header class="topbar">
           <div>
-            <p class="eyebrow">FOUNDER WORKSPACE</p>
-            <h1 id="view-title">Mission</h1>
+            <p class="eyebrow">创始人操作系统</p>
+            <h1 id="view-title" tabindex="-1">决策</h1>
           </div>
           <div class="topbar-actions">
             <span class="environment-badge">
               <span class="environment-dot" aria-hidden="true"></span>
-              Live API
+              服务连接
             </span>
             <button class="button button-quiet is-hidden" id="refresh-run" type="button">
-              Refresh
+              刷新
             </button>
             <button class="button button-secondary" id="new-mission" type="button">
-              New mission
+              新建决策
             </button>
           </div>
         </header>
@@ -97,54 +100,53 @@
           >
             <div class="live-execution-heading">
               <div>
-                <p class="eyebrow">D15 · VERIFIED MODEL EXECUTION</p>
-                <h2 id="live-execution-title">Live Agent Execution</h2>
+                <p class="eyebrow">模型执行记录</p>
+                <h2 id="live-execution-title">模型执行记录</h2>
                 <p id="live-execution-summary">
-                  Gateway evidence for the two LLM-backed specialist Agents.
+                  查看工程规划与风险核验的实际模型调用记录。
                 </p>
               </div>
               <div class="live-execution-verdict" id="live-execution-verdict">
-                Awaiting execution
+                等待执行
               </div>
             </div>
             <div class="live-execution-grid" id="live-execution-grid"></div>
             <p class="live-execution-disclosure" id="live-execution-disclosure">
-              Only persisted Gateway metadata can mark an Agent LIVE.
+              实际模型调用以已保存的网关记录为准。
             </p>
           </section>
 
           <section class="composer" id="mission-composer" aria-labelledby="composer-title">
             <div class="composer-copy">
-              <p class="eyebrow accent">NEW FOUNDER MISSION</p>
-              <h2 id="composer-title">Turn a hard decision into an executable plan.</h2>
+              <p class="eyebrow accent">发起决策</p>
+              <h2 id="composer-title">把问题梳理成可执行的决策。</h2>
               <p>
-                Evidence, Product, Finance, Engineering, Risk, and Verification
-                agents build one governed case. Every decision leaves evidence.
+                材料、产品、财务、工程规划与风险核验共同梳理方案。执行过程与放行决定均保留记录。
               </p>
             </div>
             <form class="mission-form" id="mission-form">
-              <label for="objective">Mission or decision</label>
+              <label for="objective">你想决定什么</label>
               <textarea
                 id="objective"
                 name="objective"
                 rows="3"
                 maxlength="2000"
                 required
-                placeholder="Should we launch an AI onboarding copilot for mid-market SaaS teams in Q4?"
+                placeholder="例如：第四季度是否为中型企业推出 AI 入职助手？"
               ></textarea>
               <div class="form-grid">
                 <div>
-                  <label for="context">Context <span>optional</span></label>
+                  <label for="context">背景信息 <span>选填</span></label>
                   <textarea
                     id="context"
                     name="context"
                     rows="2"
                     maxlength="20000"
-                    placeholder="Target market, budget, constraints, or evidence the team should consider."
+                    placeholder="目标市场、预算、约束条件，或已有材料。"
                   ></textarea>
                 </div>
                 <div>
-                  <label for="owner">Mission owner <span>optional</span></label>
+                  <label for="owner">发起人 <span>选填</span></label>
                   <input
                     id="owner"
                     name="owner"
@@ -158,11 +160,11 @@
               <div class="evidence-uploader">
                 <div class="uploader-heading">
                   <div>
-                    <label for="evidence-files">Insurance POC evidence <span>PDF + PNG</span></label>
-                    <p>Files are normalized locally before any model route is selected.</p>
+                    <label for="evidence-files">保险 POC 材料 <span>PDF + PNG</span></label>
+                    <p>材料先在本地整理，再选择模型处理路径。</p>
                   </div>
                   <button class="button button-quiet" id="load-poc-fixture" type="button">
-                    Load stable demo
+                    载入合成示例
                   </button>
                 </div>
                 <input
@@ -173,18 +175,18 @@
                   multiple
                 >
                 <div class="attachment-list" id="attachment-list">
-                  <span>No evidence files selected.</span>
+                  <span>尚未选择材料。</span>
                 </div>
                 <button class="button button-secondary preview-evidence" id="preview-evidence" type="button" disabled>
-                  Build Evidence Package
+                  整理材料
                 </button>
               </div>
               <div class="form-actions">
                 <span class="form-hint" id="form-hint">
-                  Generic missions remain available · Insurance POC is the primary demo
+                  可发起通用决策；保险 POC 为主线示例
                 </span>
                 <button class="button button-primary" id="launch-mission" type="submit">
-                  <span>Launch mission</span>
+                  <span>发起决策</span>
                   <span aria-hidden="true">→</span>
                 </button>
               </div>
@@ -194,9 +196,9 @@
           <section class="evidence-board is-hidden" id="evidence-board" aria-labelledby="evidence-board-title">
             <div class="section-heading">
               <div>
-                <p class="eyebrow accent">MULTIMODAL EVIDENCE</p>
-                <h2 id="evidence-board-title">Evidence Board</h2>
-                <p id="evidence-board-summary">Source-linked facts ready for governed routing.</p>
+                <p class="eyebrow accent">材料与依据</p>
+                <h2 id="evidence-board-title">材料与依据</h2>
+                <p id="evidence-board-summary">材料事实可追溯到来源。</p>
               </div>
               <span class="subtle-label" id="evidence-package-id">Package —</span>
             </div>
@@ -208,20 +210,20 @@
           <section class="routing-board is-hidden" id="routing-board" aria-labelledby="routing-board-title">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">CAPABILITY · PRIVACY · COST</p>
-                <h2 id="routing-board-title">Routing Decisions</h2>
-                <p id="routing-board-summary">Measured health and adaptive scores before execution.</p>
+                <p class="eyebrow">能力 · 隐私 · 成本</p>
+                <h2 id="routing-board-title">模型处理路径</h2>
+                <p id="routing-board-summary">执行前检查可用性与处理条件。</p>
               </div>
               <button class="button button-secondary" id="simulate-route-fallback" type="button">
-                Simulate Engineering route outage
+                模拟工程规划路径中断
               </button>
             </div>
             <div class="routing-policy" id="routing-policy">
               <div>
-                <strong>Adaptive explainable router</strong>
-                <p>Hard filters run before ranking: availability and health → capability → modality → privacy and cloud eligibility → context → latency → cost.</p>
+                <strong>可解释的规则路由</strong>
+                <p>先核对可用性、能力、材料类型与隐私，再比较上下文、延迟和成本。</p>
               </div>
-              <p>Eligible candidates receive transparent scores for semantic depth, specialist fit, locality, measured latency, and budget headroom. This is adaptive policy routing—not a trained or learned Router.</p>
+              <p>符合条件的模型按任务匹配、本地执行、实测延迟与预算排序。这是确定性的规则路由，并非经过训练的路由模型。</p>
             </div>
             <div class="routing-grid" id="routing-grid"></div>
             <div class="routing-disclosure" id="routing-disclosure"></div>
@@ -230,54 +232,54 @@
           <section class="empty-overview" id="empty-overview" aria-labelledby="overview-title">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">HOW THE SYSTEM MOVES</p>
-                <h2 id="overview-title">Specialists, evidence, and one governed decision.</h2>
+                <p class="eyebrow">决策如何形成</p>
+                <h2 id="overview-title">从材料到方案，保留每一步依据。</h2>
               </div>
-              <span class="subtle-label">D15 · 2 LIVE LLM SPECIALISTS</span>
+              <span class="subtle-label">工程规划与风险核验 · 实际路径以执行记录为准</span>
             </div>
             <div class="system-map">
               <article class="map-card product">
                 <span class="agent-monogram">P</span>
                 <div>
-                  <p>01 · DISCOVERY</p>
-                  <h3>Product Agent</h3>
-                  <span>Users · value · scope · risks</span>
+                  <p>01 · 产品</p>
+                  <h3>产品规划</h3>
+                  <span>用户 · 价值 · 范围 · 风险</span>
                 </div>
               </article>
               <article class="map-card finance">
                 <span class="agent-monogram">F</span>
                 <div>
-                  <p>02 · ECONOMICS</p>
-                  <h3>Finance Agent</h3>
-                  <span>Revenue · costs · thresholds</span>
+                  <p>02 · 财务</p>
+                  <h3>财务分析</h3>
+                  <span>收入 · 成本 · 边界</span>
                 </div>
               </article>
               <article class="map-card engineering">
                 <span class="agent-monogram">G</span>
                 <div>
-                  <p>03 · DELIVERY · LIVE LLM</p>
-                  <h3>Engineering Agent</h3>
-                  <span>Two-week plan · validation · limitations</span>
+                  <p>03 · 工程规划</p>
+                  <h3>工程规划</h3>
+                  <span>两周计划 · 验证方式 · 局限</span>
                 </div>
               </article>
               <article class="map-card risk">
                 <span class="agent-monogram">R</span>
                 <div>
-                  <p>04 · GOVERNANCE · LIVE LLM</p>
-                  <h3>Risk Agent</h3>
-                  <span>Authority · privacy · human review</span>
+                  <p>04 · 风险</p>
+                  <h3>风险核验</h3>
+                  <span>权限 · 隐私 · 人工放行</span>
                 </div>
               </article>
               <article class="map-card executive">
                 <span class="agent-monogram">E</span>
                 <div>
-                  <p>05 · SYNTHESIS</p>
-                  <h3>Executive Orchestrator</h3>
-                  <span>Decision memo · action plan</span>
+                  <p>05 · 汇总</p>
+                  <h3>决策统筹</h3>
+                  <span>决策备忘录 · 行动计划</span>
                 </div>
               </article>
               <div class="map-join" aria-hidden="true">
-                <span></span><span></span><strong>GO / NO-GO</strong>
+                <span></span><span></span><strong>推进 / 暂缓</strong>
               </div>
             </div>
           </section>
@@ -286,18 +288,18 @@
             <article class="run-hero">
               <div class="run-hero-main">
                 <div class="hero-kicker">
-                  <span class="status-pill" id="run-status">Queued</span>
+                  <span class="status-pill" id="run-status">排队中</span>
                   <span id="run-short-id">Run —</span>
                 </div>
-                <h2 id="run-objective">Founder mission</h2>
-                <p id="run-owner">Owned by Founder</p>
+                <h2 id="run-objective">决策任务</h2>
+                <p id="run-owner">发起人待确认</p>
               </div>
               <div class="run-hero-actions">
                 <button class="button button-secondary" id="retry-run" type="button">
-                  Retry / recover
+                  重试 / 恢复
                 </button>
                 <button class="button button-primary" id="view-result" type="button">
-                  View decision bundle
+                  查看决策输出
                 </button>
               </div>
             </article>
@@ -309,12 +311,12 @@
                 <small id="progress-detail">agents completed</small>
               </article>
               <article class="metric">
-                <span>Artifacts</span>
+                <span>决策输出</span>
                 <strong id="artifact-metric">0</strong>
                 <small>integrity checked</small>
               </article>
               <article class="metric">
-                <span>Approvals</span>
+                <span>待你放行</span>
                 <strong id="approval-metric">0</strong>
                 <small id="approval-detail">no pending decisions</small>
               </article>
@@ -328,7 +330,7 @@
             <div class="run-notice is-hidden" id="run-notice">
               <span class="notice-icon" aria-hidden="true">!</span>
               <div>
-                <strong id="notice-title">Workflow needs attention</strong>
+                <strong id="notice-title">执行步骤 needs attention</strong>
                 <p id="notice-body"></p>
               </div>
               <button class="button button-small" id="notice-action" type="button">Review</button>
@@ -338,8 +340,8 @@
               <section class="panel workflow-panel" aria-labelledby="workflow-title">
                 <div class="panel-heading">
                   <div>
-                    <p class="eyebrow">LIVE EXECUTION</p>
-                    <h2 id="workflow-title">Workflow</h2>
+                    <p class="eyebrow">执行记录</p>
+                    <h2 id="workflow-title">执行步骤</h2>
                   </div>
                   <span class="panel-meta" id="workflow-updated">Awaiting run</span>
                 </div>
@@ -349,8 +351,8 @@
               <aside class="panel policy-panel" aria-labelledby="policy-title">
                 <div class="panel-heading">
                   <div>
-                    <p class="eyebrow">GUARDRAILS</p>
-                    <h2 id="policy-title">Policy & risk</h2>
+                    <p class="eyebrow">控制规则</p>
+                    <h2 id="policy-title">规则与风险</h2>
                   </div>
                   <span class="risk-badge risk-low" id="risk-badge">LOW</span>
                 </div>
@@ -419,8 +421,8 @@
         <section class="view" id="audit-view" data-view="audit">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">APPEND-ONLY EVIDENCE</p>
-              <h2>Audit trail</h2>
+              <p class="eyebrow">过程与依据</p>
+              <h2>记录</h2>
               <p>State transitions, routing decisions, approvals, retries, and outcomes.</p>
             </div>
             <span class="subtle-label" id="audit-count">0 events</span>
@@ -431,52 +433,52 @@
         <section class="view" id="evaluation-view" data-view="evaluation">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">DETERMINISTIC EVIDENCE</p>
-              <h2>Evaluation dashboard</h2>
+              <p class="eyebrow">证据类型</p>
+              <h2>评测与证据</h2>
               <p>
-                Repeatable quality scores from persisted workflow, artifact,
-                governance, routing, and audit records.
+                三类证据分别阅读：合成演示、决策工作流完整度、协议测试。工程任务不适用决策文档评分；分数不代表模型质量。
               </p>
             </div>
             <button class="button button-secondary" id="refresh-evaluation" type="button">
-              Refresh evaluation
+              刷新证据
             </button>
           </div>
 
           <section class="panel demo-comparison" aria-labelledby="demo-comparison-title">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">INSURANCE POC · SMALL SAMPLE</p>
-                <h2 id="demo-comparison-title">Baseline vs CoFounder OS</h2>
+                <p class="eyebrow">① 合成演示对比</p>
+                <h2 id="demo-comparison-title">合成演示对比 · 不代表模型质量</h2>
               </div>
-              <span class="panel-meta" id="demo-evaluation-sample">Loading demo evaluation</span>
+              <span class="panel-meta" id="demo-evaluation-sample">正在读取合成演示证据</span>
             </div>
             <div class="demo-strategy-grid" id="demo-strategy-grid"></div>
             <div class="demo-evaluation-disclosure" id="demo-evaluation-disclosure">
-              Evaluation disclosure will appear here.
+              评测 disclosure will appear here.
             </div>
           </section>
 
-          <div class="metric-grid evaluation-metrics" aria-label="Evaluation summary">
+          <section class="panel protocol-evidence"><h2>③ 协议测试 T28</h2><p>0 / 10 个用例需要在多个合法选项中选择</p><p>这是协议遵循观察，不代表决策质量提升。</p></section>
+          <div class="metric-grid evaluation-metrics" aria-label="评测 summary">
             <article class="metric">
-              <span>Evaluated runs</span>
+              <span>决策任务数</span>
               <strong id="evaluation-run-count">—</strong>
-              <small id="evaluation-run-detail">loading evidence</small>
+              <small id="evaluation-run-detail">正在读取证据</small>
             </article>
             <article class="metric">
-              <span>Completion</span>
+              <span>完成率</span>
               <strong id="evaluation-completion">—</strong>
-              <small>terminal success rate</small>
+              <small>已完成任务比例</small>
             </article>
             <article class="metric">
-              <span>Average score</span>
+              <span>决策任务平均完整度</span>
               <strong id="evaluation-average">—</strong>
-              <small>weighted out of 100</small>
+              <small>最近决策记录 · 满分100</small>
             </article>
             <article class="metric">
-              <span>Artifact integrity</span>
+              <span>输出完整性</span>
               <strong id="evaluation-integrity">—</strong>
-              <small>checksum evidence</small>
+              <small>文件校验记录</small>
             </article>
           </div>
 
@@ -484,8 +486,8 @@
             <section class="panel evaluation-score-panel" aria-labelledby="evaluation-latest-title">
               <div class="panel-heading">
                 <div>
-                  <p class="eyebrow">LATEST RUN</p>
-                  <h2 id="evaluation-latest-title">Quality score</h2>
+                  <p class="eyebrow">② 最近任务</p>
+                  <h2 id="evaluation-latest-title">决策任务的工作流完整度</h2>
                 </div>
                 <span class="evaluation-grade grade-attention" id="evaluation-grade">—</span>
               </div>
@@ -495,8 +497,8 @@
             <section class="panel evaluation-agents-panel" aria-labelledby="evaluation-agents-title">
               <div class="panel-heading">
                 <div>
-                  <p class="eyebrow">RELIABILITY</p>
-                  <h2 id="evaluation-agents-title">Agent performance</h2>
+                  <p class="eyebrow">步骤记录</p>
+                  <h2 id="evaluation-agents-title">步骤执行记录</h2>
                 </div>
                 <span class="panel-meta" id="evaluation-retries">0 retries</span>
               </div>
@@ -509,7 +511,7 @@
               <div class="panel-heading">
                 <div>
                   <p class="eyebrow">RECENT EVIDENCE</p>
-                  <h2 id="evaluation-runs-title">Run history</h2>
+                  <h2 id="evaluation-runs-title">任务记录</h2>
                 </div>
                 <span class="panel-meta" id="evaluation-updated">Awaiting evaluation</span>
               </div>

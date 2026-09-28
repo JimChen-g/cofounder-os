@@ -1,6 +1,23 @@
 "use strict";
 
 const ACTIVE_RUN_KEY = "cofounder-os.active-run-id";
+const localPortal = ["127.0.0.1", "localhost"].includes(location.hostname) && location.port === "19000";
+let boundOwner = null;
+function isEngineering(run) {
+  return Boolean(run?.metadata?.engineering || run?.task_type === "engineering" || run?.engineering);
+}
+function engineeringUrl(runId) { return `${localPortal ? "/" : "/ui/engineering"}?run=${encodeURIComponent(runId)}`; }
+function openEngineering(runId) {
+  window.localStorage.removeItem(ACTIVE_RUN_KEY);
+  location.assign(engineeringUrl(runId));
+}
+function evaluationState(run) {
+  return window.CofounderState?.deriveDisplayState(run, run.delivery || {state: run.delivery_state, expires_at: run.expires_at}) || run.status;
+}
+function evaluationLabel(run) {
+  const status = evaluationState(run);
+  return window.CofounderState?.label(status) || labelize(status);
+}
 
 const state = {
   runId: null,
@@ -22,47 +39,47 @@ const state = {
 };
 
 const viewTitles = {
-  mission: "Mission",
-  approvals: "Approvals",
-  artifacts: "Artifacts",
-  audit: "Audit trail",
-  evaluation: "Evaluation",
+  mission: "决策",
+  approvals: "待你放行",
+  artifacts: "决策输出",
+  audit: "记录",
+  evaluation: "评测与证据",
 };
 
 const agentDefinitions = {
   "product-agent": {
     className: "product",
-    label: "Product Agent",
+    label: "产品规划",
     monogram: "P",
     discipline: "Product intelligence",
   },
   "finance-agent": {
     className: "finance",
-    label: "Finance Agent",
+    label: "财务分析",
     monogram: "F",
     discipline: "Financial intelligence",
   },
   "executive-orchestrator": {
     className: "executive",
-    label: "Executive Orchestrator",
+    label: "决策统筹",
     monogram: "E",
     discipline: "Decision synthesis",
   },
   "evidence-extractor": {
     className: "evidence",
-    label: "Evidence Extractor",
+    label: "材料提取",
     monogram: "V",
     discipline: "Multimodal evidence",
   },
   "engineering-agent": {
     className: "engineering",
-    label: "Engineering Agent",
+    label: "工程规划",
     monogram: "G",
     discipline: "Executable delivery",
   },
   "risk-agent": {
     className: "risk",
-    label: "Risk Agent",
+    label: "风险分析",
     monogram: "R",
     discipline: "Authority & privacy",
   },
@@ -161,7 +178,9 @@ function statusClass(status) {
 }
 
 function labelize(value) {
-  return String(value || "unknown")
+  const labels = {"engineering-agent": "工程规划", "engineering-implementation": "代码实现", "product-agent": "产品规划", "finance-agent": "财务分析", "risk-agent": "风险分析", "verifier-agent": "核验", "completed": "已完成", "failed": "未通过", "running": "进行中", "waiting_approval": "待你放行", "cancelled": "已取消", "expired": "已过期", "pending": "待处理", "approved": "已批准", "rejected": "已驳回"};
+  if (labels[value]) return labels[value];
+  return String(value || "未知")
     .replaceAll("_", " ")
     .replaceAll("-", " ")
     .replaceAll(".", " · ")
@@ -238,7 +257,7 @@ function renderAttachmentList() {
   selectors.attachmentList.replaceChildren();
   if (!state.pendingAttachments.length) {
     selectors.attachmentList.append(
-      element("span", null, "No evidence files selected."),
+      element("span", null, "尚未选择材料。"),
     );
     selectors.previewEvidence.disabled = true;
     return;
@@ -813,7 +832,7 @@ async function loadPocFixture() {
   try {
     const fixture = await apiRequest("/api/insurance-poc/fixture");
     document.querySelector("#objective").value = fixture.mission;
-    document.querySelector("#owner").value = "Founder";
+    document.querySelector("#owner").value = boundOwner || "Founder";
     state.pendingAttachments = fixture.attachments;
     state.evidencePackage = null;
     state.routingPlan = null;
@@ -892,6 +911,7 @@ function switchView(view) {
     button.setAttribute("aria-current", active ? "page" : "false");
   });
   selectors.viewTitle.textContent = viewTitles[target];
+  selectors.viewTitle.focus({ preventScroll: true });
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (target === "evaluation") {
     loadEvaluation();
@@ -959,7 +979,7 @@ async function createMission(event) {
             ? `${genericPayload.objective}\n\nFounder context: ${context}`
             : genericPayload.objective,
           attachments: state.pendingAttachments,
-          owner: owner || "Founder",
+          owner: boundOwner || owner || "Founder",
           unavailable_models: state.unavailableModels,
         }
       : genericPayload;
@@ -1056,6 +1076,10 @@ async function loadRun({ useCurrentSnapshot = false } = {}) {
     ) {
       return;
     }
+    if (isEngineering(snapshot.run)) {
+      openEngineering(requestedRunId);
+      return;
+    }
     state.snapshot = snapshot;
     state.artifacts = artifactResponse.artifacts || [];
     state.events = eventResponse.events || [];
@@ -1130,7 +1154,7 @@ async function retryRun() {
 }
 
 async function resolveApproval(approvalId, decision, card) {
-  const reviewer = card.querySelector("[data-approval-reviewer]").value.trim();
+  const reviewer = boundOwner || card.querySelector("[data-approval-reviewer]").value.trim();
   const reason = card.querySelector("[data-approval-reason]").value.trim();
   if (!reviewer || !reason) {
     showAlert(
@@ -1720,24 +1744,25 @@ function renderApprovals() {
 
     if (pending) {
       const form = element("div", "approval-form");
-      const reviewerLabel = element("label", null, "Reviewer");
+      const reviewerLabel = element("label", null, "放行人");
       reviewerLabel.setAttribute("for", `reviewer-${approval.id}`);
       const reviewerInput = element("input");
       reviewerInput.id = `reviewer-${approval.id}`;
-      reviewerInput.value = reviewer;
+      reviewerInput.value = boundOwner || reviewer;
+      reviewerInput.readOnly = Boolean(boundOwner);
       reviewerInput.maxLength = 200;
       reviewerInput.dataset.approvalReviewer = "";
-      const reasonLabel = element("label", null, "Decision reason");
+      const reasonLabel = element("label", null, "决定理由");
       reasonLabel.setAttribute("for", `reason-${approval.id}`);
       const reasonInput = element("textarea");
       reasonInput.id = `reason-${approval.id}`;
       reasonInput.rows = 3;
       reasonInput.maxLength = 2000;
       reasonInput.placeholder =
-        "Record why this action should continue or stop.";
+        "记录继续或停止这一步的理由。";
       reasonInput.dataset.approvalReason = "";
       const actions = element("div", "approval-actions");
-      const reject = element("button", "button button-danger", "Reject");
+      const reject = element("button", "button button-danger", "拒绝放行");
       reject.type = "button";
       reject.addEventListener("click", () =>
         resolveApproval(approval.id, "rejected", card),
@@ -1745,7 +1770,7 @@ function renderApprovals() {
       const approve = element(
         "button",
         "button button-primary",
-        "Approve & resume",
+        "放行并继续",
       );
       approve.type = "button";
       approve.addEventListener("click", () =>
@@ -2027,16 +2052,16 @@ function renderInsuranceDemoEvaluation() {
   selectors.demoStrategyGrid.replaceChildren();
   const evaluation = state.insuranceEvaluation;
   if (!evaluation) {
-    selectors.demoEvaluationSample.textContent = "Demo evaluation unavailable";
+    selectors.demoEvaluationSample.textContent = "合成演示证据暂不可用";
     selectors.demoEvaluationDisclosure.textContent =
-      "Run the reproducible insurance POC evaluation command to generate this comparison.";
+      "尚未读取到可复现的保险 POC 合成对比记录。";
     return;
   }
   selectors.demoEvaluationSample.textContent =
-    `${evaluation.sample_size} synthetic Founder Tasks · ${evaluation.label}`;
+    `${evaluation.sample_size} 个合成案例 · 不代表模型质量`;
   [
-    ["Single model / no router", evaluation.baseline, "baseline"],
-    ["CoFounder OS", evaluation.cofounder_os, "cofounder"],
+    ["单模型 / 无路由", evaluation.baseline, "baseline"],
+    ["Cofounder", evaluation.cofounder_os, "cofounder"],
   ].forEach(([title, metrics, className]) => {
     const card = element("article", `demo-strategy-card ${className}`);
     const rows = element("div", "demo-metric-rows");
@@ -2077,12 +2102,12 @@ function renderInsuranceDemoEvaluation() {
     selectors.demoStrategyGrid.append(card);
   });
   selectors.demoEvaluationDisclosure.replaceChildren(
-    element("strong", null, "Demo evaluation — not statistical model quality"),
+    element("strong", null, "合成演示对比 · 不代表模型质量"),
     element("p", null, evaluation.disclosure),
     element(
       "p",
       null,
-      `Source: ${evaluation.source_dataset}. Latency is measured for the local Agent handler; no billing or live-model inference is claimed.`,
+      `来源：${evaluation.source_dataset}。延迟为本地处理耗时，不代表实时模型推理或账单成本。`,
     ),
   );
 }
@@ -2090,7 +2115,7 @@ function renderInsuranceDemoEvaluation() {
 function renderEvaluationEmpty() {
   document.querySelector("#evaluation-run-count").textContent = "0";
   document.querySelector("#evaluation-run-detail").textContent =
-    "no persisted runs";
+    "暂无决策记录";
   document.querySelector("#evaluation-completion").textContent = "—";
   document.querySelector("#evaluation-average").textContent = "—";
   document.querySelector("#evaluation-integrity").textContent = "—";
@@ -2099,7 +2124,7 @@ function renderEvaluationEmpty() {
     "evaluation-grade grade-attention";
   document.querySelector("#evaluation-retries").textContent = "0 retries";
   document.querySelector("#evaluation-updated").textContent =
-    "Awaiting persisted evidence";
+    "等待任务记录";
   selectors.evaluationLatest.replaceChildren(
     emptyCard(
       "◫",
@@ -2128,17 +2153,18 @@ function renderEvaluation() {
   document.querySelector("#evaluation-run-count").textContent =
     String(summary.run_count);
   document.querySelector("#evaluation-run-detail").textContent =
-    `${summary.task_success_rate.toFixed(1)}% task success`;
+    `${summary.task_success_rate.toFixed(1)}% 步骤完成`;
   document.querySelector("#evaluation-completion").textContent =
     formatPercent(summary.completion_rate);
-  document.querySelector("#evaluation-average").textContent =
-    Number(summary.average_score).toFixed(1);
+  const decisions = summary.recent_runs.filter(run => !isEngineering(run));
+  document.querySelector("#evaluation-average").textContent = decisions.length
+    ? (decisions.reduce((sum, run) => sum + Number(run.overall_score || 0), 0) / decisions.length).toFixed(1) : "不适用";
   document.querySelector("#evaluation-integrity").textContent =
     formatPercent(summary.artifact_integrity_rate);
   document.querySelector("#evaluation-retries").textContent =
     `${summary.total_retries} ${summary.total_retries === 1 ? "retry" : "retries"}`;
   document.querySelector("#evaluation-updated").textContent =
-    `Updated ${formatTime(summary.generated_at, true)}`;
+    `更新于 ${formatTime(summary.generated_at, true)}`;
 
   renderLatestEvaluation(summary.recent_runs[0]);
   renderEvaluationAgents(summary.agent_performance || []);
@@ -2151,6 +2177,15 @@ function renderEvaluation() {
 
 function renderLatestEvaluation(run) {
   selectors.evaluationLatest.replaceChildren();
+  if (isEngineering(run)) {
+    const badge = document.querySelector("#evaluation-grade");
+    badge.textContent = "不适用";
+    badge.className = "evaluation-grade";
+    const link = element("a", "button button-secondary", "查看工程检查");
+    link.href = engineeringUrl(run.run_id);
+    append(selectors.evaluationLatest, element("h3", null, "工程任务 · " + evaluationLabel(run)), element("p", null, (window.CofounderState?.reason(run) || "") + " 工程任务不使用决策文档清单评分。检查与模型复核证据请见工程工作区。"), link);
+    return;
+  }
   const grade = String(run.grade || "attention").replace(/[^a-z]/g, "");
   const gradeBadge = document.querySelector("#evaluation-grade");
   gradeBadge.textContent = labelize(grade);
@@ -2170,7 +2205,7 @@ function renderLatestEvaluation(run) {
     element(
       "p",
       null,
-      `${labelize(run.status)} · Run ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)}`,
+      `${evaluationLabel(run)} · 任务 ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)}`,
     ),
   );
   append(hero, score, copy);
@@ -2243,11 +2278,11 @@ function renderEvaluationRuns(runs) {
     const copy = element("div", "evaluation-run-copy");
     append(
       copy,
-      element("strong", null, run.objective),
+      element("strong", null, isEngineering(run) ? "材料完整性检查" : run.objective),
       element(
         "p",
         null,
-        `Run ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)} · ${run.completed_tasks}/${run.task_count} tasks`,
+        `任务 ${shortId(run.run_id)} · ${formatTime(run.updated_at, true)} · ${run.completed_tasks}/${run.task_count} 步骤` + (isEngineering(run) ? " · " + (window.CofounderState?.reason(run) || "") : ""),
       ),
     );
     const evidence = element("div", "evaluation-run-evidence");
@@ -2255,15 +2290,15 @@ function renderEvaluationRuns(runs) {
       evidence,
       element(
         "span",
-        `task-status ${statusClass(run.status)}`,
-        labelize(run.status),
+        `task-status ${statusClass(evaluationState(run))}`,
+        evaluationLabel(run),
       ),
-      element("strong", "evaluation-run-score", run.overall_score),
+      element("strong", "evaluation-run-score", isEngineering(run) ? "不适用 · 工程检查" : run.overall_score),
     );
     const inspect = element(
       "button",
       "button button-small",
-      "Inspect Run",
+      "查看任务",
     );
     inspect.type = "button";
     inspect.addEventListener("click", () => openEvaluatedRun(run.run_id));
@@ -2297,6 +2332,8 @@ function renderEvaluationProviders(distribution, evaluatedRunCount) {
 }
 
 function openEvaluatedRun(runId) {
+  const row = state.evaluation?.recent_runs?.find(run => run.run_id === runId);
+  if (isEngineering(row)) { openEngineering(runId); return; }
   state.requestEpoch += 1;
   state.runId = runId;
   window.localStorage.setItem(ACTIVE_RUN_KEY, state.runId);
@@ -2330,14 +2367,14 @@ function renderEmptyDataViews() {
   selectors.approvalList.replaceChildren(
     emptyCard(
       "✓",
-      "No active mission",
+      "尚未选择决策任务",
       "Launch a founder mission to review controlled actions and policy evidence.",
     ),
   );
   selectors.artifactList.replaceChildren(
     emptyCard(
       "▱",
-      "No active mission",
+      "尚未选择决策任务",
       "The synthesized decision bundle will appear after a workflow runs.",
     ),
   );
@@ -2345,7 +2382,7 @@ function renderEmptyDataViews() {
   selectors.auditList.replaceChildren(
     emptyCard(
       "≋",
-      "No active mission",
+      "尚未选择决策任务",
       "The append-only audit trace will appear after a workflow starts.",
     ),
   );
@@ -2400,7 +2437,7 @@ document
 renderEmptyDataViews();
 renderAttachmentList();
 checkHealth();
-const persistedRunId = window.localStorage.getItem(ACTIVE_RUN_KEY);
+const persistedRunId = new URLSearchParams(location.search).get("run") || window.localStorage.getItem(ACTIVE_RUN_KEY);
 if (
   persistedRunId &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -2411,4 +2448,23 @@ if (
   selectors.composer.classList.add("is-hidden");
   selectors.emptyOverview.classList.add("is-hidden");
   loadRun();
+}
+
+// The local adapter binds identity server-side; native UI only mirrors that identity.
+if (localPortal) {
+  const docsLink = document.querySelector('a[href="/docs"]');
+  if (docsLink) { docsLink.href = "/"; docsLink.textContent = "返回今日与工程"; docsLink.removeAttribute("target"); }
+  document.querySelectorAll("[data-engineering-link]").forEach(link => { link.href = "/"; });
+  selectors.missionForm.querySelectorAll("button[type=submit]").forEach(button => { button.disabled = true; });
+  fetch("/local/status", {credentials: "same-origin"}).then(response => {
+    if (!response.ok) throw new Error("无法读取本机账号，请刷新后重试");
+    return response.json();
+  }).then(status => {
+    if (!status.owner) throw new Error("当前账号未知");
+    boundOwner = status.owner;
+    const input = document.querySelector("#owner");
+    input.value = boundOwner; input.readOnly = true;
+    selectors.missionForm.querySelectorAll("button[type=submit]").forEach(button => { button.disabled = false; });
+    if (state.snapshot) renderApprovals();
+  }).catch(error => showAlert("无法确认当前账号", error));
 }
