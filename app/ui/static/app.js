@@ -51,49 +51,49 @@ const agentDefinitions = {
     className: "product",
     label: "产品规划",
     monogram: "P",
-    discipline: "Product intelligence",
+    discipline: "产品规划",
   },
   "finance-agent": {
     className: "finance",
     label: "财务分析",
     monogram: "F",
-    discipline: "Financial intelligence",
+    discipline: "财务分析",
   },
   "executive-orchestrator": {
     className: "executive",
     label: "决策统筹",
     monogram: "E",
-    discipline: "Decision synthesis",
+    discipline: "决策汇总",
   },
   "evidence-extractor": {
     className: "evidence",
     label: "材料提取",
     monogram: "V",
-    discipline: "Multimodal evidence",
+    discipline: "材料提取",
   },
   "engineering-agent": {
     className: "engineering",
     label: "工程规划",
     monogram: "G",
-    discipline: "Executable delivery",
+    discipline: "工程规划",
   },
   "risk-agent": {
     className: "risk",
     label: "风险分析",
     monogram: "R",
-    discipline: "Authority & privacy",
+    discipline: "权限与隐私",
   },
   "artifact-synthesizer": {
     className: "synthesis",
-    label: "Artifact Synthesizer",
+    label: "产物汇总",
     monogram: "S",
-    discipline: "Delivery package",
+    discipline: "交付材料",
   },
   verifier: {
     className: "verifier",
-    label: "Independent Verifier",
+    label: "结果核验",
     monogram: "✓",
-    discipline: "Consistency & revision",
+    discipline: "一致性核验",
   },
 };
 
@@ -178,7 +178,7 @@ function statusClass(status) {
 }
 
 function labelize(value) {
-  const labels = {"engineering-agent": "工程规划", "engineering-implementation": "代码实现", "product-agent": "产品规划", "finance-agent": "财务分析", "risk-agent": "风险分析", "verifier-agent": "核验", "completed": "已完成", "failed": "未通过", "running": "进行中", "waiting_approval": "待你放行", "cancelled": "已取消", "expired": "已过期", "pending": "待处理", "approved": "已批准", "rejected": "已驳回"};
+  const labels = {"queued":"排队中","ready":"待执行","blocked":"已暂停","active":"进行中","decision_only":"计划路由","executed":"已执行","healthy":"正常","unhealthy":"不可用","unknown":"未知","low":"低","medium":"中","high":"高","engineering-agent": "工程规划", "engineering-implementation": "代码实现", "product-agent": "产品规划", "finance-agent": "财务分析", "risk-agent": "风险分析", "verifier-agent": "核验", "completed": "已完成", "failed": "未通过", "running": "进行中", "waiting_approval": "待你放行", "cancelled": "已取消", "expired": "已过期", "pending": "待处理", "approved": "已批准", "rejected": "已驳回"};
   if (labels[value]) return labels[value];
   return String(value || "未知")
     .replaceAll("_", " ")
@@ -236,10 +236,10 @@ function bytesToBase64(buffer) {
 
 async function fileToAttachment(file) {
   if (!["application/pdf", "image/png"].includes(file.type)) {
-    throw new Error(`${file.name} must be a PDF or PNG file.`);
+    throw new Error(`${file.name} 必须是 PDF 或 PNG 文件。`);
   }
   if (file.size > 4 * 1024 * 1024) {
-    throw new Error(`${file.name} exceeds the 4 MiB demo boundary.`);
+    throw new Error(`${file.name} 超过 4 MiB 大小限制。`);
   }
   return {
     filename: file.name,
@@ -294,10 +294,10 @@ async function handleEvidenceFiles(event) {
   try {
     const files = [...(event.target.files || [])];
     if (files.length > 4) {
-      throw new Error("Select no more than four evidence files.");
+      throw new Error("最多选择 4 个材料文件。");
     }
     if (files.reduce((total, file) => total + file.size, 0) > 10 * 1024 * 1024) {
-      throw new Error("The evidence bundle exceeds the 10 MiB demo boundary.");
+      throw new Error("材料总大小不能超过 10 MiB。");
     }
     state.pendingAttachments = await Promise.all(files.map(fileToAttachment));
     state.evidencePackage = null;
@@ -332,15 +332,16 @@ function liveExecutionState(decision) {
     decision.provider,
   );
   if (executed && live) {
-    return { className: "is-live", label: "LIVE LLM" };
+    return { className: "is-live", label: "实时模型" };
   }
-  if (executed && (failedLiveRoute || !live)) {
-    return { className: "is-fallback", label: "LOCAL FALLBACK" };
+  if (executed && (failedLiveRoute || execution.fallback_used)) {
+    return { className: "is-fallback", label: "本地回退" };
   }
+  if (executed) return {className:"is-control",label:"规则控制"};
   if (livePlanned) {
-    return { className: "is-planned", label: "LIVE LLM PLANNED" };
+    return { className: "is-planned", label: "计划路由" };
   }
-  return { className: "is-fallback", label: "LOCAL FALLBACK PLANNED" };
+  return { className: "is-planned", label: "计划路由" };
 }
 
 function renderLiveExecutionBoard() {
@@ -361,29 +362,29 @@ function renderLiveExecutionBoard() {
 
   selectors.liveExecutionBoard.classList.remove("is-hidden");
   const states = decisions.map((decision) => liveExecutionState(decision));
-  const liveCount = states.filter((item) => item.label === "LIVE LLM").length;
+  const liveCount = states.filter((item) => item.label === "实时模型").length;
   const fallbackCount = states.filter(
-    (item) => item.label === "LOCAL FALLBACK",
+    (item) => item.label === "本地回退",
   ).length;
-  const plannedCount = states.filter((item) => item.label.includes("PLANNED")).length;
+  const plannedCount = states.filter((item) => item.className === "is-planned").length;
   const health = Object.entries(plan.measured_provider_health || {})
     .map(([model, status]) => `${labelize(model.replace("cofounder-", ""))} ${status}`)
     .join(" · ");
 
   if (liveCount === decisions.length) {
     selectors.liveExecutionVerdict.className = "live-execution-verdict is-live";
-    selectors.liveExecutionVerdict.textContent = `${liveCount} / ${decisions.length} LIVE AGENTS VERIFIED`;
+    selectors.liveExecutionVerdict.textContent = `${liveCount} / ${decisions.length} 个实时模型记录已核验`;
   } else if (liveCount || fallbackCount) {
     selectors.liveExecutionVerdict.className = "live-execution-verdict is-degraded";
-    selectors.liveExecutionVerdict.textContent = `DEGRADED · ${liveCount} LIVE · ${fallbackCount} FALLBACK`;
+    selectors.liveExecutionVerdict.textContent = `已降级 · 实时模型 ${liveCount} · 本地回退 ${fallbackCount}`;
   } else {
     selectors.liveExecutionVerdict.className = "live-execution-verdict is-planned";
-    selectors.liveExecutionVerdict.textContent = `${plannedCount} LIVE ROUTES PLANNED`;
+    selectors.liveExecutionVerdict.textContent = `${plannedCount} 条路径等待执行`;
   }
   selectors.liveExecutionSummary.textContent =
-    `${liveCount} verified live · ${fallbackCount} executed fallback · ${plannedCount} awaiting execution${health ? ` · ${health}` : ""}`;
+    `实时模型 ${liveCount} · 本地回退 ${fallbackCount} · 等待执行 ${plannedCount}${health ? ` · ${health}` : ""}`;
   selectors.liveExecutionDisclosure.textContent =
-    "Only persisted Gateway metadata can mark an Agent LIVE. Planned routes, simulations, and deterministic controls do not count as model calls.";
+    "只有已保存的模型调用记录可标为实时模型；计划路由、模拟和规则控制不计为模型调用。";
 
   decisions.forEach((decision) => {
     const execution = decision.execution_metadata || {};
@@ -411,8 +412,8 @@ function renderLiveExecutionBoard() {
         "small",
         null,
         execution.selected_provider
-          ? `${execution.selected_provider} → ${execution.selected_upstream_model || "verified upstream"}`
-          : `${labelize(decision.provider)} · awaiting verified provider response`,
+          ? `${execution.selected_provider} → ${execution.selected_upstream_model || "已核验上游"}`
+          : `${labelize(decision.provider)} · 等待服务响应`,
       ),
     );
 
@@ -420,32 +421,32 @@ function renderLiveExecutionBoard() {
     const executedWithoutLiveCall =
       decision.execution_status === "executed" &&
       execution.execution_backend !== "gateway_llm_agent";
-    let fallbackValue = "Pending";
+    let fallbackValue = "待执行";
     if (execution.fallback_reason) {
       fallbackValue = execution.fallback_reason;
     } else if (execution.fallback_used) {
-      fallbackValue = "Yes · Gateway provider fallback";
+      fallbackValue = "已回退至备用服务";
     } else if (executedWithoutLiveCall) {
-      fallbackValue = "Yes · local deterministic Agent";
+      fallbackValue = "已回退至本地规则";
     } else if (decision.execution_status === "executed") {
-      fallbackValue = "No";
+      fallbackValue = "否";
     } else if (decision.fallback_model) {
-      fallbackValue = `Standby · ${decision.fallback_model}`;
+      fallbackValue = `备用 · ${decision.fallback_model}`;
     }
-    let repairValue = "Pending";
+    let repairValue = "待执行";
     if (executedWithoutLiveCall) {
-      repairValue = "N/A · no live call";
+      repairValue = "不适用 · 未调用模型";
     } else if (decision.execution_status === "executed") {
       repairValue = execution.repair_performed
-        ? `Yes · ${execution.call_count || 2} calls`
-        : `No · ${execution.call_count || 1} call`;
+        ? `是 · ${execution.call_count || 2} 次调用`
+        : `否 · ${execution.call_count || 1} 次调用`;
     }
     [
-      ["REQUEST ID", execution.request_id || "Awaiting verified call"],
-      ["TOKENS", execution.total_tokens ?? "—"],
-      ["LATENCY", formatExecutionLatency(execution.latency_ms)],
-      ["REPAIR", repairValue],
-      ["FALLBACK", fallbackValue],
+      ["请求编号", execution.request_id || "等待调用记录"],
+      ["词元", execution.total_tokens ?? "—"],
+      ["耗时", formatExecutionLatency(execution.latency_ms)],
+      ["修改", repairValue],
+      ["回退", fallbackValue],
     ].forEach(([label, value]) => {
       const metric = element("div", "live-proof-metric");
       append(metric, element("span", null, label), element("strong", null, value));
@@ -475,11 +476,11 @@ function renderRoutingBoard() {
     .map(([model, status]) => `${model.replace("cofounder-", "")}: ${status}`)
     .join(" · ");
   selectors.routingBoardSummary.textContent =
-    `${plan.decisions.length} task routes · ${fallbackCount} fallback${fallbackCount === 1 ? "" : "s"} · ${plan.live_model_calls} verified live model call${plan.live_model_calls === 1 ? "" : "s"}${health ? ` · ${health}` : ""}`;
+    `${plan.decisions.length} 条路径 · ${fallbackCount} 次回退 · ${plan.live_model_calls} 次已核验模型调用${health ? ` · ${health}` : ""}`;
   const simulatedOutage = state.unavailableModels.length > 0;
   selectors.simulateRouteFallback.textContent = simulatedOutage
-    ? "Restore normal routing"
-    : "Simulate Engineering route outage";
+    ? "恢复正常路径"
+    : "模拟工程规划路径中断";
 
   plan.decisions.forEach((decision) => {
     const card = element(
@@ -499,13 +500,13 @@ function renderRoutingBoard() {
     );
     const executionMode =
       execution.execution_backend === "gateway_llm_agent"
-        ? "LIVE LLM"
+        ? "实时模型"
         : execution.fallback_reason ||
             (decision.fallback_used && execution.execution_backend)
-          ? "LOCAL FALLBACK"
+          ? "本地回退"
           : livePlanned && decision.execution_status !== "executed"
-            ? "LIVE LLM PLANNED"
-            : "DETERMINISTIC CONTROL";
+            ? "计划路由"
+            : "规则控制";
     append(
       heading,
       headingCopy,
@@ -524,22 +525,22 @@ function renderRoutingBoard() {
         ? element(
             "small",
             "route-score-summary",
-            `Adaptive score ${Number(decision.candidate_scores[decision.selected_model]).toFixed(3)}`,
+            `规则评分 ${Number(decision.candidate_scores[decision.selected_model]).toFixed(3)}`,
           )
         : null,
       decision.requested_model !== decision.selected_model
-        ? element("small", null, `Requested ${decision.requested_model}`)
+        ? element("small", null, `原请求 ${decision.requested_model}`)
         : null,
     );
     const facts = element("div", "route-facts");
     [
-      ["Privacy", labelize(decision.privacy_level)],
-      ["Complexity", labelize(decision.complexity)],
-      ["Context", `${decision.context_length} est. tokens`],
-      ["Latency", `${decision.estimated_latency_ms} / ${decision.latency_budget_ms} ms`],
-      ["Cost", `$${decision.estimated_cost_usd.toFixed(2)} / $${decision.cost_budget_usd.toFixed(2)}`],
-      ["Execution", labelize(decision.execution_status)],
-      ["Verifier", decision.validation_required ? "Required" : "Not required"],
+      ["隐私", labelize(decision.privacy_level)],
+      ["复杂度", labelize(decision.complexity)],
+      ["上下文", `${decision.context_length} 个估算词元`],
+      ["耗时", `${decision.estimated_latency_ms} / ${decision.latency_budget_ms} ms`],
+      ["成本", `$${decision.estimated_cost_usd.toFixed(2)} / $${decision.cost_budget_usd.toFixed(2)}`],
+      ["执行状态", labelize(decision.execution_status)],
+      ["核验", decision.validation_required ? "需要" : "无需"],
     ].forEach(([label, value]) => {
       const row = element("div");
       append(row, element("span", null, label), element("strong", null, value));
@@ -572,7 +573,7 @@ function renderRoutingBoard() {
     if (exclusionBlock) {
       exclusions.forEach(([model, reason]) => {
         exclusionBlock.append(
-          element("p", null, `Excluded ${model}: ${reason}`),
+          element("p", null, `排除 ${model}： ${reason}`),
         );
       });
     }
@@ -588,9 +589,9 @@ function renderRoutingBoard() {
         element(
           "p",
           null,
-          `${execution.selected_provider} · ${execution.selected_upstream_model} · ${Number(execution.latency_ms || 0).toFixed(1)} ms · ${execution.total_tokens || 0} tokens`,
+          `${execution.selected_provider} · ${execution.selected_upstream_model} · ${Number(execution.latency_ms || 0).toFixed(1)} ms · ${execution.total_tokens || 0} 个词元`,
         ),
-        element("p", null, `Request ${execution.request_id}`),
+        element("p", null, `请求编号 ${execution.request_id}`),
       );
     } else if (execution.fallback_reason) {
       fallbackEvidence = element("div", "route-fallback-evidence");
@@ -622,7 +623,7 @@ function renderRoutingBoard() {
       element(
         "p",
         "route-validation",
-        `Validation: ${decision.validation_requirement}`,
+        `核验： ${decision.validation_requirement}`,
       ),
     );
     selectors.routingGrid.append(card);
@@ -640,7 +641,7 @@ function renderRoutingBoard() {
         element(
           "p",
           null,
-          `${decision.task_title}: ${decision.requested_model} → ${decision.selected_model}. ${decision.excluded_models?.[decision.requested_model] || "The preferred candidate was not eligible."}`,
+          `${decision.task_title}: ${decision.requested_model} → ${decision.selected_model}. ${decision.excluded_models?.[decision.requested_model] || "首选模型不满足本次条件。"}`,
         ),
       ),
     );
@@ -649,7 +650,7 @@ function renderRoutingBoard() {
     element(
       "strong",
       null,
-      hasExecution ? "Route bound to Agent execution" : "Routing decision preview",
+      hasExecution ? "路径已绑定执行记录" : "路径预览",
     ),
     element("p", null, plan.simulation_disclosure),
   );
@@ -657,7 +658,7 @@ function renderRoutingBoard() {
 
 async function loadRoutingDecisions(unavailableModels = []) {
   if (!state.evidencePackage) {
-    throw new Error("Build the Evidence Package before routing work.");
+    throw new Error("请先整理材料，再选择处理路径。");
   }
   const plan = await apiRequest("/api/insurance-poc/routing", {
     method: "POST",
@@ -696,7 +697,7 @@ async function simulateRouteFallback() {
         (decision) => decision.task_key === "engineering-plan",
       );
       toast(
-        `Engineering route recalculated: ${target} → ${rerouted?.selected_model || "declared fallback"}. Simulation changes availability only and is not counted as a live call.`,
+        `工程路径已重算： ${target} → ${rerouted?.selected_model || "声明的回退路径"}. 模拟只改变可用性，不计为模型调用。`,
       );
     }
   } catch (error) {
@@ -718,7 +719,7 @@ function renderEvidenceBoard() {
 
   selectors.evidenceBoard.classList.remove("is-hidden");
   selectors.evidencePackageId.textContent =
-    `Package ${shortId(packageValue.package_id)} · ${packageValue.evidence.length} facts`;
+    `材料 ${shortId(packageValue.package_id)} · ${packageValue.evidence.length} 条依据`;
   selectors.evidenceBoardSummary.textContent =
     `${packageValue.sources.length} normalized sources · ${packageValue.synthetic ? "synthetic demo" : "submitted evidence"} · non-authoritative`;
 
@@ -769,7 +770,7 @@ function renderEvidenceBoard() {
         element(
           "small",
           null,
-          `Used by ${item.used_by_agents.map(labelize).join(", ")}`,
+          `使用角色：${item.used_by_agents.map(labelize).join(", ")}`,
         ),
       );
       column.append(fact);
@@ -784,7 +785,7 @@ function renderEvidenceBoard() {
 async function buildEvidencePackage({ quiet = false } = {}) {
   const mission = document.querySelector("#objective").value.trim();
   if (!mission) {
-    throw new Error("Enter the Founder Mission before building evidence.");
+    throw new Error("请先填写要决定的问题。");
   }
   const pdfCount = state.pendingAttachments.filter(
     (item) => item.content_type === "application/pdf",
@@ -793,7 +794,7 @@ async function buildEvidencePackage({ quiet = false } = {}) {
     (item) => item.content_type === "image/png",
   ).length;
   if (pdfCount !== 1 || imageCount < 1) {
-    throw new Error("Select exactly one PDF and at least one PNG image.");
+    throw new Error("请选择 1 个 PDF 和至少 1 张 PNG 图片。");
   }
   setButtonLoading(selectors.previewEvidence, true);
   try {
@@ -864,7 +865,7 @@ async function apiRequest(path, options = {}) {
     const error = new Error(
       validationDetail ||
         payload?.detail ||
-        "The system could not complete the request.",
+        "请求未完成，未自动重试。",
     );
     error.code = payload?.error || `http_${response.status}`;
     error.requestId =
@@ -882,7 +883,7 @@ function setButtonLoading(button, loading) {
 
 function showAlert(title, error) {
   const requestSuffix = error?.requestId
-    ? ` Reference: ${error.requestId}.`
+    ? `（参考编号 ${error.requestId}）`
     : "";
   selectors.alertTitle.textContent = title;
   selectors.alertMessage.textContent = `${error?.message || error}${requestSuffix}`;
@@ -900,8 +901,9 @@ function toast(message, kind = "success") {
 }
 
 function switchView(view) {
-  const target = viewTitles[view] ? view : "mission";
+  const target = !state.runId && ["approvals","artifacts","audit"].includes(view) ? "mission" : viewTitles[view] ? view : "mission";
   state.activeView = target;
+  updateDecisionShell();
   document.querySelectorAll("[data-view]").forEach((node) => {
     node.classList.toggle("is-active", node.dataset.view === target);
   });
@@ -910,7 +912,7 @@ function switchView(view) {
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
-  selectors.viewTitle.textContent = viewTitles[target];
+  selectors.viewTitle.textContent = decisionTitle() || viewTitles[target];
   selectors.viewTitle.focus({ preventScroll: true });
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (target === "evaluation") {
@@ -964,10 +966,10 @@ async function createMission(event) {
 
   setButtonLoading(selectors.launchButton, true);
   selectors.formHint.textContent =
-    "Planning the mission and evaluating approval gates…";
+    "正在规划决策并检查放行条件…";
   const slowMessageTimer = window.setTimeout(() => {
     selectors.formHint.textContent =
-      "Agents are executing; bounded validation and repair may take several minutes.";
+      "各角色正在执行，可能需要几分钟。";
   }, 12000);
   try {
     const endpoint = insuranceMission
@@ -1020,14 +1022,14 @@ async function createMission(event) {
   } finally {
     window.clearTimeout(slowMessageTimer);
     selectors.formHint.textContent =
-      "Generic missions remain available · Insurance POC is the primary demo";
+      "可发起通用决策，也可从保险示例开始。";
     setButtonLoading(selectors.launchButton, false);
   }
 }
 
 async function waitForInsuranceWorkflow(jobId, requestEpoch) {
   if (!jobId) {
-    throw new Error("The DGX workflow did not return a job ID.");
+    throw new Error("服务未返回任务编号，请核对记录，勿重复提交。");
   }
   for (let attempt = 0; attempt < 120; attempt += 1) {
     if (requestEpoch !== state.requestEpoch) {
@@ -1039,16 +1041,16 @@ async function waitForInsuranceWorkflow(jobId, requestEpoch) {
     }
     if (job.status === "failed") {
       throw new Error(
-        job.error?.detail || "The governed DGX workflow stopped safely.",
+        job.error?.detail || "流程已停止，请查看记录。",
       );
     }
     const elapsedSeconds = Math.max(1, (attempt + 1) * 2);
     selectors.formHint.textContent =
-      `DGX accepted the run · live Agents executing · ${elapsedSeconds}s elapsed`;
+      `服务已接收任务 · 角色执行中 · 已用 ${elapsedSeconds} 秒`;
     await new Promise((resolve) => window.setTimeout(resolve, 2000));
   }
   throw new Error(
-    "The DGX workflow is still running after four minutes. Open Evaluation to recover the persisted Run.",
+    "任务仍在执行，可从最近的决策查看已保存的记录。",
   );
 }
 
@@ -1134,10 +1136,10 @@ async function retryRun() {
     if (state.runId === requestedRunId && state.snapshot) {
       toast(
         result.terminal_failure
-          ? "Recovery stopped safely. Review the failed task and audit evidence."
+          ? "恢复已停止，请查看未通过的步骤与经过。"
           : result.replayed
-          ? "Completed evidence verified; no additional model calls were made."
-          : "Bounded recovery completed.",
+          ? "已核对完成记录，未新增模型调用。"
+          : "恢复操作已完成。",
         result.terminal_failure ? "error" : "success",
       );
     }
@@ -1154,12 +1156,14 @@ async function retryRun() {
 }
 
 async function resolveApproval(approvalId, decision, card) {
+  const currentApproval = state.snapshot?.approvals.find(item => item.id === approvalId);
+  if (!currentApproval || currentApproval.status !== "pending" || !Number.isFinite(Date.parse(currentApproval.expires_at)) || Date.parse(currentApproval.expires_at) <= Date.now()) { showAlert("放行不可用", new Error("放行已过期或有效期未知，请刷新记录。")); return; }
   const reviewer = boundOwner || card.querySelector("[data-approval-reviewer]").value.trim();
   const reason = card.querySelector("[data-approval-reason]").value.trim();
   if (!reviewer || !reason) {
     showAlert(
-      "Decision needs evidence",
-      new Error("Enter the reviewer and a decision reason before continuing."),
+      "请先写一句放行理由",
+      new Error("放行人和理由不能为空。"),
     );
     return;
   }
@@ -1175,13 +1179,13 @@ async function resolveApproval(approvalId, decision, card) {
     "p",
     "approval-progress",
     decision === "approved"
-      ? "Decision is being recorded. The controller will resume the workflow."
-      : "Decision is being recorded. The controller will stop the workflow safely.",
+      ? "正在记录决定，随后继续流程。"
+      : "正在记录决定，随后停止流程。",
   );
   card.querySelector(".approval-form").append(progress);
   const slowMessageTimer = window.setTimeout(() => {
     progress.textContent =
-      "Agents are executing through bounded validation, repair, and artifact synthesis…";
+      "角色正在执行检查、修改和产出汇总…";
   }, 12000);
   hideAlert();
   try {
@@ -1208,8 +1212,8 @@ async function resolveApproval(approvalId, decision, card) {
     if (state.runId === requestedRunId && state.snapshot) {
       toast(
         decision === "approved"
-          ? "Approval recorded. Workflow resumed through the controller."
-          : "Rejection recorded. The workflow stopped with audit evidence.",
+          ? "已放行，流程继续。"
+          : "已拒绝放行，流程已停止，记录已保存。",
       );
     }
   } catch (error) {
@@ -1240,6 +1244,7 @@ function renderAll() {
   selectors.refreshRun.classList.remove("is-hidden");
   renderEvidenceBoard();
   renderRoutingBoard();
+  updateDecisionShell();
   renderRunSummary();
   renderWorkflow();
   renderPolicy();
@@ -1248,6 +1253,7 @@ function renderAll() {
   renderApprovals();
   renderArtifacts();
   renderAudit();
+  selectors.viewTitle.textContent = decisionTitle();
 }
 
 function renderRunSummary() {
@@ -1263,27 +1269,27 @@ function renderRunSummary() {
   runStatus.textContent = labelize(run.status);
   runStatus.className = `status-pill ${statusClass(run.status)}`;
   document.querySelector("#run-short-id").textContent =
-    `Run ${shortId(run.id)} · ${formatTime(run.created_at, true)}`;
+    `任务 ${shortId(run.id)} · ${formatTime(run.created_at, true)}`;
   document.querySelector("#run-objective").textContent = run.objective;
   document.querySelector("#run-owner").textContent =
-    `Owned by ${run.owner || "Founder"} · ${tasks.length} governed tasks`;
+    `${tasks.length} 个受控步骤`;
   document.querySelector("#progress-metric").textContent =
     `${completed} / ${tasks.length || 3}`;
   document.querySelector("#progress-detail").textContent =
     completed === tasks.length && tasks.length
-      ? "workflow complete"
-      : "tasks completed";
+      ? "流程已完成"
+      : "步骤已完成";
   document.querySelector("#artifact-metric").textContent =
     String(state.artifacts.length);
   document.querySelector("#approval-metric").textContent =
     String(pendingApprovals.length);
   document.querySelector("#approval-detail").textContent = pendingApprovals.length
-    ? "decision required"
-    : "no pending decisions";
+    ? "待你放行"
+    : "暂无待放行";
   document.querySelector("#route-metric").textContent =
     latestRoute?.provider || "—";
   document.querySelector("#route-detail").textContent =
-    latestRoute?.selected_model || "awaiting evidence";
+    latestRoute?.selected_model || "等待依据";
 
   selectors.artifactCount.textContent = String(state.artifacts.length);
   selectors.artifactCount.classList.toggle(
@@ -1304,19 +1310,19 @@ function renderRunSummary() {
   if (pendingApprovals.length) {
     noticeTitle.textContent = "需要你作出决定";
     noticeBody.textContent =
-      `${pendingApprovals.length} controlled action awaits review before execution can continue.`;
+      `${pendingApprovals.length} 项操作等待放行，随后才可继续。`;
     noticeAction.textContent = "查看依据";
     noticeAction.onclick = () => switchView("approvals");
   } else if (run.status === "failed") {
     noticeTitle.textContent = "执行已停止";
     noticeBody.textContent =
-      "Inspect the failed task and audit evidence, then run bounded recovery if eligible.";
+      "请查看未通过的步骤和经过；符合条件时可手动恢复。";
     noticeAction.textContent = "查看记录";
     noticeAction.onclick = () => switchView("audit");
   } else if (run.status === "completed") {
     noticeTitle.textContent = "决策输出已就绪";
     noticeBody.textContent =
-      `${state.artifacts.length} artifacts are available with checksum evidence.`;
+      `已有 ${state.artifacts.length} 项产出，可查看校验依据。`;
     noticeAction.textContent = "查看输出";
     noticeAction.onclick = () => switchView("artifacts");
   } else {
@@ -1324,7 +1330,7 @@ function renderRunSummary() {
   }
 
   selectors.retryRun.textContent =
-    run.status === "completed" ? "Verify replay" : "Retry / recover";
+    run.status === "completed" ? "核对完成记录" : "尝试恢复";
   selectors.retryRun.disabled = pendingApprovals.length > 0;
   selectors.viewResult.disabled = state.artifacts.length === 0;
 }
@@ -1333,9 +1339,9 @@ function taskAgent(task) {
   return (
     agentDefinitions[task.assigned_agent] || {
       className: "product",
-      label: labelize(task.assigned_agent || "Unassigned agent"),
+      label: labelize(task.assigned_agent || "未分配角色"),
       monogram: "?",
-      discipline: "Governed execution",
+      discipline: "受控执行",
     }
   );
 }
@@ -1394,10 +1400,10 @@ function renderWorkflow() {
       element(
         "p",
         null,
-        `${parallel ? `Stage ${String(stage).padStart(2, "0")} · parallel · ` : ""}${
+        `${parallel ? `阶段 ${String(stage).padStart(2, "0")} · 并行 · ` : ""}${
           dependencies.length
-            ? `Depends on ${dependencies.join(" + ")}`
-            : "Ready at workflow start"
+            ? `依赖：${dependencies.join(" + ")}`
+            : "可从流程开始时执行"
         }`,
       ),
     );
@@ -1410,7 +1416,7 @@ function renderWorkflow() {
     track.append(step);
   });
   document.querySelector("#workflow-updated").textContent =
-    `Updated ${formatTime(state.snapshot.run.updated_at)}`;
+    `更新于 ${formatTime(state.snapshot.run.updated_at)}`;
 }
 
 function hydrateInsuranceRunState() {
@@ -1473,8 +1479,8 @@ function conflictValue(conflict, side) {
     const proposal = conflict[side] || {};
     const cost = Number(proposal.planned_cost_cny || 0).toLocaleString();
     return side === "proposal_before"
-      ? `CNY ${cost} scope request`
-      : `CNY ${cost}; deferred ${proposal.deferred || "optional work"}`;
+      ? `范围请求：${cost} 元`
+      : `${cost} 元；暂缓 ${proposal.deferred || "可选工作"}`;
   }
   return labelize(conflict[side]?.decision_mode || "unknown");
 }
@@ -1487,7 +1493,7 @@ function renderConflicts() {
   }
   selectors.conflictSection.classList.remove("is-hidden");
   selectors.conflictSummary.textContent =
-    `${state.conflicts.length} resolved from structured outputs`;
+    `已根据结构化产出处理 ${state.conflicts.length} 项分歧`;
   state.conflicts.forEach((conflict) => {
     const card = element("article", "conflict-card");
     const head = element("div", "conflict-head");
@@ -1510,14 +1516,14 @@ function renderConflicts() {
       element(
         "p",
         "conflict-agents",
-        `${labelize(conflict.raised_by)} challenged ${conflict.affected_agents.map(labelize).join(", ")}`,
+        `${labelize(conflict.raised_by)} 对以下角色提出异议：${conflict.affected_agents.map(labelize).join(", ")}`,
       ),
       transition,
-      element("p", "conflict-rule", `Rule: ${labelize(conflict.resolution_rule)}`),
+      element("p", "conflict-rule", `规则：${labelize(conflict.resolution_rule)}`),
       element(
         "small",
         null,
-        `Evidence ${conflict.source_evidence.join(", ")} · accepted by ${conflict.accepted_by.map(labelize).join(", ")}`,
+        `依据 ${conflict.source_evidence.join(", ")} · 接受角色：${conflict.accepted_by.map(labelize).join(", ")}`,
       ),
     );
     selectors.conflictGrid.append(card);
@@ -1558,7 +1564,7 @@ function renderPolicy() {
   summary.replaceChildren();
   const evidence = policyEvidence();
   const riskBadge = document.querySelector("#risk-badge");
-  riskBadge.textContent = evidence.risk.toUpperCase();
+  riskBadge.textContent = ({low:"低",moderate:"中",high:"高",critical:"需处理"})[evidence.risk] || "未知";
   riskBadge.className = `risk-badge risk-${evidence.risk}`;
 
   const control = element("div", "policy-state");
@@ -1568,15 +1574,15 @@ function renderPolicy() {
       "strong",
       null,
       evidence.pending.length
-        ? "Controlled action paused"
-        : "No active policy blocker",
+        ? "受控操作已暂停"
+        : "当前没有待放行操作",
     ),
     element(
       "p",
       null,
       evidence.pending.length
-        ? `${evidence.pending.length} decision awaits ${evidence.reviewer || "founder"} review.`
-        : "Current actions are allowed or have already been resolved by the workflow authority.",
+        ? `${evidence.pending.length} 项决定等待放行。`
+        : "当前操作已允许执行，或已记录决定。",
     ),
   );
 
@@ -1588,8 +1594,8 @@ function renderPolicy() {
       "p",
       null,
       evidence.actions.length
-        ? `${evidence.actions.length} deterministic policy action${evidence.actions.length === 1 ? "" : "s"} recorded across the task graph.`
-        : "Agents propose results; only the Workflow Controller changes authoritative state.",
+        ? `已记录 ${evidence.actions.length} 项规则控制操作。`
+        : "角色提出方案，流程控制器负责推进状态。",
     ),
   );
   if (evidence.rules.length) {
@@ -1602,73 +1608,22 @@ function renderPolicy() {
   append(summary, control, boundary);
 }
 
+function executionSource(task, route) {
+  const execution = route?.metadata || route?.execution_metadata || {};
+  if (execution.execution_backend === "gateway_llm_agent" && route?.execution_status === "executed") return "实时模型";
+  if (route?.execution_status === "executed" && (execution.fallback_reason || execution.fallback_used || route?.fallback_used)) return "本地回退";
+  if (route?.execution_status === "executed" && execution.execution_backend) return "规则控制";
+  return route ? "计划路由" : "来源未提供";
+}
 function renderAgents() {
-  const grid = document.querySelector("#agent-grid");
-  grid.replaceChildren();
-  const completed = state.snapshot.tasks.filter(
-    (task) => task.status === "completed",
-  ).length;
-
-  tasksInStageOrder().forEach((task) => {
-    const definition = taskAgent(task);
-    const route = state.snapshot.route_decisions
-      .filter(
-        (decision) =>
-          decision.task_id === task.id ||
-          (!decision.task_id &&
-            task.assigned_agent === "executive-orchestrator"),
-      )
-      .at(-1);
-    const artifactCount = state.snapshot.artifacts.filter(
-      (artifact) => artifact.task_id === task.id,
-    ).length;
-    const card = element("article", `agent-card ${definition.className}`);
-    const bar = element("div", "agent-card-bar");
-    const body = element("div", "agent-card-body");
-    const head = element("div", "agent-card-head");
-    const identity = element("div", "agent-identity");
-    const identityCopy = element("div");
-    append(
-      identityCopy,
-      element("h3", null, definition.label),
-      element("p", null, definition.discipline),
-    );
-    append(
-      identity,
-      element("span", "agent-monogram", definition.monogram),
-      identityCopy,
-    );
-    append(
-      head,
-      identity,
-      element(
-        "span",
-        `task-status ${statusClass(task.status)}`,
-        labelize(task.status),
-      ),
-    );
-    const evidence = element("div", "agent-evidence");
-    [
-      ["Route", route?.provider || "Awaiting route"],
-      ["Model", route?.selected_model || "—"],
-      ["Attempts", `${task.attempt_count} / ${task.max_attempts}`],
-      ["Artifacts", String(artifactCount)],
-    ].forEach(([label, value]) => {
-      const row = element("div", "evidence-row");
-      append(row, element("span", null, label), element("strong", null, value));
-      evidence.append(row);
-    });
-    append(
-      body,
-      head,
-      element("p", "agent-task", task.description || task.title),
-      evidence,
-    );
-    append(card, bar, body);
-    grid.append(card);
+  const grid = document.querySelector("#agent-grid"); grid.replaceChildren();
+  tasksInStageOrder().forEach(task => {
+    const definition=taskAgent(task), route=(state.snapshot.route_decisions || []).filter(item=>item.task_id===task.id).at(-1);
+    const card=element("article","agent-card"), row=element("div","role-row");
+    append(row,element("strong",null,definition.label),element("span",`task-status ${statusClass(task.status)}`,labelize(task.status)),element("span","source-label",executionSource(task,route)));
+    const details=element("details","source-details");append(details,element("summary",null,"原始依据"),element("pre",null,JSON.stringify({task,route},null,2)));append(card,row,details);grid.append(card);
   });
-  document.querySelector("#agent-summary").textContent =
-    `${completed} of ${state.snapshot.tasks.length} complete`;
+  document.querySelector("#agent-summary").textContent=`已完成 ${state.snapshot.tasks.filter(task=>task.status==="completed").length} / ${state.snapshot.tasks.length} 步`;
 }
 
 function renderApprovals() {
@@ -1684,15 +1639,16 @@ function renderApprovals() {
     selectors.approvalList.append(
       emptyCard(
         "✓",
-        "No approval requests",
-        "The policy gate has not paused this workflow. Controlled actions will appear here.",
+        "无需放行",
+        "当前流程没有需要你放行的操作。",
       ),
     );
     return;
   }
 
   approvals.forEach((approval) => {
-    const pending = approval.status === "pending";
+    const expired = !Number.isFinite(Date.parse(approval.expires_at)) || Date.parse(approval.expires_at) <= Date.now();
+    const pending = approval.status === "pending" && !expired;
     const reviewer =
       approval.metadata?.reviewer_required ||
       approval.decided_by ||
@@ -1708,45 +1664,26 @@ function renderApprovals() {
       element(
         "span",
         `task-status ${statusClass(approval.status)}`,
-        labelize(approval.status),
+        approval.status === "pending" && expired ? "已过期或有效期未知" : labelize(approval.status),
       ),
-      element("span", "subtle-label", `Approval ${shortId(approval.id)}`),
+      element("span", "subtle-label", `放行 ${shortId(approval.id)}`),
     );
+    const task = state.snapshot.tasks.find(item=>item.id===approval.task_id);
+    const route = (state.snapshot.route_decisions || []).filter(item=>item.task_id===approval.task_id).at(-1);
+    const role = task ? taskAgent(task).label : "决策统筹";
     const meta = element("div", "approval-meta");
-    [
-      ["Required reviewer", reviewer],
-      ["Requested by", approval.requested_by],
-      ["Expires", formatTime(approval.expires_at, true)],
-      ["Policy rules", (approval.metadata?.policy_rule_ids || []).join(", ") || "Plan gate"],
-    ].forEach(([label, value]) => {
-      const block = element("div");
-      append(
-        block,
-        element("span", null, label),
-        element("strong", null, value),
-      );
-      meta.append(block);
-    });
-    append(
-      copy,
-      kicker,
-      element(
-        "h3",
-        null,
-        approval.task_id
-          ? "Controlled task action"
-          : "Executive plan review",
-      ),
-      element("p", "approval-reason", approval.reason),
-      meta,
-    );
+    const reason = /[\u3400-\u9fff]/.test(approval.reason || "") ? approval.reason : "规则要求此操作经人工放行。详细说明见原始依据。";
+    [["为什么停下",reason],["将由谁执行",role + " · " + executionSource(task,route)],["依据",approval.metadata?.policy_rule_ids?.length ? "已记录的策略规则（见原始依据）" : "流程的人工放行条件"],["有效至",formatTime(approval.expires_at,true)]].forEach(([label,value])=>{const block=element("div");append(block,element("span",null,label),element("strong",null,value));meta.append(block);});
+    append(copy,kicker,element("h3",null,"放行："+role),element("p","approval-reason","放行后继续这一步；拒绝后流程停止，已有产出保留。"),meta);
+    const raw=element("details","source-details");append(raw,element("summary",null,"原始依据"),element("pre",null,JSON.stringify({approval,task,route},null,2)));copy.append(raw);
     card.append(copy);
 
     if (pending) {
       const form = element("div", "approval-form");
-      const reviewerLabel = element("label", null, "放行人");
+      const reviewerLabel = element("label", boundOwner ? "is-hidden" : "", "放行人");
       reviewerLabel.setAttribute("for", `reviewer-${approval.id}`);
       const reviewerInput = element("input");
+      reviewerInput.type = boundOwner ? "hidden" : "text";
       reviewerInput.id = `reviewer-${approval.id}`;
       reviewerInput.value = boundOwner || reviewer;
       reviewerInput.readOnly = Boolean(boundOwner);
@@ -1756,7 +1693,7 @@ function renderApprovals() {
       reasonLabel.setAttribute("for", `reason-${approval.id}`);
       const reasonInput = element("textarea");
       reasonInput.id = `reason-${approval.id}`;
-      reasonInput.rows = 3;
+      reasonInput.rows = 1;
       reasonInput.maxLength = 2000;
       reasonInput.placeholder =
         "记录继续或停止这一步的理由。";
@@ -1776,7 +1713,7 @@ function renderApprovals() {
       approve.addEventListener("click", () =>
         resolveApproval(approval.id, "approved", card),
       );
-      append(actions, reject, approve);
+      append(actions, approve, reject);
       append(
         form,
         reviewerLabel,
@@ -1790,11 +1727,11 @@ function renderApprovals() {
       const resolution = element("div", "approval-form");
       append(
         resolution,
-        element("strong", null, `Resolved by ${approval.decided_by || "—"}`),
+        element("strong", null, `处理人：${approval.decided_by === "founder" ? "创始人" : approval.decided_by || "—"}`),
         element(
           "p",
           "approval-reason",
-          approval.decision_reason || "No decision reason recorded.",
+          approval.decision_reason || "未记录理由。",
         ),
         element(
           "span",
@@ -1812,7 +1749,7 @@ function artifactName(resource) {
   return (
     resource.artifact.metadata?.filename ||
     resource.artifact.name ||
-    "Artifact"
+    "产出"
   );
 }
 
@@ -1822,8 +1759,8 @@ function renderArtifacts() {
     selectors.artifactList.append(
       emptyCard(
         "▱",
-        "No artifacts yet",
-        "Validated Product, Finance, and Executive outputs will appear after execution.",
+        "暂无产出",
+        "任务完成相关步骤后，产出会显示在这里。",
       ),
     );
     renderArtifactViewer();
@@ -1837,7 +1774,7 @@ function renderArtifacts() {
     element(
       "span",
       null,
-      `${state.artifacts.length} integrity-checked files`,
+      `${state.artifacts.length} 个已校验文件`,
     ),
   );
   selectors.artifactList.append(head);
@@ -2121,6 +2058,9 @@ function renderInsuranceDemoEvaluation() {
 }
 
 function renderEvaluationEmpty() {
+  document.querySelector(".evaluation-metrics").classList.add("is-hidden");
+  document.querySelector("#evaluation-no-decisions").classList.remove("is-hidden");
+  document.querySelector(".evaluation-score-panel").classList.add("is-hidden");
   document.querySelector("#evaluation-run-count").textContent = "0";
   document.querySelector("#evaluation-run-detail").textContent =
     "暂无决策记录";
@@ -2165,6 +2105,8 @@ function renderEvaluation() {
   document.querySelector("#evaluation-completion").textContent =
     formatPercent(summary.completion_rate);
   const decisions = summary.recent_runs.filter(run => !isEngineering(run));
+  document.querySelector(".evaluation-metrics").classList.toggle("is-hidden", !summary.run_count);
+  document.querySelector("#evaluation-no-decisions").classList.toggle("is-hidden", Boolean(summary.run_count));
   document.querySelector("#evaluation-average").textContent = decisions.length
     ? (decisions.reduce((sum, run) => sum + Number(run.overall_score || 0), 0) / decisions.length).toFixed(1) : "不适用";
   document.querySelector("#evaluation-integrity").textContent =
@@ -2174,9 +2116,12 @@ function renderEvaluation() {
   document.querySelector("#evaluation-updated").textContent =
     `更新于 ${formatTime(summary.generated_at, true)}`;
 
-  renderLatestEvaluation(summary.recent_runs[0]);
+  if (decisions.length) renderLatestEvaluation(decisions[0]);
+  document.querySelector(".evaluation-score-panel").classList.toggle("is-hidden", !decisions.length);
   renderEvaluationAgents(summary.agent_performance || []);
-  renderEvaluationRuns(summary.recent_runs);
+  renderEvaluationRuns(decisions);
+  const engineeringCount = summary.recent_runs.length-decisions.length;
+  if (engineeringCount) { const link=element("a","text-link",`工程任务不参与决策文档评分（当前清单 ${engineeringCount} 个）→ 查看`); link.href="/#tasks"; selectors.evaluationRuns.append(link); }
   renderEvaluationProviders(
     summary.provider_distribution || {},
     summary.run_count,
@@ -2423,6 +2368,7 @@ function startNewMission() {
   hideAlert();
   renderEmptyDataViews();
   switchView("mission");
+  loadRecentDecisions();
   document.querySelector("#objective").focus();
 }
 
@@ -2447,7 +2393,7 @@ document
 renderEmptyDataViews();
 renderAttachmentList();
 checkHealth();
-const persistedRunId = new URLSearchParams(location.search).get("run") || window.localStorage.getItem(ACTIVE_RUN_KEY);
+const persistedRunId = new URLSearchParams(location.search).get("run");
 if (
   persistedRunId &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -2478,3 +2424,50 @@ if (localPortal) {
     if (state.snapshot) renderApprovals();
   }).catch(error => showAlert("无法确认当前账号", error));
 }
+
+function updateDecisionShell() {
+  const selected = Boolean(state.runId), evaluation = state.activeView === "evaluation";
+  document.querySelector("#decision-tabs").classList.toggle("is-hidden", !selected || evaluation);
+  document.querySelector("#back-to-decisions").classList.toggle("is-hidden", !selected);
+  document.querySelector("#recent-decisions").classList.toggle("is-hidden", selected || evaluation);
+  selectors.newMission.classList.toggle("is-hidden", !selected || evaluation);
+}
+async function loadRecentDecisions() {
+  const list = document.querySelector("#decision-list");
+  try {
+    const data = await apiRequest(localPortal ? "/local/runs" : "/api/evaluation/summary?limit=50");
+    const rows = (data.runs || data.recent_runs || []).filter(run => !isEngineering(run));
+    list.replaceChildren();
+    rows.forEach(run => {
+      const row = element("article","decision-history-row"), copy = element("div");
+      append(copy,element("strong",null,run.objective || "决策任务"),element("p",null,formatTime(run.created_at || run.updated_at,true)));
+      const link = element("a","button button-secondary","查看"); link.href = "/ui?run=" + encodeURIComponent(run.id || run.run_id);
+      append(row,copy,element("span","task-status",evaluationLabel(run)),link); list.append(row);
+    });
+    if (!rows.length) list.append(element("p",null,"还没有决策任务。写下问题，开始第一项决策。"));
+  } catch (_) { list.textContent = "决策列表读取失败，请刷新重试。"; }
+}
+document.querySelector("#refresh-decisions").addEventListener("click",loadRecentDecisions);
+updateDecisionShell(); loadRecentDecisions();
+if (new URLSearchParams(location.search).get("view") === "evaluation") switchView("evaluation");
+
+function decisionTitle() {
+  if (!state.snapshot || state.activeView === "evaluation") return "";
+  const pending = state.snapshot.approvals.find(item=>item.status==="pending");
+  const task = state.snapshot.tasks.find(item=>item.id===pending?.task_id);
+  if (pending && Date.parse(pending.expires_at) <= Date.now()) return "放行已过期";
+  return pending ? "停在“" + (task ? taskAgent(task).label : "执行计划") + "”前，等你放行" : evaluationLabel(state.snapshot.run);
+}
+// Expiry changes only action availability, never rebuilds an in-progress reason field.
+setInterval(() => {
+  if (!state.snapshot) return;
+  state.snapshot.approvals.forEach(approval => {
+    if (approval.status !== "pending" || Date.parse(approval.expires_at) > Date.now()) return;
+    const reason = document.getElementById("reason-" + approval.id);
+    const card = reason?.closest(".approval-card");
+    if (!card) return;
+    card.querySelectorAll("button").forEach(button=>{button.disabled=true;});
+    card.querySelector(".task-status").textContent = "已过期或有效期未知";
+  });
+  if (state.activeView !== "evaluation") selectors.viewTitle.textContent=decisionTitle();
+},1000);
