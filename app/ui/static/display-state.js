@@ -14,7 +14,7 @@
   function tone(status) {
     return status === 'approved' ? 'seal' : ['failed','rejected','timeout','manual_required','pending','waiting_approval','blocked'].includes(status) ? 'warn' : ['running','active','queued','ready','repair_queued'].includes(status) ? 'live' : ['completed','passed','pass','success','connected'].includes(status) ? 'good' : 'neutral';
   }
-  const reasons = {budget_or_policy_denied:'预算或策略检查未通过。具体原因以本次记录为准。',repair_budget_exhausted:'当前修改预算不足，修改请求未受理。',repair_attempts_exhausted:'修改尝试次数已用完，修改请求未受理。',no_progress:'修改未产生可交付的新进展。',cancelled:'任务已取消。',rejected:'此版本已被驳回。',expired:'未在有效期内作出决定。',tests_failed:'检查未通过。',review_failed:'模型复核未通过。',execution_failed:'执行未完成，请查看经过中的详细记录。'};
+  const reasons = {review_evidence_not_in_patch:'模型复核引用未能定位到补丁原文，任务未通过。',budget_or_policy_denied:'预算或策略检查未通过。具体原因以本次记录为准。',repair_budget_exhausted:'当前修改预算不足，修改请求未受理。',repair_attempts_exhausted:'修改尝试次数已用完，修改请求未受理。',no_progress:'修改未产生可交付的新进展。',cancelled:'任务已取消。',rejected:'此版本已被驳回。',expired:'未在有效期内作出决定。',tests_failed:'检查未通过。',review_failed:'模型复核未通过。',execution_failed:'执行未完成，请查看经过中的详细记录。'};
   function reason(run = {}, delivery) {
     const status = deriveDisplayState(run, delivery);
     if (status === 'expired') return reasons.expired;
