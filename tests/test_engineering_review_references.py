@@ -93,3 +93,19 @@ async def test_reference_protocol_preserves_semantic_and_approval_gates(env, blo
     assert reviewed and all(r['review_wire_schema'] == 'engineering_review_v3' for r in reviewed)
     assert reviewed[0]['reviewer_attempts'][0]['evidence_origin'] == 'host_resolved_patch_bound_references'
     assert list(service.root.glob('*-evidence/reviewer-references.json'))
+
+
+def test_display_labels_only_eligible_exact_source_and_rejects_wrong_file():
+    from app.engineering.review_references import referenced_source
+    files, raw = fixture()
+    table = reference_table(files, raw['patch_sha'])
+    shown = referenced_source(ALLOWED[0], files[ALLOWED[0]], table)
+    assert '1 | import os' in shown and '[I1]' not in shown
+    assert '2 | # comment' in shown and '[I2]' not in shown
+    assert '[I3] 3 | if "/" in name or "\\\\" in name:' in shown
+    raw['checks']['tests']['ref'] = 'I3'
+    with pytest.raises(RuntimeError, match='review_reference_invalid'):
+        resolve_review(raw, table, files)
+    from jsonschema import ValidationError
+    with pytest.raises(ValidationError):
+        validate(raw, response_format('engineering_review_v3')['json_schema']['schema'])
