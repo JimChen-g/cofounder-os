@@ -30,7 +30,11 @@ class SyntheticGateway(GatewayClient):
         if 'implementation Agent' in messages[0].content:
             self.implementations += 1
             revision = 1 if self.same_patch else self.implementations
-            content = ({'old': '# synthetic revision 1', 'new': f'# synthetic revision {revision}'} if 'bounded repair' in messages[0].content else {'implementation': f'# synthetic revision {revision}\nsynthetic_fixture = True\n', 'tests': '# fixture\nsynthetic_fixture = True\n'})
+            content = ({'operation': 'replace', 'old': '# synthetic revision 1',
+                        'new': f'# synthetic revision {revision}', 'function_line': '', 'docstring': ''}
+                       if 'bounded repair' in messages[0].content else
+                       {'implementation': f'# synthetic revision {revision}\nsynthetic_fixture = True\n',
+                        'tests': '# fixture\nsynthetic_fixture = True\n'})
         else:
             self.reviews += 1
             content = {'patch_sha': json.loads(messages[1].content)['patch_sha'],
@@ -430,8 +434,9 @@ async def test_bounded_repair_preserves_untargeted_file_and_constraints(env, tar
         assert policy.timeout_seconds == 600
         if 'bounded repair' in messages[0].content:
             assert kwargs['max_tokens'] == 1200
-            return GatewayCompletion(content=json.dumps({'old': initial_files[target],
-                'new': initial_files[target] + '# bounded synthetic change\n'}), requested_model='synthetic')
+            return GatewayCompletion(content=json.dumps({'operation': 'replace',
+                'old': initial_files[target], 'new': initial_files[target] + '# bounded synthetic change\n',
+                'function_line': '', 'docstring': ''}), requested_model='synthetic')
         assert kwargs['max_tokens'] == 3000
         return await original_complete(messages, **kwargs)
     s.gateway.complete = minimal_edit

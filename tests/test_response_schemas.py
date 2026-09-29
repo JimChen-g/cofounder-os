@@ -14,7 +14,8 @@ from app.router.selector import route_chat
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('schema_name', ['engineering_review_v1', 'engineering_review_v2', 'engineering_review_v3', 'engineering_patch_v1',
-                                          'engineering_repair_v1', 'engineering_retry_v1', 'engineering_statement_v1'])
+                                          'engineering_repair_v1', 'engineering_feedback_v2',
+                                          'engineering_retry_v1', 'engineering_statement_v1'])
 async def test_fixed_schema_client_router_provider_transmission(monkeypatch, schema_name):
     registry = ProviderRegistry()
     registry.register(OpenAICompatProvider(Provider.QWEN, 'test-only', 'http://upstream/v1', 'qwen'))
@@ -146,6 +147,11 @@ def test_repair_schemas_keep_bounded_anchors_and_paths():
     assert repair['required'] == ['old', 'new']
     assert repair['properties']['old']['minLength'] == 1
     assert repair['properties']['old']['maxLength'] == 20000
+    feedback = response_format('engineering_feedback_v2')['json_schema']['schema']
+    assert feedback['additionalProperties'] is False
+    assert feedback['required'] == ['operation', 'old', 'new', 'function_line', 'docstring']
+    assert feedback['properties']['operation']['enum'] == ['replace', 'insert_function_docstring']
+    assert feedback['properties']['docstring']['maxLength'] == 1000
     retry = response_format('engineering_retry_v1')['json_schema']['schema']['properties']['edits']
     assert (retry['minItems'], retry['maxItems']) == (1, 3)
     item = retry['items']

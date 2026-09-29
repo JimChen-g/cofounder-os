@@ -2,10 +2,23 @@
 from typing import Any, Literal
 
 ResponseSchema = Literal['engineering_review_v1', 'engineering_review_v2', 'engineering_review_v3',
-                         'engineering_patch_v1', 'engineering_repair_v1', 'engineering_retry_v1', 'engineering_statement_v1']
+                         'engineering_patch_v1', 'engineering_repair_v1', 'engineering_feedback_v2',
+                         'engineering_retry_v1', 'engineering_statement_v1']
 
 
 def response_format(name: ResponseSchema) -> dict[str, Any]:
+    if name == 'engineering_feedback_v2':
+        return {'type': 'json_schema', 'json_schema': {'name': name, 'strict': True, 'schema': {
+            'type': 'object', 'additionalProperties': False,
+            'required': ['operation', 'old', 'new', 'function_line', 'docstring'],
+            'properties': {
+                'operation': {'type': 'string', 'enum': ['replace', 'insert_function_docstring']},
+                'old': {'type': 'string', 'maxLength': 20000},
+                'new': {'type': 'string', 'maxLength': 20000},
+                'function_line': {'type': 'string', 'maxLength': 500},
+                'docstring': {'type': 'string', 'maxLength': 1000},
+            },
+        }}}
     if name == 'engineering_review_v3':
         result = response_format('engineering_review_v2')
         result['json_schema']['name'] = name
