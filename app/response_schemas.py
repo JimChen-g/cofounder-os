@@ -2,10 +2,17 @@
 from typing import Any, Literal
 
 ResponseSchema = Literal['engineering_review_v1', 'engineering_review_v2',
-                         'engineering_patch_v1', 'engineering_repair_v1', 'engineering_retry_v1']
+                         'engineering_patch_v1', 'engineering_repair_v1', 'engineering_retry_v1', 'engineering_statement_v1']
 
 
 def response_format(name: ResponseSchema) -> dict[str, Any]:
+    if name == 'engineering_statement_v1':
+        return {'type': 'json_schema', 'json_schema': {'name': name, 'strict': True, 'schema': {
+            'type': 'object', 'additionalProperties': False, 'required': ['edits'], 'properties': {
+                'edits': {'type': 'array', 'minItems': 1, 'maxItems': 3, 'items': {
+                    'type': 'object', 'additionalProperties': False, 'required': ['target_id', 'new'],
+                    'properties': {'target_id': {'type': 'string', 'pattern': '^target-[123]$'},
+                                   'new': {'type': 'string', 'minLength': 1, 'maxLength': 4000}}}}}}}}
     if name in ('engineering_patch_v1', 'engineering_repair_v1', 'engineering_retry_v1'):
         source = {'type': 'string'}
         edit = {'type': 'object', 'additionalProperties': False,
@@ -27,7 +34,7 @@ def response_format(name: ResponseSchema) -> dict[str, Any]:
                                             'app/insurance_poc/materials.py',
                                             'tests/test_insurance_poc_materials.py']},
                                         'old': {'type': 'string', 'minLength': 1, 'maxLength': 4000},
-                                        'new': {'type': 'string', 'maxLength': 20000}}}}}}
+                                        'new': {'type': 'string', 'maxLength': 4000}}}}}}
         return {'type': 'json_schema', 'json_schema': {
             'name': name, 'strict': True, 'schema': schema}}
     if name not in ('engineering_review_v1', 'engineering_review_v2'):

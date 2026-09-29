@@ -14,7 +14,7 @@ from app.router.selector import route_chat
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('schema_name', ['engineering_review_v1', 'engineering_review_v2', 'engineering_patch_v1',
-                                          'engineering_repair_v1', 'engineering_retry_v1'])
+                                          'engineering_repair_v1', 'engineering_retry_v1', 'engineering_statement_v1'])
 async def test_fixed_schema_client_router_provider_transmission(monkeypatch, schema_name):
     registry = ProviderRegistry()
     registry.register(OpenAICompatProvider(Provider.QWEN, 'test-only', 'http://upstream/v1', 'qwen'))
