@@ -32,4 +32,5 @@ assert.match(reason({status:'failed',metadata:{termination_reason:'unrecognized_
 
 assert.equal(eventLabel({event_type:"engineering.approve",details:{revision:2}}),"本人批准第 2 版");
 assert.match(eventLabel({event_type:"engineering.reject",details:{revision:1}}),/第 1 版/);
-console.log(JSON.stringify({passed:cases.length+8,case_names:cases.map(c=>c[0]),source:'app/ui/static/display-state.js'}));
+assert.match(reason({status:'failed',metadata:{termination_reason:'feedback_no_source_change'}}),/模型未产生实际修改，原候选保留，本次修订未通过/);
+console.log(JSON.stringify({passed:cases.length+9,case_names:cases.map(c=>c[0]),source:'app/ui/static/display-state.js'}));
