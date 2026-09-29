@@ -22,11 +22,15 @@ class OpenAICompatProvider(BaseProvider):
         api_key: str | None,
         base_url: str,
         model: str,
+        *,
+        context_window: int | None = None,
     ) -> None:
         self.name = name
         self._api_key = api_key
         self._base_url = base_url.rstrip("/") + "/chat/completions"
         self._model = model
+        self._context_window = context_window
+        self._tokenize_url = base_url.rstrip("/").removesuffix("/v1") + "/tokenize"
 
     async def complete(
         self,
@@ -61,6 +65,25 @@ class OpenAICompatProvider(BaseProvider):
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
+                if self._context_window is not None:
+                    # Same model, messages and generation framing; never truncate evidence.
+                    tokenized = await client.post(self._tokenize_url, json={
+                        "model": payload["model"], "messages": payload["messages"],
+                        "add_generation_prompt": True,
+                    }, headers=headers)
+                    if tokenized.status_code != 200:
+                        raise ProviderError("context_preflight_failed", provider=self.name)
+                    try:
+                        count = tokenized.json()["count"]
+                        if type(count) is not int or count < 0:
+                            raise ValueError("invalid_count")
+                    except (ValueError, KeyError, TypeError) as exc:
+                        raise ProviderError("context_preflight_invalid", provider=self.name) from exc
+                    available = self._context_window - count - 64
+                    # Retain room for a complete structured review, not a tiny fragment.
+                    if available < min(max_tokens, 2000):
+                        raise ProviderError("context_capacity_insufficient", provider=self.name)
+                    payload["max_tokens"] = min(max_tokens, available)
                 resp = await client.post(self._base_url, json=payload, headers=headers)
         except httpx.HTTPError as exc:
             raise ProviderError(f"{self.name.value} transport failed", provider=self.name) from exc

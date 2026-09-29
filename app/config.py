@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     qwen_api_key: Optional[str] = Field(default=None, validation_alias="QWEN_API_KEY")
     qwen_model: str = Field(default="replace-with-vllm-model-id", validation_alias="QWEN_MODEL")
 
+    # Opt-in for vLLM deployments with an authenticated /tokenize endpoint.
+    qwen_context_window: int | None = Field(default=None, ge=2048)
+
     # ── Step ───────────────────────────────────────────────────────────────
     step_base_url: str = Field(
         default="https://api.stepfun.com/step_plan/v1",
