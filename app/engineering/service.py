@@ -442,7 +442,7 @@ class EngineeringService:
                     result['cleanup_error'] = type(cleanup_error).__name__
             result['state'] = 'timeout' if timed_out else 'failed'
             result['error'] = type(exc).__name__
-            result['termination_reason'] = ('timeout' if result['state'] == 'timeout' else 'budget_or_policy_denied' if type(exc).__name__ in {'PolicyDenied','BudgetExceeded'} or str(exc) in {'request_budget_exhausted','no_legal_provider'} else str(exc) if str(exc) in {'test_gate_blocked','independent_review_gate_blocked','review_location_not_in_patch','review_evidence_not_in_patch','review_evidence_not_substantive','review_evidence_missing_file','review_patch_sha_mismatch'} else 'invalid_model_output_or_execution_failed')
+            result['termination_reason'] = ('timeout' if result['state'] == 'timeout' else 'budget_or_policy_denied' if type(exc).__name__ in {'PolicyDenied','BudgetExceeded'} or str(exc) in {'request_budget_exhausted','no_legal_provider'} else str(exc) if str(exc) in {'test_gate_blocked','independent_review_gate_blocked','review_location_not_in_patch','review_evidence_not_in_patch','review_evidence_not_substantive','review_evidence_missing_file','review_patch_sha_mismatch','feedback_no_source_change'} else 'invalid_model_output_or_execution_failed')
             self._publish_envelopes(task, snapshot, workspace, result, correlation_id)
             # Retain failed evidence as a run artifact, never a successful task output.
             self.writer.write_json(task.run_id, 'engineering-failure-' + workspace.id,
@@ -570,7 +570,10 @@ class EngineeringService:
                 source = previous_files[feedback['path']]
                 if source.count(edit.old) != 1:
                     raise ValueError('repair_anchor_not_unique')
-                previous_files[feedback['path']] = source.replace(edit.old, edit.new, 1)
+                updated = source.replace(edit.old, edit.new, 1)
+                if updated == source:
+                    raise ValueError('feedback_no_source_change')
+                previous_files[feedback['path']] = updated
                 workspace.apply_files(previous_files)
             elif previous_files is not None:
                 before_repair = dict(previous_files)

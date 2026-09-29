@@ -160,7 +160,8 @@ async def test_no_progress_stops_without_approval(env):
     rid = await ready(env)
     c.act(rid, 'founder', 'feedback', feedback(p, rid))
     assert (await s.execute(rid)).status == 'failed'
-    assert p.get_run(rid).run.metadata['termination_reason'] == 'no_progress'
+    assert p.get_run(rid).run.metadata['termination_reason'] == 'feedback_no_source_change'
+    assert s.gateway.reviews == 1
     with pytest.raises(DeliveryConflict):
         c.export(rid, 'founder')
 
