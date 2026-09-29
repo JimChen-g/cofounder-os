@@ -258,6 +258,9 @@ async def test_reviewer_receives_plain_numbered_immutable_sources_separate_from_
     assert result.status == 'waiting_approval'
     assert len(service.gateway.calls) == 2
     review_messages = service.gateway.calls[1][0]
+    assert 'select the reference from the implementation FILE only' in review_messages[0].content
+    assert 'Never take a T-labelled test line number and change its prefix to I' in review_messages[0].content
+    assert 'For side_effects, cite an implementation line' in review_messages[0].content
     metadata = json.loads(review_messages[1].content)
     assert 'diff' not in metadata
     assert len(metadata['tests']) == 3
