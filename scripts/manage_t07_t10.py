@@ -51,7 +51,7 @@ if action in {'start', 'restart'}:
                FEISHU_TENANT_FILE=str(root/'bridge/identity.json'), PRODUCT_DATA_DIR=str(root/'data'),
                AUDIT_DIR=str(root/'audit'), GATEWAY_API_KEY=c['gateway_token'],
                QWEN_API_KEY=(root/'model.key').read_text().strip(), QWEN_MODEL='qwen3.5',
-               QWEN_BASE_URL='http://127.0.0.1:8000/v1', STEP_API_KEY=c['step_key'],
+               QWEN_BASE_URL='http://127.0.0.1:8000/v1', QWEN_CONTEXT_WINDOW='8192', STEP_API_KEY=c['step_key'],
                STEP_BASE_URL='https://api.stepfun.com/step_plan/v1', STEP_MODEL='step-3.7-flash',
                SPARK_DECIDE_API_KEY=c.get('spark_decide_api_key', ''),
                GATEWAY_ALLOW_CLOUD=str(c.get('gateway_allow_cloud', False)).lower(),

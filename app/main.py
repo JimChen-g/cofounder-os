@@ -104,6 +104,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             api_key=settings.qwen_api_key,
             base_url=settings.qwen_base_url,
             model=settings.qwen_model,
+            context_window=settings.qwen_context_window,
         )
         registry.register(qwen)
         logger.info("Registered provider: %s", qwen.name)
