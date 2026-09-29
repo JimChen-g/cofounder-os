@@ -362,9 +362,7 @@ def apply_feedback_edit(source: str, path: str, edit: FeedbackEdit) -> tuple[str
     lines = source.splitlines(keepends=True)
     target = candidates[0]
     newline = '\r\n' if lines[target.lineno - 1].endswith('\r\n') else '\n'
-    indentation = re.match(r'\s*', edit.function_line)
-    assert indentation is not None
-    indent = indentation.group(0) + '    '
+    indent = edit.function_line[:len(edit.function_line) - len(edit.function_line.lstrip())] + '    '
     lines.insert(target.lineno, indent + repr(text) + newline)
     updated = ''.join(lines)
     ast.parse(updated)
