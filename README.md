@@ -1,351 +1,344 @@
-# Co-founder OS — Founder Mission Control
+# Co-founder OS
 
-## September hackathon: engineering execution and spark-decide
+> 在 NVIDIA DGX Spark 上运行本地大模型，把 AI 工程任务变成“真实执行、可核对、可恢复、由本人批准”的交付闭环。
 
-The supported materials-completeness engineering task generates a real candidate
-patch in an isolated workspace, runs contract/regression/generated tests, obtains
-a same-model review in a separate context, and requires version-bound founder
-approval before export. The standalone [spark-decide Skill](skills/spark-decide/SKILL.md)
-recommends a policy-constrained action; it does not execute that action.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111%2B-009688)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-See [T23–T27](docs/t23-t27.md), [T28–T29](docs/t28-t29.md), and the
-[independent-review correction record](docs/independent-review-fixes.md).
-The historical T28 benchmark has **0/10 cases requiring a choice among multiple
-legal candidates**. Its observed difference concerns tool-protocol adherence,
-not demonstrated decision-quality improvement. Original failed trials remain
-part of the original scores. Learning stays in shadow mode; no official Tier 3
-PASS or general quality lift is claimed.
+Co-founder OS 面向个人创业者和小型团队。它不是让多个 Agent 在聊天窗口里轮流给建议，而是为每次任务建立可追踪的 Run、Task、版本、预算、补丁、测试、复核、审批和导出记录。当前黑客松主案例是一个边界明确的软件工程任务：为合成保险 POC 增加材料完整性检查并补齐测试。系统让实施 Agent 在受限 Git 工作区生成真实补丁，执行真实检查，由同一 Qwen 的独立上下文完成复核；反馈产生新 revision，旧批准不能沿用，只有本人批准的当前版本才允许导出。
 
-The engineering review anchors quotations to source; quotation presence does
-not prove semantic support. Delivery control has dedicated state mutations and
-is not yet one atomic transaction across every Run/Task/evidence file. A passing
-candidate is not founder approval. These boundaries are part of the release scope.
+## 目录
 
+- [一、项目说明文档](#一项目说明文档)
+- [二、系统架构](#二系统架构)
+- [三、部署说明](#三部署说明)
+- [四、大模型优化](#四大模型优化)
+- [五、Agent Skills 设计](#五agent-skills-设计)
+- [六、技术栈说明](#六技术栈说明)
+- [七、快速运行与验证](#七快速运行与验证)
+- [八、真实结果与限制](#八真实结果与限制)
 
-> An AI operating system for solo founders that turns goals and evidence into auditable workflows, coordinating product, engineering, finance, and risk agents with human approval.
+---
 
-Co-founder OS turns a founder objective into a bounded, inspectable execution process. It combines structured planning, specialist agents, deterministic governance, durable artifacts, human approval, and replayable state in one local-first web application.
+## 一、项目说明文档
 
-The project is deliberately more than a multi-agent chat. Tasks have explicit owners and dependencies; execution is claimed atomically; retries are bounded; artifacts are integrity-checked; high-risk actions stop at a policy gate; and every material transition is recorded for later inspection.
+### 1.1 创作背景与作品特点
 
-The repository also includes a fully synthetic traffic-accident insurance POC. It demonstrates the complete governed workflow without representing the output as legal advice, an autonomous liability decision, or a production insurance integration.
+个人创业者使用 AI 编程时，最大的风险通常不是“模型不会写代码”，而是无法确认一次交付究竟发生了什么：代码是否真正写入工作区，测试是否真的执行，Reviewer 审查的是不是当前补丁，手机上批准的版本是否与最终导出一致，连接中断后恢复的还是不是同一个任务。聊天中的一句“完成了”经常把计划、执行、验证和批准混为一谈。Co-founder OS 针对这个问题，把 AI 协作从回答生成改造成一条有状态、有证据、有权限边界的工程流水线。
 
-## Core value
+作品的第一个特点是**真实执行，而不是计划展示**。实施 Agent 获得受限任务契约、固定基线和允许修改的路径，在隔离 Git 工作区生成文件与补丁；系统实际运行契约测试、生成测试和相关回归，并保存命令、退出码、补丁哈希与候选提交。失败会进入明确状态，不会因为模型输出了“测试通过”就进入审批阶段。
 
-Most AI tools return an answer. Co-founder OS returns a controlled operating trail:
+第二个特点是**版本绑定的人机治理**。系统由唯一 Workflow Controller 管理权威状态。Web 界面、飞书、模型和 Skill 都不能直接宣布任务获批。每次批准必须绑定 Run、Task、revision、base、patch、Approval ID 和有效期；发生反馈后生成新 revision，旧测试、旧复核和旧批准不能自动继承。用户可以在电脑端查看定位证据，在飞书完成本人批准或驳回，最终导出只允许读取已经批准的准确版本。
 
-- **From objective to execution:** an Executive Orchestrator converts a founder goal into a dependency-aware task plan.
-- **From roles to contracts:** registered Product, Finance, Engineering, Risk, and synthesis roles produce structured, versioned outputs instead of free-form group chat.
-- **From generation to evidence:** deliverables are stored with lineage, checksums, provenance, and source evidence.
-- **From autonomy to accountable control:** deterministic policy rules stop guarded actions until the founder approves or rejects them.
-- **From demo to inspectable system:** Mission Control shows tasks, routes, artifacts, approvals, and audit events; the Evaluation workspace scores persisted evidence without making another model call.
+第三个特点是**本地优先与权限约束**。主模型部署在 NVIDIA DGX Spark，敏感任务可以保持本地推理。可选的 StepFun 云端通道只有在隐私等级、允许 provider、显式云调用授权和持久预算同时满足时才可使用；本地调用失败不会偷偷扩大权限。模型负责建议和生成，确定性策略负责身份、预算、隐私、路径、版本与审批门禁。
 
-## What is implemented
+第四个特点是**失败可见、恢复可查**。消息去重、任务 claim、有限重试、候选保护、审计事件和恢复回执都被持久化。真实演练保留了复核引用错误、批准过期、网络断开等失败，没有把不同 Run 的最佳片段拼成一条“完美演示”。WebSocket 重连验证保持了同一进程和同一 Run；平台接受附件只记录为发送回执，不被写成用户已经阅读。
 
-### Founder workflow runtime
+第五个特点是**独立而克制的 Agent Skill**。仓库内的 [`spark-decide`](skills/spark-decide/SKILL.md) 可以脱离主项目目录使用，只在调用者提供的有限候选中建议 `local`、`step`、`human` 或 `refuse`。它不执行下游动作、不授予云端权限、不代替本人批准。Skill 的 schema、标准库客户端、示例和失败语义均独立保存，适合被其他 Agent 或自动化流程复用。
 
-- Strict Pydantic models for Runs, Tasks, Artifacts, Approvals, routing decisions, and audit events.
-- Explicit Agent Registry with capability matching and fail-closed assignment.
-- Task lifecycle state machine with dependency-aware readiness.
-- Atomic task claiming, claim tokens, competing-claim rejection, and idempotent re-claiming.
-- Bounded retries, terminal failures, restart recovery, and completed-run replay.
-- A single Workflow Controller as the authority for task and Run transitions.
+### 1.2 核心亮点
 
-### Agents and deliverables
+- **同一 Run 的工程闭环**：需求、候选、测试、复核、反馈、批准和附件导出不跨 Run 拼接。
+- **真实 Git 产物**：生成可检查的 diff 和候选提交，而不是只输出实现建议。
+- **同模型独立上下文复核**：实施和 Reviewer 使用相同 Qwen、不同上下文；明确不冒充多模型共识。
+- **版本失效机制**：反馈形成新 revision 后，旧证据与旧批准不能推进新版本。
+- **本人批准**：Agent、Skill、Web 批注和飞书消息都不能替代用户本人决策。
+- **本地模型与受控云通道**：本地 Qwen 为生产主线，StepFun 仅为获准候选 provider。
+- **证据化发布**：源码清单、静态扫描、依赖审计、签名 manifest 与篡改负测共同约束发布包。
+- **诚实实验边界**：学习路由保持 shadow；NVIDIA Dynamo、Nemotron 与 Lavish 只按实际实验结果说明。
 
-- Executive planning and orchestration through the internal Gateway boundary.
-- Product and Finance agents with strict structured-output validation and one bounded repair attempt.
-- Artifact synthesis into an executive decision memo, PRD, budget summary, risk register, and action plan.
-- Insurance POC specialist execution in which Engineering Planning and Risk Review can use a healthy live provider; other POC stages are explicitly labeled deterministic controls or local fallbacks.
+### 1.3 技术实现方案与优化思路
 
-### Model gateway and routing
+后端使用 FastAPI 和 Pydantic 定义严格契约。Run、Task、Artifact、Approval、路由结果和审计事件都有版本化模型；文件状态通过结构化 JSON、追加式 JSONL 和 SHA-256 Artifact Store 保存。Workflow Controller 负责生命周期，Agent Registry 负责能力匹配，Gateway 统一封装本地 Qwen 和获准的 StepFun 接口。工程执行器把模型建议限制在可信 Git 基线、白名单路径、有限尝试数和测试容器中；Reviewer 只能根据当前补丁和证据给出结构化结果。
 
-- One OpenAI-compatible `POST /v1/chat/completions` boundary.
-- Three stable virtual model names: `cofounder-auto`, `cofounder-qwen`, and `cofounder-step`.
-- Qwen through an OpenAI-compatible endpoint, typically local vLLM on NVIDIA DGX Spark.
-- StepFun as the optional cloud provider.
-- Provider fallback, measured health, routing rationale, request IDs, token usage, latency, and privacy-aware routing evidence.
-- A D15 insurance router with hard eligibility filters and transparent scoring. It is deterministic and is **not** presented as a learned router.
+系统优化优先选择“减少不确定性”，而不是盲目增加 Agent 数量。主流程使用一个本地 Qwen 服务，实施和复核串行执行以避免争抢 GPU；长篇说明不会重复塞入每次推理，独立 Skill 使用短 JSON 契约；预算在调用前预留，在失败、重试和回退时仍受同一持久约束。学习路由只在 shadow 中记录，不改变真实动作。用户界面使用轻量 HTML/CSS/JavaScript，由 FastAPI 同源提供，减少额外前端运行时和跨域状态分叉。
 
-### Governance, persistence, and evaluation
+---
 
-- Deterministic Policy Gate for external writes, production changes, irreversible actions, material budget decisions, and unrecognized command execution.
-- Founder approval, rejection, pause, and resume with persisted policy evidence.
-- File-based Run state using structured JSON and append-only JSONL events.
-- Atomic, run-isolated Artifact Store with SHA-256 verification, path-safety checks, and idempotent writes.
-- Same-origin Founder Mission Control UI with no separate frontend runtime.
-- Read-only Evaluation workspace covering workflow outcome, execution reliability, artifact evidence, governance, and auditability.
-
-### Synthetic insurance POC
-
-The primary demo turns one synthetic requirements PDF, two synthetic accident images, budget and project facts, and a founder mission into a governed two-week POC delivery package.
-
-The checked-in path includes:
-
-- checksum-verified fixtures and bounded evidence extraction;
-- source-linked evidence with modality, confidence, privacy level, and Agent usage;
-- a fixed ten-task DAG and ten persisted routing decisions;
-- parallel Product/Finance and Engineering/Risk work;
-- explicit scope-budget and decision-authority conflict resolution;
-- six final deliverables plus verification and conflict records;
-- a denied private-data upload path and a founder-approved sanitized release path;
-- deterministic fallback when no eligible live provider is healthy.
-
-The two PNG findings use a SHA-256-bound synthetic fixture adapter. Arbitrary image understanding is not implemented and unsupported images fail recoverably.
-
-## System architecture
+## 二、系统架构
 
 ```mermaid
 flowchart LR
-    F["Founder"] --> UI["Mission Control UI"]
-    UI --> API["FastAPI Product API"]
-    API --> EO["Executive Orchestrator"]
-    EO --> WC["Workflow Controller"]
-    WC --> AR["Agent Registry and specialist runtimes"]
-    AR --> GW["OpenAI-compatible Gateway"]
-    GW --> Q["Local Qwen via vLLM"]
-    GW --> S["StepFun cloud provider"]
-    WC --> PG["Policy Gate and Founder Approval"]
-    WC --> ST["JSON and JSONL Run State"]
-    WC --> AS["Integrity-checked Artifact Store"]
-    ST --> EV["Read-only Evaluation"]
-    AS --> EV
-    EV --> UI
+    Founder["创始人"] --> Web["Mission Control / 本机门户"]
+    Founder --> Feishu["飞书本人操作"]
+    Web --> API["FastAPI Product API"]
+    Feishu --> Bridge["单实例飞书 Bridge"]
+    Bridge --> API
+    API --> Controller["唯一 Workflow Controller"]
+    Controller --> Registry["Agent Registry"]
+    Controller --> Runner["受限 Git 工程执行器"]
+    Controller --> Policy["Policy Gate / 版本审批"]
+    Controller --> Store["Run 状态 / Artifact Store / Audit"]
+    Registry --> Gateway["模型 Gateway"]
+    Gateway --> Qwen["DGX Spark 本地 Qwen + vLLM"]
+    Gateway -. 显式授权 .-> Step["StepFun step-3.7-flash"]
+    Skill["spark-decide Skill"] --> Decision["受限决策端点"]
+    Decision --> Qwen
 ```
 
-The deployment contract is local-first:
+关键设计原则：
+
+1. **单一状态权威**：只有 Workflow Controller 可以改变 Run/Task 的权威状态。
+2. **模型不拥有权限**：模型输出不能绕过 provider、隐私、预算、路径或审批门禁。
+3. **证据绑定版本**：补丁、测试、复核、反馈、批准和导出都绑定准确 revision。
+4. **本地优先、云端显式授权**：受限数据不会因重试或回退自动流向云端。
+5. **失败不抹除**：历史失败、过期批准和未运行实验属于最终结果的一部分。
+
+---
+
+## 三、部署说明
+
+### 3.1 本地算力部署拓扑
+
+实际部署使用 NVIDIA DGX Spark / GB10（Linux ARM64）作为推理与产品服务节点：
 
 ```text
-Mac browser or application
-    -> optional SSH tunnel at 127.0.0.1:19000
-    -> FastAPI Gateway/Product runtime at 127.0.0.1:9000 on DGX Spark
-         -> local Qwen/vLLM at 127.0.0.1:8000
-         -> optional StepFun cloud endpoint
+Mac 浏览器 / 飞书客户端
+        │
+        ├─ 可选 SSH 隧道 / 受限本机门户：127.0.0.1:19000
+        │
+        ▼
+DGX Spark
+  ├─ Qwen3.5-35B-A3B-FP8 + vLLM：127.0.0.1:8000
+  ├─ Co-founder OS Gateway / Product API：127.0.0.1:9000
+  ├─ 唯一飞书 Bridge
+  ├─ Git 工程工作区与测试运行器
+  └─ Run 状态、审计与制品存储
 ```
 
-Application code calls the Gateway; it does not call Qwen or StepFun directly. The Gateway owns provider access and routing metadata. The Product API owns Runs, Tasks, Approvals, Artifacts, and workflow recovery. Only the Workflow Controller changes authoritative workflow state.
+生产主模型固定为 `Qwen3.5-35B-A3B-FP8`，使用固定 ModelScope revision 和 14 个已核验权重分片。实际引擎为 vLLM `0.18.1rc1.dev220+g5b8c30d62`、PyTorch `2.10.0+cu130`。部署复用只读权重和不可变镜像标识；新节点必须核对模型 revision、分片数量、大小和 SHA-256，不能使用滚动 nightly tag 冒充同一版本。
 
-See [the architecture contract](docs/architecture-contract.md), [domain model](docs/domain-model.md), and [workflow controller](docs/workflow-controller.md) for the detailed boundaries.
-
-## End-to-end workflow
-
-1. The founder enters an objective and optional context in Mission Control.
-2. The Executive Orchestrator requests a bounded plan and validates the Agent assignments and dependency graph.
-3. The orchestration service persists the Run, Tasks, route decisions, and append-only events.
-4. The Workflow Controller finds ready tasks and obtains an atomic claim for the registered executor.
-5. The Agent or deterministic task adapter reads persisted inputs and produces a strict, versioned result.
-6. The Artifact Store writes output atomically, verifies its checksum, and registers lineage and provenance.
-7. Failures receive at most the allowed number of retries; exhausted work reaches an explicit terminal state instead of being reported as success.
-8. The synthesizer resolves Product and Finance evidence into a decision package.
-9. The Policy Gate evaluates guarded actions. A required approval moves the Run to `waiting_approval`.
-10. The founder approves or rejects the pending action. Approval resumes the same persisted Run.
-11. Mission Control exposes the resulting artifacts and audit trace; Evaluation scores the persisted evidence without mutating the workflow.
-
-The insurance POC follows the same authorities while adding multimodal fixture evidence, adaptive explainable routes, two live-capable specialist tasks, deterministic verification, and a capability-bound approval cookie.
-
-## Technology stack
-
-| Layer | Technology |
-| --- | --- |
-| Backend and API | Python 3.10+, FastAPI, Uvicorn |
-| Contracts and configuration | Pydantic 2, pydantic-settings |
-| Provider access | httpx, OpenAI-compatible Chat Completions interface |
-| Reliability | Tenacity plus explicit state, claim, retry, and recovery services |
-| Persistence | Structured JSON, append-only JSONL, filesystem Artifact Store, SHA-256 |
-| Document and fixture handling | pypdf; Pillow and ReportLab for development fixture tooling |
-| Frontend | HTML, CSS, vanilla JavaScript served by FastAPI |
-| Local inference target | Qwen through vLLM on NVIDIA DGX Spark |
-| Optional cloud provider | StepFun |
-| Quality gates | pytest, pytest-asyncio, Ruff, Mypy, Node syntax check, Python build |
-
-## Development milestones
-
-| Stage | Delivered work |
-| --- | --- |
-| Gateway foundation | FastAPI gateway, Qwen/Step provider registry, virtual models, fallback, health, and privacy-safe request audit |
-| D00-D05 | Frozen local/DGX architecture, deployment workflow, domain models, file state repository, orchestration service, and Executive Orchestrator |
-| D06-D10 | Agent execution contract, atomic Artifact Store, Product and Finance agents, lifecycle integration, Policy Gate, Artifact Synthesizer, Workflow Controller, retries, and recovery |
-| D11-D13 | Stable Product API, Founder Mission Control UI, and deterministic read-only Evaluation dashboard |
-| D14 | Synthetic insurance fixtures, Evidence Package, explainable routing, governed golden workflow, verification, and reproducible demo evaluation |
-| D15 | Gateway-backed Engineering Planning and Risk Review, bounded structured-output repair, adaptive provider scoring, verified call metadata, and truthful local fallback |
-
-The detailed acceptance history is recorded in [PROJECT_STATE.md](docs/project-control/PROJECT_STATE.md), the stage contracts under [`tasks/`](tasks/), and the Git commit history.
-
-## Installation
-
-### Requirements
-
-- Python 3.10 or newer
-- Node.js only for the optional frontend syntax check
-- Optional: an OpenAI-compatible Qwen endpoint and/or StepFun credentials
-- Optional deployment target: NVIDIA DGX Spark with Qwen served through vLLM
-
-### Create the environment
+### 3.2 应用安装
 
 ```bash
 git clone https://github.com/JimChen-g/cofounder-os.git
 cd cofounder-os
+
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e ".[dev]"
-```
 
-### Provider configuration
-
-The stable insurance demo can run through declared deterministic fallbacks without a live model provider. For live Gateway execution, copy the template and replace only the values for providers you actually use:
-
-```bash
 cp .env.example .env
-```
+# 只在本机填写真实配置；禁止提交 .env 或令牌
 
-Important variables:
-
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `QWEN_BASE_URL` | OpenAI-compatible Qwen endpoint | `http://127.0.0.1:8000/v1` |
-| `QWEN_API_KEY` | Qwen endpoint credential | unset in application settings |
-| `QWEN_MODEL` | Served Qwen model ID | placeholder |
-| `STEP_BASE_URL` | StepFun API base | `https://api.stepfun.com/step_plan/v1` |
-| `STEP_API_KEY` | StepFun credential | unset |
-| `STEP_MODEL` | StepFun model ID | `step-3.7-flash` |
-| `GATEWAY_HOST` / `GATEWAY_PORT` | Runtime bind address and port | `127.0.0.1` / `9000` |
-| `PRODUCT_DATA_DIR` | Run state and Artifact Store root | `data` |
-| `AUDIT_DIR` | Gateway request-audit directory | `data/audit` |
-| `GATEWAY_AUDIT_TOKEN` | Token required by `GET /audit/recent`; the endpoint is disabled when unset | unset |
-
-Never commit a real `.env` file or provider credential.
-
-## Run the application
-
-```bash
-source .venv/bin/activate
 bash scripts/run_gateway.sh
 ```
 
-Open:
+默认入口：
 
-- Mission Control: <http://127.0.0.1:9000/ui>
-- OpenAPI documentation: <http://127.0.0.1:9000/docs>
-- Gateway health: <http://127.0.0.1:9000/health>
-- Product API health: <http://127.0.0.1:9000/api/health>
+- Mission Control：`http://127.0.0.1:9000/ui`
+- Gateway 健康：`http://127.0.0.1:9000/health`
+- Product API 健康：`http://127.0.0.1:9000/api/health`
+- OpenAPI：`http://127.0.0.1:9000/docs`
 
-A generic founder mission uses the Gateway and therefore needs at least one working provider. The stable insurance POC has a disclosed deterministic fallback path.
+常用配置：
 
-## Reproduce the insurance demo
+| 配置 | 作用 |
+|---|---|
+| `QWEN_BASE_URL` | 本地 vLLM 的 OpenAI 兼容 `/v1` 地址 |
+| `QWEN_MODEL` | 固定的 Qwen 服务模型 ID |
+| `QWEN_API_KEY` | 本地模型服务凭据；不得写入仓库 |
+| `STEP_BASE_URL` | `https://api.stepfun.com/step_plan/v1` |
+| `STEP_MODEL` | `step-3.7-flash` |
+| `STEP_API_KEY` | StepFun 凭据；只有显式授权时使用 |
+| `GATEWAY_ALLOW_CLOUD` | 是否允许云端 provider 候选 |
+| `PRODUCT_DATA_DIR` | Run、Task、制品和审计状态目录 |
+| `GATEWAY_AUDIT_TOKEN` | 审计读取令牌；未配置时端点关闭 |
 
-Verify the checked-in fixtures, then start an isolated runtime:
+### 3.3 DGX Spark 发布与回滚
+
+Mac Git 仓库是源码权威，Spark 是部署目标。发布脚本要求本机 `main` 和远端源码区干净，通过经过校验的 Git Bundle/传输包同步固定提交；远端 `data/`、日志、模型权重、`.env`、服务配置和审批记录不由源码部署覆盖。
+
+```bash
+# 只验证，不部署
+scripts/deploy-to-spark.sh --dry-run
+
+# 部署当前干净 main；失败时自动恢复前一提交
+scripts/deploy-to-spark.sh
+
+# 产品健康与远端/隧道冒烟
+scripts/smoke-product.sh
+
+# 回滚到上一版或指定提交
+scripts/rollback-product.sh [commit-sha]
+```
+
+发布后必须分别核对源码提交、模型服务身份、Product API 健康、唯一 Bridge、受保护 Run 与候选对象；不同层可以有不同版本标识，不能只凭一个 SHA 推断整个系统完全一致。
+
+---
+
+## 四、大模型优化
+
+本项目没有用未经验证的“性能倍数”描述优化，而是围绕本地资源、可恢复性和输出可靠性实施以下措施：
+
+1. **FP8 权重与固定运行镜像**：生产使用 Qwen3.5-35B-A3B-FP8，降低权重占用；权重 revision、14 个分片和镜像 ID 均固定核验。
+2. **DGX Spark 统一内存调度**：实际节点统一内存约 124614 MiB；模型加载日志约 34.23 GiB。设置 GPU 内存比例和并发上限，并与其他 GPU 作业错峰。
+3. **受控 vLLM 配置**：上下文 8192、TP=1、并发 2、batch 2048、GPU 内存比例 0.55、thinking 关闭、prefix cache 开启；这些是本项目锁定配置，不推广为所有任务的最优值。
+4. **短契约与结构化输出**：工程任务、Reviewer 和 Skill 均使用有限 schema；失败时进行有上限的格式修复，不无限追加上下文。
+5. **串行真实推理**：实施、复核和决定请求在共享 GPU 上按阶段串行，避免为演示同时部署多个生产 Bridge 或争抢模型。
+6. **规则路由 + learning shadow**：24 个合成实例按 12/6/6 冻结训练、校准、留出；校准未达到启用阈值，因此学习结果只观察、不改变生产动作。
+7. **权限优先的 provider 过滤**：隐私、provider grant、预算和用户授权先于模型选择；失败不会自动升级到云端。
+8. **实验与生产隔离**：Dynamo、Nemotron 的实验运行时结束后清理，不替换稳定 Qwen 服务，也不把共驻冒烟解释为生产优化。
+
+---
+
+## 五、Agent Skills 设计
+
+本项目提交的 Skill Markdown 位于：
+
+**[`skills/spark-decide/SKILL.md`](skills/spark-decide/SKILL.md)**
+
+配套文件：
+
+```text
+skills/spark-decide/
+├── SKILL.md
+├── scripts/
+│   ├── decide.py
+│   └── demo.py
+├── references/
+│   ├── request.schema.json
+│   └── response.schema.json
+└── examples.json
+```
+
+### 5.1 设计目标
+
+`spark-decide` 解决的是一个窄问题：在调用者提供的有限动作中，结合隐私、provider 权限、调用授权和预算，给出一个短路由建议。合法动作是 `local`、`step`、`human`、`refuse`。服务器先确定合法候选，再最多进行一次本地模型推理。
+
+Skill 的核心安全边界：
+
+- 推荐动作不等于执行动作；
+- 推荐 `step` 不会自动调用 StepFun；
+- 推荐 `human` 不代表人已经批准；
+- 使用 decision-only bearer token，不能访问聊天或产品 API；
+- 本地失败不自动重试，也不回退云端；
+- `scores: null` / `score_kind: unavailable` 不解释为零置信度；
+- request/output hash 用于追踪，不是签名或批准凭据。
+
+### 5.2 项目外调用
+
+```bash
+export SPARK_DECIDE_URL="http://127.0.0.1:9000/v1/spark-decide"
+export SPARK_DECIDE_API_KEY="<decision-only-token>"
+
+python /path/to/spark-decide/scripts/decide.py /path/to/request.json
+```
+
+最小接线测试：
+
+```bash
+python skills/spark-decide/scripts/demo.py
+```
+
+`demo.py` 使用明确标记的本地 fixture，模型调用为 0；它验证客户端接线，不是实时 Qwen 或决策质量证据。
+
+---
+
+## 六、技术栈说明
+
+### 6.1 NVIDIA 软件、SDK 与硬件
+
+| 组件 | 本项目用途 | 采用状态 |
+|---|---|---|
+| NVIDIA DGX Spark / GB10 | 本地大模型推理、产品 API、工程测试与 Bridge 运行节点 | 生产主线 |
+| NVIDIA Driver 580.126.09 / CUDA 13.0 驱动能力 | 为 ARM64 GPU 容器和 PyTorch/vLLM 提供运行基础；CUDA 13.0 为 `nvidia-smi` 驱动报告 | 生产主线 |
+| NVIDIA Container Toolkit / Docker GPU Runtime | 隔离模型与工程测试运行环境，限制资源和挂载范围 | 生产部署基础 |
+| NVIDIA NGC | 获取并固定 NVIDIA Dynamo 实验运行时 | 隔离实验 |
+| NVIDIA Dynamo 1.5.0 | 单 worker 真实生成链路与部署可行性验证 | 实验，未替换生产 vLLM |
+| NIXL 1.3.2 | Nemotron NVFP4 实验运行时组件 | 实验 |
+
+注意：日志中的 PyTorch “Dynamo bytecode transform” 不等于 NVIDIA Dynamo 分布式推理框架已在生产启用。
+
+### 6.2 模型与推理引擎
+
+| 模型/引擎 | 作用 | 状态与边界 |
+|---|---|---|
+| `Qwen3.5-35B-A3B-FP8` | 工程实施、独立上下文复核和本地短决定的主模型 | 生产主线；ModelScope 固定 revision，14 个权重分片核验 |
+| vLLM `0.18.1rc1.dev220+g5b8c30d62` | Qwen 的 OpenAI 兼容本地推理服务 | 生产主线 |
+| PyTorch `2.10.0+cu130` | 本地模型运行基础 | 生产主线 |
+| StepFun `step-3.7-flash` | 经 Gateway 管理的可选云端 provider / 受控回退 | 已做真实连接与冒烟；非固定主案例必经 |
+| `NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4` | 中文、JSON、代码三个短请求与 NVFP4 加载实验 | 实验；未完成与 Qwen 的共同任务比较，未生产采用 |
+| vLLM `0.28.0` / PyTorch `2.13.0+cu130` | Nemotron 实验运行时 | 实验，不与生产版本混写 |
+
+### 6.3 应用与工程栈
+
+| 层 | 技术 |
+|---|---|
+| API 与运行时 | Python 3.10+、FastAPI、Uvicorn |
+| 数据契约 | Pydantic 2、pydantic-settings、JSON Schema |
+| 模型访问 | httpx、OpenAI-compatible Chat Completions |
+| 可靠性 | Tenacity、显式状态机、claim token、有限重试与恢复 |
+| 状态与制品 | JSON、JSONL、SQLite inbox/ledger、文件 Artifact Store、SHA-256 |
+| 工程执行 | Git 隔离工作区、固定 base、可信测试镜像、版本绑定候选 |
+| 前端 | HTML、CSS、原生 JavaScript，由 FastAPI 同源提供 |
+| 移动入口 | 飞书开放平台 SDK / WSS 单实例 Bridge |
+| 质量门禁 | pytest、pytest-asyncio、Ruff、Mypy、Node syntax check、Python build |
+| 安全与发布 | Bandit、Semgrep、Gitleaks、依赖审计、RSA-3072 签名 manifest |
+
+---
+
+## 七、快速运行与验证
+
+### 7.1 CPU 与离线检查
 
 ```bash
 source .venv/bin/activate
+
+pytest
+ruff check app tests
+mypy app
 python scripts/build_insurance_poc_fixtures.py --verify-only
+python skills/spark-decide/scripts/demo.py
+```
+
+### 7.2 合成保险演示
+
+```bash
 PRODUCT_DATA_DIR=/tmp/cofounder-os-insurance-demo/data \
 GATEWAY_PORT=9100 \
 bash scripts/run_gateway.sh
 ```
 
-Open <http://127.0.0.1:9100/ui>, select **Load stable demo**, and launch the mission. The expected bounded stop is `waiting_approval`; approve or reject the guarded release in the Approval workspace to complete the run.
+打开 `http://127.0.0.1:9100/ui`，加载稳定演示并启动任务。预期受控停止点是 `waiting_approval`；只有当前版本的本人批准或驳回才能继续。该演示使用合成 PDF 和图片，不提供保险责任、赔付或法律结论。
 
-For the complete scenario, evidence contract, fallback rules, and demo narration, see [docs/insurance-poc-demo.md](docs/insurance-poc-demo.md).
+更多契约与实现文档：
 
-## API surface
+- [架构契约](docs/architecture-contract.md)
+- [领域模型](docs/domain-model.md)
+- [Workflow Controller](docs/workflow-controller.md)
+- [工程闭环说明](docs/t23-t27.md)
+- [Skill 配对评测与限制](docs/t28-t29.md)
+- [独立审查修复记录](docs/independent-review-fixes.md)
+- [部署流程](docs/deployment-workflow.md)
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /health` | Provider-aware Gateway health |
-| `GET /v1/models` | Stable virtual model list |
-| `POST /v1/chat/completions` | Unified non-streaming provider request |
-| `GET /audit/recent` | Bounded Gateway request audit |
-| `POST /api/runs` | Create and drive a generic founder workflow |
-| `GET /api/runs/{run_id}` | Retrieve Run, Task, route, approval, artifact, and event state |
-| `GET /api/runs/{run_id}/artifacts` | Retrieve verified artifact metadata and bounded text content |
-| `POST /api/runs/{run_id}/approvals/{approval_id}` | Resolve one approval and resume |
-| `POST /api/runs/{run_id}/retry` | Retry, recover, or replay through the Workflow Controller |
-| `GET /api/evaluation/summary` | Read-only cross-Run evaluation |
-| `GET /api/evaluation/runs/{run_id}` | Read-only evaluation of one Run |
-| `/api/insurance-poc/*` | Fixture, evidence, routing, workflow-job, and demo-evaluation endpoints |
+---
 
-## Testing and verification
+## 八、真实结果与限制
 
-Run the same repository-level checks used for release verification:
+### 已验证
 
-```bash
-source .venv/bin/activate
-ruff check app tests scripts/run_insurance_poc_evaluation.py
-mypy app
-pytest -q
-node --check app/ui/static/app.js
-python -m build --no-isolation
-git diff --check
-```
+- 连续三次真实工程闭环完成：实际候选、三项检查、独立上下文复核、本人飞书批准、导出和附件交付。
+- 其中一轮覆盖 Web 函数说明批注、revision 2、重新检查、重新复核与版本绑定批准。
+- 发布源码在干净 Git clone 和独立 Python 3.10 环境完成 782 项测试。
+- 仓库 Skill 与带 LICENSE 的独立 Skill 均通过 12/12 Tier 1 结构验证。
+- 最终扫描保留 Bandit 43 低/5 中/0 高、Semgrep 0 发现但 1 处部分解析、Gitleaks 3 项已判读测试/模式字符串、66 个依赖 0 个当时已知漏洞。
+- 正式签名包原件通过；内容篡改、文件删除、payload 增项、顶层增项和 manifest 篡改均被拒绝。
 
-The pre-review baseline passed 665 tests. Current correction verification and release receipts are recorded in `docs/independent-review-fixes.md`; run the commands above for the checked-out revision. The suite may emit Pydantic and Starlette deprecation warnings; they do not currently fail the checks.
+### 明确保留的限制
 
-To run the committed small-sample insurance demo evaluation:
+- T21 只有 24 个合成实例（12/6/6），校准没有达到启用阈值，生产继续规则路由加 learning shadow。
+- T28 是自建受限协议观察；10 个用例中 0 个要求在多个合法候选中选择，因此不能证明决策质量提升。
+- 官方 live Agent trial 为 0，没有官方 Tier 3 PASS。
+- Dynamo 与 Nemotron 的共同任务/性能对照未运行；它们仍是实验，不是生产组件。
+- Lavish 只完成原版 UI/CLI 与隔离反馈适配，模型调用为 0，未替代现有 Web 反馈入口。
+- 跨文件 Run/Task/证据更新不是一个全局事务；引文存在不等于语义完整；同 UID 进程与任意恶意 Python 的完整隔离仍未完成。
+- 签名证明指定内容的完整性，不代表官方认证、永久无漏洞或用户已阅读附件。
 
-```bash
-python scripts/run_insurance_poc_evaluation.py \
-  --data-dir /tmp/cofounder-os-insurance-evaluation \
-  --output examples/insurance-poc/demo-evaluation-results.json
-```
+---
 
-This is a six-sample demo acceptance measurement, not statistical model-quality evidence. When no approved live baseline is configured, the output marks that baseline unavailable and claims no comparative delta.
+## License
 
-## Project structure
-
-```text
-app/
-├── agents/              # Agent Registry and Product/Finance contracts
-├── api/                 # Gateway, Product, Evaluation, and insurance POC routes
-├── artifacts/           # Atomic filesystem Artifact Store
-├── audit/               # Privacy-safe Gateway request audit
-├── clients/             # Internal Gateway client
-├── domain/              # Strict Run/Task/Artifact/Approval data models
-├── evaluation/          # Deterministic read-only scoring
-├── insurance_poc/       # Fixtures, evidence, routing, live Agents, and workflow
-├── orchestrators/       # Executive planning and materialization
-├── policy/              # Deterministic Policy Gate
-├── providers/           # OpenAI-compatible Qwen and Step adapters
-├── router/              # Virtual-model selection and fallback
-├── services/            # Execution, lifecycle, orchestration, and controller
-├── state/               # Lifecycle machine and file repository
-├── synthesizers/        # Cross-Agent deliverable synthesis
-└── ui/                  # Same-origin Mission Control frontend
-docs/                    # Architecture, API, demo, evaluation, and governance docs
-examples/                # Synthetic demo assets and reproducible evaluation data
-scripts/                 # Startup, fixture, smoke, deployment, and verification tools
-tasks/                   # D06-D15 stage scope and acceptance contracts
-tests/                   # Behavioral and regression test suite
-```
-
-## Known limitations
-
-- The application is a hackathon prototype, not a production multi-tenant service.
-- State and artifacts are filesystem-backed and designed for a single process and single worker.
-- Provider registration happens at startup; changing providers requires a restart.
-- Gateway and product endpoints authenticate requests; credential scopes and server-side provider limits are described in the correction record.
-- Gateway audit files rotate only by UTC day and have no size-based retention policy.
-- Health checks synchronously call each configured provider's model endpoint.
-- Only the insurance Engineering Planning and Risk Review tasks have D15 live-model execution; other insurance stages are deterministic controls or local fallbacks.
-- Arbitrary image analysis is not implemented; the demo recognizes only checksum-bound synthetic image fixtures.
-- The adaptive insurance router is rule- and score-based, not trained.
-- The older insurance-planning artifact remains a plan; the separate materials engineering endpoint produces a real candidate diff and test evidence, but does not automatically merge or deploy candidate code.
-- No real insurer write, email, payment, production change, or autonomous liability decision occurs.
-- The committed six-case demo evaluation is too small to establish general model quality.
-
-## Roadmap
-
-- Replace the checksum-bound image adapter with general, evaluated multimodal evidence ingestion.
-- Add live, strictly governed specialist execution for more roles while preserving deterministic policy authority.
-- Expand founder roles into Growth, Operations, Legal, and HR.
-- Add durable database/queue infrastructure, multi-worker coordination, authentication, and retention controls.
-- Build statistically meaningful quality, cost, latency, fallback, and human-intervention evaluations.
-- Add secure tool and MCP integrations behind explicit scopes and approval gates.
-- Support long-running missions, recurring reviews, and cross-project organizational memory.
-
-## License and disclaimer
-
-Co-founder OS is released under the [MIT License](LICENSE).
-
-Co-founder OS is experimental software. The insurance scenario, documents, images, companies, vehicles, and claim facts are synthetic. Outputs are demonstrations of workflow orchestration and are not legal, financial, insurance, compliance, or professional advice. Do not use the prototype to make real liability, coverage, payment, production, or other high-impact decisions without qualified human review and appropriate security controls.
-
+项目自研代码采用 [MIT License](LICENSE)。模型、容器、云端 API 和第三方组件仍分别受其原始许可证与服务条款约束；本仓库不会把 NVIDIA、Qwen、StepFun 或其他上游资产自动重新许可为 MIT。
