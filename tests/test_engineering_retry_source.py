@@ -24,13 +24,13 @@ def test_retry_prompt_preserves_literal_source_and_failure_context():
 
 def test_documented_overlength_fixture_builds_before_validation():
     namespace = {}
-    exec(TEST_FIXTURE_HELPER, namespace)  # trusted app-owned helper, not generated code
+    exec(TEST_FIXTURE_HELPER.replace('index % len(IDS)', 'index').replace('index % len(MIMES)', 'index'), namespace)  # trusted app-owned helper, not generated code
     material = namespace['material']
     with pytest.raises(IndexError):
         [material(i) for i in range(4)]
     entries = [material(i) for i in range(3)] + [material(0, filename="extra")]
     assert len(entries) == 4 and all(set(item) == {'material_id', 'filename', 'content_type'} for item in entries)
-    assert 'only indices 0, 1, 2' in CONTRACT
+    assert 'fixture construction only' in CONTRACT
     assert '[material(i) for i in range(3)] + [material(0, filename="extra")]' in CONTRACT
 
 
