@@ -42,6 +42,10 @@ async def test_review_format_recovery_keeps_candidate_and_original_evidence(env,
     attempts = result['reviewer_attempts']
     assert len(attempts) == 2 and 'validation_error' in attempts[0]
     assert attempts[1]['validation_status'] == 'passed'
+    if failure == 'line':
+        diagnostics = attempts[0]['validation_error']['citation_diagnostics']
+        assert any(item['check'] == 'tests' and item['exact_quote_lines'] for item in diagnostics)
+        assert 'source_at_claimed_line' in attempts[1]['request']['messages'][-1]['content']
     assert attempts[0]['request']['messages'][:3] == attempts[1]['request']['messages'][:3]
     evidence = records[0].parent
     assert json.loads((evidence/'reviewer-response.json').read_text()) == attempts[0]['response']
