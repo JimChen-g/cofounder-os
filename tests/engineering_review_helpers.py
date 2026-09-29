@@ -1,4 +1,6 @@
 """Synthetic review evidence for governance tests, never real model acceptance."""
+import re
+
 from app.engineering.workspace import ALLOWED
 
 
@@ -15,5 +17,5 @@ def synthetic_review_checks(messages):
                      if line.split(' | ', 1)[1].strip()
                      and not line.split(' | ', 1)[1].strip().startswith(('#', 'import ', 'from ')))
         line, evidence = first.split(' | ', 1)
-        checks[key] = {'path': path, 'line': int(line), 'evidence': evidence.strip(), 'satisfied': True}
+        checks[key] = {'path': path, 'line': int(re.sub(r'^\[[IT]\d+\] ', '', line)), 'evidence': evidence.strip(), 'satisfied': True}
     return checks

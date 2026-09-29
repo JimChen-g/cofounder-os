@@ -18,12 +18,26 @@ def reference_table(files: dict[str, str], patch_sha: str) -> dict[str, Any]:
         path: hashlib.sha256(source.encode()).hexdigest() for path, source in files.items()}, 'references': refs}
 
 
+def referenced_source(path: str, source: str, table: dict[str, Any]) -> str:
+    """Show only eligible IDs next to their exact source line, including all other source."""
+    by_line = {item['line']: ref for ref, item in table['references'].items() if item['path'] == path}
+    rows = []
+    for line, text in enumerate(source.splitlines(), 1):
+        label = f"[{by_line[line]}] " if line in by_line else ''
+        rows.append(f'{label}{line} | {text}')
+    return f'FILE {path}\n' + '\n'.join(rows) + '\nEND FILE\n'
+
+
 def resolve_review(raw: dict[str, Any], table: dict[str, Any], files: dict[str, str]) -> dict[str, Any]:
     """Resolve only exact current references. Leave model judgments unchanged."""
     if raw.get('patch_sha') != table['patch_sha']:
         raise RuntimeError('review_patch_sha_mismatch')
     if table != reference_table(files, table['patch_sha']):
         raise RuntimeError('review_reference_table_mismatch')
+    for name, check in raw['checks'].items():
+        expected = 'T' if name == 'tests' else 'I'
+        if not check['ref'].startswith(expected):
+            raise RuntimeError('review_reference_invalid')
     def resolve(item: dict[str, Any]) -> dict[str, Any]:
         ref = item['ref']
         if ref not in table['references']:

@@ -11,9 +11,11 @@ def response_format(name: ResponseSchema) -> dict[str, Any]:
         result['json_schema']['name'] = name
         schema = result['json_schema']['schema']
         ref = {'type': 'string', 'pattern': '^[IT][1-9][0-9]*$', 'maxLength': 12}
-        for check in schema['properties']['checks']['properties'].values():
+        for key, check in list(schema['properties']['checks']['properties'].items()):
+            check = dict(check)
+            schema['properties']['checks']['properties'][key] = check
             check['required'] = ['ref', 'satisfied']
-            check['properties'] = {'ref': ref, 'satisfied': {'type': 'boolean'}}
+            check['properties'] = {'ref': ref | {'pattern': '^T[1-9][0-9]*$' if key == 'tests' else '^I[1-9][0-9]*$'}, 'satisfied': {'type': 'boolean'}}
         reference_finding = schema['properties']['findings']['items']
         reference_finding['required'] = ['ref', 'trigger', 'impact', 'severity']
         reference_finding['properties'] = {k: v for k, v in reference_finding['properties'].items()
