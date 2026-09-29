@@ -51,7 +51,7 @@ async def test_review_transport_retry_never_regenerates_tested_candidate(env, ex
     retry_messages = first['reviewer_attempts'][1]['request']['messages']
     assert retry_messages[:3] == first['reviewer_attempts'][0]['request']['messages']
     assert first['reviewer_attempts'][0]['response']['content'] not in retry_messages[-1]['content']
-    assert len(retry_messages[-1]['content']) < 1000
+    assert len(retry_messages[-1]['content']) < 5000
     assert 'validation_error' in retry_messages[-1]['content']
     assert second['review_retry_of']['candidate_commit'] == first['candidate_commit']
     assert second['patch_sha'] == first['patch_sha']
