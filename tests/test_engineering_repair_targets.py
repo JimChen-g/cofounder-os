@@ -124,7 +124,7 @@ async def test_real_failure_routes_to_statement_schema_and_preserves_assertions(
         'log': value['log'], 'gate': {}, 'cwd': 'synthetic-sandbox', 'duration_seconds': 0.001})
     run = service.create('founder', 'synthetic-statement-protocol').run
     assert (await service.execute(run.id)).status == 'waiting_approval'
-    assert calls == ['engineering_patch_v1', 'engineering_statement_v1', 'engineering_review_v2']
+    assert calls == ['engineering_patch_v1', 'engineering_statement_v1', 'engineering_review_v3']
     records = sorted((json.loads(p.read_text()) for p in service.root.glob('*-evidence/result.json')), key=lambda r:r['attempt'])
     assert len(records) == 2 and len(records[1]['tests']) == 3
     assert records[1]['runtime_repair_targets'][0]['source_sha256'] == targets[0].source_sha256

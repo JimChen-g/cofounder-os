@@ -296,7 +296,7 @@ async def test_v2_review_cannot_pass_with_unbound_or_unsatisfied_checks(repo, tm
     async def complete(messages, **kwargs):
         response = await original_complete(messages, **kwargs)
         if 'independent code Reviewer' in messages[0].content:
-            assert kwargs['response_schema'] == 'engineering_review_v2'
+            assert kwargs['response_schema'] == 'engineering_review_v3'
             review = json.loads(response.content)
             check = review['checks']['input_shape']
             if mode == 'missing':

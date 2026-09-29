@@ -1,11 +1,24 @@
 """Server-owned bounded response schemas; clients select names, never arbitrary schemas."""
 from typing import Any, Literal
 
-ResponseSchema = Literal['engineering_review_v1', 'engineering_review_v2',
+ResponseSchema = Literal['engineering_review_v1', 'engineering_review_v2', 'engineering_review_v3',
                          'engineering_patch_v1', 'engineering_repair_v1', 'engineering_retry_v1', 'engineering_statement_v1']
 
 
 def response_format(name: ResponseSchema) -> dict[str, Any]:
+    if name == 'engineering_review_v3':
+        result = response_format('engineering_review_v2')
+        result['json_schema']['name'] = name
+        schema = result['json_schema']['schema']
+        ref = {'type': 'string', 'pattern': '^[IT][1-9][0-9]*$', 'maxLength': 12}
+        for check in schema['properties']['checks']['properties'].values():
+            check['required'] = ['ref', 'satisfied']
+            check['properties'] = {'ref': ref, 'satisfied': {'type': 'boolean'}}
+        reference_finding = schema['properties']['findings']['items']
+        reference_finding['required'] = ['ref', 'trigger', 'impact', 'severity']
+        reference_finding['properties'] = {k: v for k, v in reference_finding['properties'].items()
+                                 if k not in {'path', 'line', 'evidence'}} | {'ref': ref}
+        return result
     if name == 'engineering_statement_v1':
         return {'type': 'json_schema', 'json_schema': {'name': name, 'strict': True, 'schema': {
             'type': 'object', 'additionalProperties': False, 'required': ['edits'], 'properties': {
