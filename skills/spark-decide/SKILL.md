@@ -1,6 +1,8 @@
 ---
 name: spark-decide
 description: Choose a bounded local, authorized cloud, or human route through a configured Spark decision endpoint. Use for explicit routing decisions among supplied candidates; ordinary writing, factual questions, and actions without a routing choice do not need this skill.
+metadata:
+  author: JimCheng <76893969+JimChen-g@users.noreply.github.com>
 ---
 
 # Spark Decide
