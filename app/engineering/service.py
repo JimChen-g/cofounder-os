@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import ast
+import re
 import hashlib
 import json
 import os
@@ -113,6 +115,43 @@ def numbered_source(path: str, source: str) -> str:
     return f'FILE {path}\n' + lines + ('\n' if lines and not lines.endswith('\n') else '') + 'END FILE\n'
 
 
+def runtime_failures(log: str) -> list[dict[str, str]]:
+    """Retain pytest exception context before warning/summary noise, bounded by block."""
+    section = log.split('FAILURES', 1)[-1].split('warnings summary', 1)[0]
+    failures = []
+    remaining = 6000
+    matches = list(re.finditer(r'^_{3,} (test_[^\n]+?) _{3,}\s*$', section, re.MULTILINE))
+    for match in matches:
+        tail = section[match.end():]
+        next_test = re.search(r'^_{3,} test_', tail, re.MULTILINE)
+        block = tail[:next_test.start()] if next_test else tail
+        exception_lines = [line for line in block.splitlines() if line.startswith('E ')]
+        if not exception_lines:
+            continue
+        limit = min(1800, remaining)
+        excerpt = block.strip()[:limit]
+        remaining -= len(excerpt)
+        failures.append({'test': match.group(1).strip(), 'kind': 'pytest_runtime_failure',
+                         'exceptions': '\n'.join(exception_lines)[:300],
+                         'traceback': excerpt, 'truncated': str(len(block.strip()) > limit).lower()})
+        if len(failures) == 4 or remaining <= 0:
+            break
+    if failures:
+        failures[-1]['additional_test_blocks'] = str(max(0, len(matches) - len(failures)))
+    return failures
+
+
+def reject_runtime_noop(before: dict[str, str], after: dict[str, str]) -> None:
+    """Comments/type ignores cannot repair a runtime exception; never rewrite source."""
+    try:
+        unchanged = all(ast.dump(ast.parse(before[path]), include_attributes=False)
+                        == ast.dump(ast.parse(after[path]), include_attributes=False) for path in before)
+    except SyntaxError:
+        return  # Existing sandbox gates reject invalid Python.
+    if unchanged:
+        raise ValueError('runtime_repair_has_no_semantic_change')
+
+
 def retry_messages(files: dict[str, str], prior: list[dict[str, Any]]) -> list[ChatMessage]:
     """Keep source literal; only the requested response uses JSON escaping."""
     sources = '\n'.join('FILE ' + path + '\n' + source
@@ -126,6 +165,11 @@ def retry_messages(files: dict[str, str], prior: list[dict[str, Any]]) -> list[C
                 'The FILE/END FILE markers are delimiters, not source. Copy old from the literal source exactly. '
                 'Use JSON string escaping for quotes, backslashes and newlines in old/new. '
                 'Never replace source quotes with HTML entities such as &quot; or &apos;. '
+                'When runtime_failures are reported, they are pytest runtime exceptions, not static type diagnostics. Comments, noqa and type: ignore cannot fix them. '
+                'Repair the actual data construction or implementation; never skip/delete tests or change expected exceptions to hide failures. '
+                'For unexpected material(..., extra=...), use {**material(0), "extra": 1} to add the dictionary key. '
+                'For material index 3, build [material(i) for i in range(3)] + [material(0, filename="extra")]. '
+                'Construct these invalid payloads outside pytest.raises(ValueError); only the function under test belongs inside. '
                 'Correct every reported failure while preserving every contract requirement. '
                 'No shell/tools. Finish within 1400 tokens.\n\nTask contract:\n' + CONTRACT),
             ChatMessage(role=Role.USER, content='Current candidate files (literal source):\n' + sources
@@ -425,14 +469,14 @@ class EngineeringService:
     async def _run(self, task: Task, workspace: Workspace, result: dict[str, Any]) -> None:
         session = str(uuid4())
         result['executor'] = {'session_id': session}
-        prior = []
+        prior: list[dict[str, Any]] = []
         retry_candidate = None
         review_candidate = None
         for item in self._run_evidence(task.run_id):
             if (item.get('run_id') == str(task.run_id) and item.get('task_id') == str(task.id)
                     and item.get('state') in {'failed', 'timeout'}):
                 prior.append({'error': item.get('error'), 'failed_checks':
-                    [{"failed_cases": [c['case_id'] for c in test.get('gate', {}).get('cases', []) if not c['passed']], "log_tail": test.get('log', '')[-2000:]} for test in item.get('tests', []) if test.get('exit_code') != 0],
+                    [{"failed_cases": [c['case_id'] for c in test.get('gate', {}).get('cases', []) if not c['passed']], "runtime_failures": runtime_failures(test.get('log', '')), "log_tail": test.get('log', '')[-2000:] if not runtime_failures(test.get('log', '')) else ''} for test in item.get('tests', []) if test.get('exit_code') != 0],
                     'review': item.get('review')})
                 if (item.get('attempt') == task.attempt_count
                         and item.get('base_sha') == workspace.base
@@ -505,11 +549,14 @@ class EngineeringService:
                 workspace.apply_files(previous_files)
             elif previous_files is not None:
                 repair = RetryPatch.model_validate_json(normalized)
+                before_repair = dict(previous_files)
                 for change in repair.edits:
                     source = previous_files[change.path]
                     if source.count(change.old) != 1:
                         raise ValueError('repair_anchor_not_unique')
                     previous_files[change.path] = source.replace(change.old, change.new, 1)
+                if any(check.get('runtime_failures') for attempt in prior for check in attempt['failed_checks']):
+                    reject_runtime_noop(before_repair, previous_files)
                 workspace.apply_files(previous_files)
             else:
                 patch = Patch.model_validate_json(normalized)
