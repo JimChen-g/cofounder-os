@@ -1,10 +1,35 @@
 """Server-owned bounded response schemas; clients select names, never arbitrary schemas."""
 from typing import Any, Literal
 
-ResponseSchema = Literal['engineering_review_v1', 'engineering_review_v2']
+ResponseSchema = Literal['engineering_review_v1', 'engineering_review_v2',
+                         'engineering_patch_v1', 'engineering_repair_v1', 'engineering_retry_v1']
 
 
 def response_format(name: ResponseSchema) -> dict[str, Any]:
+    if name in ('engineering_patch_v1', 'engineering_repair_v1', 'engineering_retry_v1'):
+        source = {'type': 'string'}
+        edit = {'type': 'object', 'additionalProperties': False,
+                'required': ['old', 'new'],
+                'properties': {'old': {'type': 'string', 'minLength': 1, 'maxLength': 20000},
+                               'new': {'type': 'string', 'maxLength': 20000}}}
+        if name == 'engineering_patch_v1':
+            schema = {'type': 'object', 'additionalProperties': False,
+                      'required': ['implementation', 'tests'],
+                      'properties': {'implementation': source, 'tests': source}}
+        elif name == 'engineering_repair_v1':
+            schema = edit
+        else:
+            schema = {'type': 'object', 'additionalProperties': False, 'required': ['edits'],
+                      'properties': {'edits': {'type': 'array', 'minItems': 1, 'maxItems': 3,
+                          'items': {'type': 'object', 'additionalProperties': False,
+                                    'required': ['path', 'old', 'new'], 'properties': {
+                                        'path': {'type': 'string', 'enum': [
+                                            'app/insurance_poc/materials.py',
+                                            'tests/test_insurance_poc_materials.py']},
+                                        'old': {'type': 'string', 'minLength': 1, 'maxLength': 4000},
+                                        'new': {'type': 'string', 'maxLength': 20000}}}}}}
+        return {'type': 'json_schema', 'json_schema': {
+            'name': name, 'strict': True, 'schema': schema}}
     if name not in ('engineering_review_v1', 'engineering_review_v2'):
         raise ValueError('unsupported_response_schema')
     short = {'type': 'string', 'minLength': 1, 'maxLength': 180}

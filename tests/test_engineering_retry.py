@@ -325,10 +325,17 @@ async def test_v2_review_cannot_pass_with_unbound_or_unsatisfied_checks(repo, tm
     result = await service.execute(run.id)
     assert result.status == 'failed'
     assert result.snapshot.tasks[0].attempt_count == 2
-    assert len(service.gateway.calls) == 4
+    # This synthetic gateway does not reserve budget; the separate ledger tests
+    # enforce the real invocation cap. Each task attempt permits one format retry.
+    assert len(service.gateway.calls) == (4 if mode == 'false' else 6)
     for path in service.root.glob('*-evidence/result.json'):
         record = json.loads(path.read_text())
         assert record['review_schema'] == 'engineering_review_v2'
+        attempts = record['reviewer_attempts']
+        assert len(attempts) == (1 if mode == 'false' else 2)
+        if mode != 'false':
+            assert all('validation_error' in attempt for attempt in attempts)
+            assert attempts[0]['request']['messages'][:3] == attempts[1]['request']['messages'][:3]
         assert len(record['tests']) == 3
         assert all(gate['exit_code'] == 0 for gate in record['tests'])
     assert 'delivery' not in product.get_run(run.id).run.metadata

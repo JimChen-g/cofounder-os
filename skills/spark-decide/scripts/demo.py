@@ -2,7 +2,6 @@
 """Project-independent client wiring demonstration; synthetic server, no model call."""
 import http.server
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -35,8 +34,8 @@ def main():
             with tempfile.TemporaryDirectory(prefix="spark-decide-outside-project-") as directory:
                 path = Path(directory) / "request.json"
                 path.write_text(json.dumps({"task": "Need human judgment", "candidates": ["human"]}))
-                env = dict(os.environ, SPARK_DECIDE_API_KEY="fixture-only",
-                           SPARK_DECIDE_URL=f"http://127.0.0.1:{server.server_port}/v1/spark-decide")
+                env = {"SPARK_DECIDE_API_KEY": "fixture-only",
+                       "SPARK_DECIDE_URL": f"http://127.0.0.1:{server.server_port}/v1/spark-decide"}
                 return subprocess.run([sys.executable, str(Path(__file__).with_name("decide.py")),
                                        str(path)], cwd=directory, env=env).returncode
         finally:

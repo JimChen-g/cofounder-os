@@ -13,7 +13,8 @@ from app.router.selector import route_chat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('schema_name', ['engineering_review_v1', 'engineering_review_v2'])
+@pytest.mark.parametrize('schema_name', ['engineering_review_v1', 'engineering_review_v2', 'engineering_patch_v1',
+                                          'engineering_repair_v1', 'engineering_retry_v1'])
 async def test_fixed_schema_client_router_provider_transmission(monkeypatch, schema_name):
     registry = ProviderRegistry()
     registry.register(OpenAICompatProvider(Provider.QWEN, 'test-only', 'http://upstream/v1', 'qwen'))
@@ -36,9 +37,12 @@ async def test_fixed_schema_client_router_provider_transmission(monkeypatch, sch
     sent = observed[1][1]['response_format']
     assert sent == response_format(schema_name)
     assert sent['json_schema']['strict'] is True
-    findings = sent['json_schema']['schema']['properties']['findings']
-    assert findings['maxItems'] == 3
-    assert findings['items']['properties']['evidence']['maxLength'] == 180
+    schema = sent['json_schema']['schema']
+    assert schema['additionalProperties'] is False
+    if schema_name.startswith('engineering_review_'):
+        findings = schema['properties']['findings']
+        assert findings['maxItems'] == 3
+        assert findings['items']['properties']['evidence']['maxLength'] == 180
     assert set(observed[1][1]) == {'model', 'messages', 'temperature', 'max_tokens',
                                  'response_format'}
     observed.clear()
@@ -123,3 +127,28 @@ async def test_legacy_provider_receives_no_extra_keyword():
     response, provider = await registry.complete_with_fallback(Provider.QWEN, model='', messages=[ChatMessage(role='user', content='test')])
     assert response == 'legacy-response'
     assert provider == Provider.QWEN
+
+
+def test_executor_schema_does_not_allow_the_observed_extra_tests_count():
+    from app.engineering.service import Patch
+    schema = response_format('engineering_patch_v1')['json_schema']['schema']
+    assert set(schema['properties']) == {'implementation', 'tests'}
+    assert set(schema['required']) == {'implementation', 'tests'}
+    assert schema['additionalProperties'] is False
+    with pytest.raises(ValidationError):
+        Patch.model_validate({'implementation': 'def f(): pass', 'tests': 'def test_f(): pass',
+                              'tests_count': 17})
+
+
+def test_repair_schemas_keep_bounded_anchors_and_paths():
+    repair = response_format('engineering_repair_v1')['json_schema']['schema']
+    assert repair['required'] == ['old', 'new']
+    assert repair['properties']['old']['minLength'] == 1
+    assert repair['properties']['old']['maxLength'] == 20000
+    retry = response_format('engineering_retry_v1')['json_schema']['schema']['properties']['edits']
+    assert (retry['minItems'], retry['maxItems']) == (1, 3)
+    item = retry['items']
+    assert item['additionalProperties'] is False
+    assert item['properties']['old']['maxLength'] == 4000
+    assert item['properties']['path']['enum'] == ['app/insurance_poc/materials.py',
+                                                  'tests/test_insurance_poc_materials.py']
