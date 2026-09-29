@@ -263,7 +263,13 @@ async def test_reviewer_receives_plain_numbered_immutable_sources_separate_from_
     assert len(metadata['tests']) == 3
     assert all(gate['exit_code'] == 0 for gate in metadata['tests'])
     assert len(review_messages) == 3
-    assert review_messages[2].content == numbered_source(ALLOWED[0], implementation) + '\n' + numbered_source(ALLOWED[1], tests)
+    # Strip display-only labels; every original source character and line remains.
+    import re
+    unlabelled = re.sub(r'^\[[IT]\d+\] ', '', review_messages[2].content, flags=re.MULTILINE)
+    assert unlabelled == numbered_source(ALLOWED[0], implementation) + '\n' + numbered_source(ALLOWED[1], tests)
+    assert '[I2] 2 |' in review_messages[2].content
+    assert '[T1]' not in review_messages[2].content
+    assert '[T2] 2 | synthetic_fixture = True' in review_messages[2].content
     record = json.loads(next(service.root.glob('*-evidence/result.json')).read_text())
     assert git(repo, 'show', record['candidate_commit'] + ':' + ALLOWED[0]) == implementation
     assert record['executor']['session_id'] != record['reviewer']['session_id']
